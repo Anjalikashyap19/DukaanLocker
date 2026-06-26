@@ -17,7 +17,7 @@ public class GSTDocument {
 
 
     @Lob
-    @Column(columnDefinition = "LONGBLOB")
+    @Column(columnDefinition = "BYTEA")
     private byte[] file;
 
 
