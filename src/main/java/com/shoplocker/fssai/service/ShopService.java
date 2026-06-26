@@ -16,7 +16,9 @@ public class ShopService {
 	// used for store incpoming shop details
 
 	public Shop saveShop(Shop shop) {
-		;
+		if (shopRepository.existsByMobile(shop.getMobile())){
+			throw  new RuntimeException("mobile number is already exist");
+		}
 		return shopRepository.save(shop);
 	}
 
@@ -29,7 +31,7 @@ public class ShopService {
 	// input: id
 	// output: shop details
 
-	public Shop etytrt(long id) {
+	public Shop getShopById(long id) {
 
 		return shopRepository.findById(id).get();
 
@@ -51,7 +53,12 @@ public class ShopService {
 
 		return  shopRepository.save(existingShop);
 
+	}
 
+	//delete shop
+
+	public void deleteShop(Long id){
+		shopRepository.deleteById(id);
 
 
 	}
