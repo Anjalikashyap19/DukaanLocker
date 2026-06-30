@@ -22,22 +22,9 @@ public class GSTDocumentService{
     }
 
 
-    public GSTDocument getGstDocumentById(Long id){
-        return gstDocumentRepository.findById(id).orElse(null);
-    }
 
-    public void deleteGstDocumentById(Long id){
-        gstDocumentRepository.deleteById(id);
 
-    }
 
-    // Stub method for fetching GST document from government API
-    // TODO: Implement actual government API integration
-    public byte[] fetchGSTDocument(String gstNumber) {
-        // Placeholder: government API logic will be added here
-        // Return empty bytes until real API integration is done
-        return new byte[0];
-    }
 
 }
 
