@@ -23,4 +23,18 @@ public class GSTDocumentController {
     private GSTDocumentService gstDocumentService;
 
 
+    @PostMapping(
+            value = "/shops/{shopId}/gst/upload",
+            consumes = "multipart/form-data"
+    )
+    public ResponseEntity<String> uploadGST(
+            @PathVariable Long shopId,
+            @RequestParam("file") MultipartFile file
+    ) {
+
+        gstDocumentService.uploadGST(shopId, file);
+
+        return ResponseEntity.ok("GST document uploaded successfully");
+    }
+
 }

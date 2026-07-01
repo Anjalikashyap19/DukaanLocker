@@ -1,4 +1,4 @@
-package com.Dukaan.DukaanLocker.config;
+package com.shoplocker.fssai.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
