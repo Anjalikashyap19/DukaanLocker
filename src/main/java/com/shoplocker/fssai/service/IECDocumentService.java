@@ -1,5 +1,6 @@
 package com.shoplocker.fssai.service;
 
+import com.shoplocker.fssai.entity.DocumentType;
 import com.shoplocker.fssai.entity.IECDocument;
 import com.shoplocker.fssai.entity.Shop;
 import com.shoplocker.fssai.exception.FssaiException;
@@ -17,17 +18,27 @@ public class IECDocumentService {
     private final IECDocumentRepository repository;
     private final ShopService shopService;
     private final S3Service s3Service;
+    private final TextractService textractService;
+    private final DocumentValidationService documentValidationService;
 
     public IECDocumentService(IECDocumentRepository repository,
                               ShopService shopService,
-                              S3Service s3Service) {
+                              S3Service s3Service,
+                              TextractService textractService,
+                              DocumentValidationService documentValidationService) {
         this.repository = repository;
         this.shopService = shopService;
         this.s3Service = s3Service;
+        this.textractService = textractService;
+        this.documentValidationService = documentValidationService;
     }
 
     public void uploadIEC(Long shopId, MultipartFile file) {
         validatePDFFile(file, "Import Export Code");
+
+        // Extract text via AWS Textract and validate document content
+        String extractedText = textractService.extractText(file);
+        documentValidationService.validate(DocumentType.IEC, extractedText, file.getOriginalFilename());
 
         Shop shop = shopService.getShopById(shopId);
         Optional<IECDocument> existing = repository.findByShop(shop);

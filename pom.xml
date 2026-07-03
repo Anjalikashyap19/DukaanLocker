@@ -89,6 +89,11 @@
 			<artifactId>auth</artifactId>
 		</dependency>
 
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>textract</artifactId>
+		</dependency>
+
 
 		<dependency>
 			<groupId>me.paulschwarz</groupId>

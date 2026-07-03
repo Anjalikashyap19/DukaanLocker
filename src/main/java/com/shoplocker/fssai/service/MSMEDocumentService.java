@@ -1,5 +1,6 @@
 package com.shoplocker.fssai.service;
 
+import com.shoplocker.fssai.entity.DocumentType;
 import com.shoplocker.fssai.entity.MSMEDocument;
 import com.shoplocker.fssai.entity.Shop;
 import com.shoplocker.fssai.exception.FssaiException;
@@ -17,17 +18,27 @@ public class MSMEDocumentService {
     private final MSMEDocumentRepository repository;
     private final ShopService shopService;
     private final S3Service s3Service;
+    private final TextractService textractService;
+    private final DocumentValidationService documentValidationService;
 
     public MSMEDocumentService(MSMEDocumentRepository repository,
                                ShopService shopService,
-                               S3Service s3Service) {
+                               S3Service s3Service,
+                               TextractService textractService,
+                               DocumentValidationService documentValidationService) {
         this.repository = repository;
         this.shopService = shopService;
         this.s3Service = s3Service;
+        this.textractService = textractService;
+        this.documentValidationService = documentValidationService;
     }
 
     public void uploadMSME(Long shopId, MultipartFile file) {
         validatePDFFile(file, "Udyam MSME Registration");
+
+        // Extract text via AWS Textract and validate document content
+        String extractedText = textractService.extractText(file);
+        documentValidationService.validate(DocumentType.MSME, extractedText, file.getOriginalFilename());
 
         Shop shop = shopService.getShopById(shopId);
         Optional<MSMEDocument> existing = repository.findByShop(shop);

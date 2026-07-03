@@ -7,10 +7,10 @@ import org.springframework.context.annotation.Configuration;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.textract.TextractClient;
 
 @Configuration
-public class AwsS3Config {
+public class AwsTextractConfig {
 
     @Value("${aws.region}")
     private String region;
@@ -22,18 +22,18 @@ public class AwsS3Config {
     private String secretAccessKey;
 
     @Bean
-    public S3Client s3Client() {
+    public TextractClient textractClient() {
         // Use explicit credentials from .env if available, otherwise fall back
         // to default credential chain (EC2 instance profile, ~/.aws/credentials, etc.)
         if (!accessKeyId.isEmpty() && !secretAccessKey.isEmpty()) {
             AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKeyId, secretAccessKey);
-            return S3Client.builder()
+            return TextractClient.builder()
                     .region(Region.of(region))
                     .credentialsProvider(StaticCredentialsProvider.create(credentials))
                     .build();
         }
 
-        return S3Client.builder()
+        return TextractClient.builder()
                 .region(Region.of(region))
                 .build();
     }

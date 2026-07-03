@@ -1,5 +1,6 @@
 package com.shoplocker.fssai.service;
 
+import com.shoplocker.fssai.entity.DocumentType;
 import com.shoplocker.fssai.entity.PANDocument;
 import com.shoplocker.fssai.entity.Shop;
 import com.shoplocker.fssai.exception.FssaiException;
@@ -17,17 +18,27 @@ public class PANDocumentService {
     private final PANDocumentRepository panDocumentRepository;
     private final ShopService shopService;
     private final S3Service s3Service;
+    private final TextractService textractService;
+    private final DocumentValidationService documentValidationService;
 
     public PANDocumentService(PANDocumentRepository panDocumentRepository,
                               ShopService shopService,
-                              S3Service s3Service) {
+                              S3Service s3Service,
+                              TextractService textractService,
+                              DocumentValidationService documentValidationService) {
         this.panDocumentRepository = panDocumentRepository;
         this.shopService = shopService;
         this.s3Service = s3Service;
+        this.textractService = textractService;
+        this.documentValidationService = documentValidationService;
     }
 
     public void uploadPAN(Long shopId, MultipartFile file) {
         validatePDFFile(file, "PAN/TAN");
+
+        // Extract text via AWS Textract and validate document content
+        String extractedText = textractService.extractText(file);
+        documentValidationService.validate(DocumentType.PAN, extractedText, file.getOriginalFilename());
 
         Shop shop = shopService.getShopById(shopId);
 

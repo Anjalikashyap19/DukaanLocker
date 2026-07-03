@@ -1,5 +1,6 @@
 package com.shoplocker.fssai.service;
 
+import com.shoplocker.fssai.entity.DocumentType;
 import com.shoplocker.fssai.entity.PollutionControlDocument;
 import com.shoplocker.fssai.entity.Shop;
 import com.shoplocker.fssai.exception.FssaiException;
@@ -17,17 +18,27 @@ public class PollutionControlDocumentService {
     private final PollutionControlDocumentRepository repository;
     private final ShopService shopService;
     private final S3Service s3Service;
+    private final TextractService textractService;
+    private final DocumentValidationService documentValidationService;
 
     public PollutionControlDocumentService(PollutionControlDocumentRepository repository,
                                            ShopService shopService,
-                                           S3Service s3Service) {
+                                           S3Service s3Service,
+                                           TextractService textractService,
+                                           DocumentValidationService documentValidationService) {
         this.repository = repository;
         this.shopService = shopService;
         this.s3Service = s3Service;
+        this.textractService = textractService;
+        this.documentValidationService = documentValidationService;
     }
 
     public void uploadPollutionControl(Long shopId, MultipartFile file) {
         validatePDFFile(file, "Pollution Control Certificate");
+
+        // Extract text via AWS Textract and validate document content
+        String extractedText = textractService.extractText(file);
+        documentValidationService.validate(DocumentType.POLLUTION_CONTROL, extractedText, file.getOriginalFilename());
 
         Shop shop = shopService.getShopById(shopId);
         Optional<PollutionControlDocument> existing = repository.findByShop(shop);

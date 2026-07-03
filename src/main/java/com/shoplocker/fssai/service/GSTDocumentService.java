@@ -1,5 +1,6 @@
 package com.shoplocker.fssai.service;
 
+import com.shoplocker.fssai.entity.DocumentType;
 import com.shoplocker.fssai.entity.GSTDocument;
 import com.shoplocker.fssai.entity.Shop;
 import com.shoplocker.fssai.exception.FssaiException;
@@ -17,18 +18,28 @@ public class GSTDocumentService {
     private final GSTDocumentRepository gstDocumentRepository;
     private final ShopService shopService;
     private final S3Service s3Service;
+    private final TextractService textractService;
+    private final DocumentValidationService documentValidationService;
 
     public GSTDocumentService(GSTDocumentRepository gstDocumentRepository,
                               ShopService shopService,
-                              S3Service s3Service) {
+                              S3Service s3Service,
+                              TextractService textractService,
+                              DocumentValidationService documentValidationService) {
         this.gstDocumentRepository = gstDocumentRepository;
         this.shopService = shopService;
         this.s3Service = s3Service;
+        this.textractService = textractService;
+        this.documentValidationService = documentValidationService;
     }
 
     public void uploadGST(Long shopId, MultipartFile file) {
 
         validateGSTFile(file);
+
+        // Extract text via AWS Textract and validate document content
+        String extractedText = textractService.extractText(file);
+        documentValidationService.validate(DocumentType.GST, extractedText, file.getOriginalFilename());
 
         // Get shop
         Shop shop = shopService.getShopById(shopId);
