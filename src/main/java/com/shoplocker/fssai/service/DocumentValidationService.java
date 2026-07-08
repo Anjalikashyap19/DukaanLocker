@@ -115,7 +115,17 @@ public class DocumentValidationService {
             Pattern.compile("(?i)(?:Trade License|License)\\s*(?:Number|No|:)?\\s*[A-Za-z0-9/-]+");
 
     private static final long MAX_FILE_SIZE_BYTES = 5L * 1024 * 1024;
-    private static final byte[] PDF_MAGIC = {0x25, 0x50, 0x44, 0x46}; // "%PDF"
+    private static final byte[] PDF_MAGIC  = {0x25, 0x50, 0x44, 0x46}; // "%PDF"
+    private static final byte[] JPEG_MAGIC = {(byte) 0xFF, (byte) 0xD8};            // JPEG SOI marker (universal)
+    private static final byte[] PNG_MAGIC  = {(byte) 0x89, 0x50, 0x4E, 0x47};       // PNG signature (first 4 of 8)
+
+    /** Identity match against a multi-byte magic header. Byte comparison is authoritative -
+     *  Content-Type from MultipartFile is just a hint that can be spoofed. */
+    private static boolean matchesMagic(byte[] bytes, byte[] magic) {
+        if (bytes == null || bytes.length < magic.length) return false;
+        for (int i = 0; i < magic.length; i++) if (bytes[i] != magic[i]) return false;
+        return true;
+    }
 
     // =========================================================================
     //  FILE-FORMAT HELPERS (cheap metadata + magic-byte check on byte[])
@@ -173,19 +183,24 @@ public class DocumentValidationService {
      * Operating on the byte[] (not on a fresh stream) keeps the I/O cost at
      * zero — the bytes were already loaded by {@link #readBytes(MultipartFile)}.
      */
+    /** Accepts PDF, JPEG, or PNG by identity-check of the magic header. The method name is
+     *  preserved for backward compatibility with the 14 *DocumentService callers - but the
+     *  body now accepts image uploads too. */
     public void assertPdfMagicBytes(byte[] fileBytes, String docDisplayName) {
-        if (fileBytes == null || fileBytes.length < 4) {
+        if (fileBytes == null) {
             throw new FssaiException(
-                    "The uploaded file for " + docDisplayName + " is empty or truncated. Please re-upload a complete PDF.",
+                    "The uploaded file for " + docDisplayName + " is null. Please re-upload a real PDF, JPEG, or PNG document.",
                     FailureCode.INVALID_FILE_FORMAT);
         }
-        if (fileBytes[0] != PDF_MAGIC[0] || fileBytes[1] != PDF_MAGIC[1] ||
-                fileBytes[2] != PDF_MAGIC[2] || fileBytes[3] != PDF_MAGIC[3]) {
-            throw new FssaiException(
-                    "The uploaded file is not a valid " + docDisplayName + " PDF. Expected PDF magic bytes '%PDF' at the " +
-                            "start of the file, but the file does not contain them. Please upload a real PDF document.",
-                    FailureCode.INVALID_FILE_FORMAT);
+        if (matchesMagic(fileBytes, PDF_MAGIC)
+                || matchesMagic(fileBytes, JPEG_MAGIC)
+                || matchesMagic(fileBytes, PNG_MAGIC)) {
+            return;
         }
+        throw new FssaiException(
+                "The uploaded file is not a valid " + docDisplayName + ". Expected PDF, JPEG, or PNG magic bytes at the "
+                        + "start of the file, but the file does not contain them. Please upload a real PDF, JPEG, or PNG document.",
+                FailureCode.INVALID_FILE_FORMAT);
     }
 
     // =========================================================================
@@ -564,10 +579,10 @@ public class DocumentValidationService {
                 "An alphanumeric policy number (e.g., Policy No: SHOP123456)");
         requireAnyKeyword(text, "Shop Insurance Policy", fileName,
                 "Policy Details",
-                "Sum Insured", "Premium", "Period", "From", "To", "Validity");
+                "Sum Insured", "Total Premium", "Coverage Period", "Effective From", "Valid Till", "Expiry Date");
         requireAnyKeyword(text, "Shop Insurance Policy", fileName,
                 "Insurance Company",
-                "Insurance Company", "Insurance Co", "Insurer");
+                "Insurance Company", "Insurance Co", "Insurer", "ICICI Lombard", "TATA AIG", "HDFC ERGO", "Bajaj Allianz", "New India Assurance", "Oriental Insurance", "Cholamandalam");
     }
 
     private void validateDrugLicense(String text, String fileName) {
