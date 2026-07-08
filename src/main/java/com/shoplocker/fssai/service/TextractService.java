@@ -54,6 +54,13 @@ public class TextractService {
             // silently returned 0 LINE blocks for. Try the fallback.
             return fallbackViaRasterizedImages(fileBytes, fileName);
 
+        } catch (FssaiException e) {
+            // Top-level guard: re-throw FssaiException unchanged so the specific
+            // failure code (400 UNSUPPORTED_DOCUMENT_FORMAT, 400 INVALID_FILE_FORMAT)
+            // propagates to GlobalExceptionHandler. Without this, the broad
+            // `catch (Exception e)` below would re-map every FssaiException to
+            // 502 TEXTRACT_FAILURE.
+            throw e;
         } catch (UnsupportedDocumentException primaryRejection) {
             // Textract explicitly rejected the PDF. The bytes are rejected every time
             // (deterministic) - no retry would help. Fall back to per-page image OCR.
