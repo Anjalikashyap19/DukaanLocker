@@ -3,6 +3,7 @@ package com.shoplocker.fssai.service;
 import com.shoplocker.fssai.dto.FssaiRequest;
 import com.shoplocker.fssai.dto.FssaiResponse;
 import com.shoplocker.fssai.entity.FssaiLicense;
+import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
 import com.shoplocker.fssai.repository.FssaiLicenseRepository;
 import com.shoplocker.fssai.scraper.FssaiScraper;
@@ -41,7 +42,9 @@ public class FssaiService {
         FssaiResponse scraped = scraper.fetchLicenseData(licenseNumber);
 
         if (!scraped.isSuccess()) {
-            throw new FssaiException("Failed to fetch data from FSSAI portal");
+            throw new FssaiException(
+                    "Failed to fetch data from FSSAI portal for license " + licenseNumber,
+                    FailureCode.SCRAPER_FAILURE);
         }
 
         FssaiLicense entity = FssaiLicense.builder()
@@ -63,7 +66,9 @@ public class FssaiService {
     @Transactional(readOnly = true)
     public FssaiResponse getLicense(String licenseNumber) {
         FssaiLicense lic = repository.findByLicenseNumber(licenseNumber)
-                .orElseThrow(() -> new FssaiException("License not found: " + licenseNumber));
+                .orElseThrow(() -> new FssaiException(
+                        "FSSAI license not found: " + licenseNumber,
+                        FailureCode.NOT_FOUND));
         return mapToResponse(lic);
     }
 

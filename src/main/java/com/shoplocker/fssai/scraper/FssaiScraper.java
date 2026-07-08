@@ -7,6 +7,7 @@ import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.options.LoadState;
 import com.shoplocker.fssai.dto.FssaiResponse;
+import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,9 +65,13 @@ public class FssaiScraper {
                     licenseNumber, businessName, address,
                     status, validityDate, licenseType, pdfPath);
 
+        } catch (FssaiException ex) {
+            throw ex;
         } catch (Exception e) {
             log.error("Error scraping license {}: {}", licenseNumber, e.getMessage());
-            throw new FssaiException("Failed to fetch license data from FSSAI portal: " + e.getMessage(), e);
+            throw new FssaiException(
+                    "Failed to fetch license data from FSSAI portal: " + e.getMessage(),
+                    FailureCode.SCRAPER_FAILURE, e);
         } finally {
             if (context != null) {
                 context.close();
@@ -103,7 +108,9 @@ public class FssaiScraper {
             searchBtn.click();
             page.waitForTimeout(3000);
         } catch (Exception e) {
-            throw new FssaiException("Failed to search for license number: " + e.getMessage(), e);
+            throw new FssaiException(
+                    "Failed to search for license number on FSSAI portal: " + e.getMessage(),
+                    FailureCode.SCRAPER_FAILURE, e);
         }
     }
 

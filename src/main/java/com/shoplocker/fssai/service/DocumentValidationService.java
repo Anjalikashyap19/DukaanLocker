@@ -1,25 +1,33 @@
 package com.shoplocker.fssai.service;
 
 import com.shoplocker.fssai.entity.DocumentType;
+import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
 import java.util.*;
 import java.util.regex.Pattern;
 
+/**
+ * Validates uploaded documents at two levels:
+ * <ol>
+ *   <li>{@link #validateFileFormat(MultipartFile, String)} — basic file format (PDF, size, magic bytes).
+ *       Throws {@link FailureCode#INVALID_FILE_FORMAT}.</li>
+ *   <li>{@link #validate(DocumentType, String, String)} — content keywords / ID regex after OCR.
+ *       Throws {@link FailureCode#DOCUMENT_VALIDATION_FAILED} for missing fields and
+ *       {@link FailureCode#DOCUMENT_TYPE_MISMATCH} when the file appears to be a different
+ *       document type entirely.</li>
+ * </ol>
+ */
 @Service
 public class DocumentValidationService {
 
     // ─── Minimum confidence threshold ───────────────────────────────────────
-    // If Textract extracts fewer characters than this, the document is
-    // likely a poor-quality scan or an unrelated file.
     private static final int MIN_EXTRACTED_TEXT_LENGTH = 100;
 
     // ─── Conflict Signatures ───────────────────────────────────────────────
-    // Each entry maps a document type name (for error messages) to the
-    // "signature" keywords that uniquely identify that document.
-    // If at least 2 signature keywords from another document type appear in
-    // the extracted text, we flag a cross-contamination error.
     private static final Map<String, List<String>> CONFLICT_SIGNATURES = new LinkedHashMap<>();
     static {
         CONFLICT_SIGNATURES.put("GST Registration Certificate",
@@ -57,81 +65,102 @@ public class DocumentValidationService {
     }
 
     // ─── Regex Patterns for Official ID Numbers ────────────────────────────
-
-    // Indian GSTIN: 2 digits + 10-char PAN + 1 digit + 1 check char + Z + 1 check digit/alnum
     private static final Pattern GSTIN_PATTERN =
             Pattern.compile("[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]");
-
-    // PAN: 5 uppercase letters + 4 digits + 1 uppercase letter
     private static final Pattern PAN_PATTERN =
             Pattern.compile("[A-Z]{5}[0-9]{4}[A-Z]");
-
-    // Aadhaar: 12 consecutive digits (optionally space/grouped)
     private static final Pattern AADHAAR_PATTERN =
             Pattern.compile("\\b[0-9]{12}\\b");
-
-    // FSSAI: 14 digits
     private static final Pattern FSSAI_PATTERN =
             Pattern.compile("\\b[0-9]{14}\\b");
-
-    // IEC: 10 alphanumeric characters (typically starts with AA..)
     private static final Pattern IEC_PATTERN =
             Pattern.compile("\\b[A-Za-z0-9]{10}\\b");
-
-    // Udyam Registration Number: UDYAM-XX-XX-XXXXXXX
     private static final Pattern UDYAM_PATTERN =
             Pattern.compile("(?i)UDYAM[-][A-Za-z0-9]{2}[-][A-Za-z0-9]{2}[-][A-Za-z0-9]{7}");
-
-    // Drug License: typical 21-21 license format or alphanumeric
     private static final Pattern DRUG_LICENSE_PATTERN =
             Pattern.compile("\\b[0-9]{2}[-][0-9]{2}[-][A-Za-z0-9-]+\\b");
-
-    // Trademark Application/Registration number
     private static final Pattern TRADEMARK_PATTERN =
             Pattern.compile("\\b[0-9]{6,7}\\b");
-
-    // Fire Safety NOC number
     private static final Pattern FIRE_NOC_PATTERN =
             Pattern.compile("(?i)(?:NOC|Certificate)\\s*[:\\.]?\\s*[A-Za-z0-9/-]+");
-
-    // Insurance Policy number
     private static final Pattern POLICY_PATTERN =
             Pattern.compile("(?i)Policy\\s*(?:Number|No|#|:)?\\s*[A-Za-z0-9/\\-]+");
-
-    // Professional Tax Enrollment Number (PTEC)
     private static final Pattern PTEC_PATTERN =
             Pattern.compile("(?i)(?:PTEC|Professional Tax)\\s*(?:Number|No|:)?\\s*[A-Za-z0-9/-]+");
-
-    // Property Assessment/ID number
     private static final Pattern PROPERTY_ID_PATTERN =
             Pattern.compile("(?i)(?:Property|Assessment|Ward)\\s*(?:ID|Number|No|#|:)?\\s*[A-Za-z0-9/\\-]+");
-
-    // Labour License Number
     private static final Pattern LABOUR_LICENSE_PATTERN =
             Pattern.compile("(?i)(?:License|Registration)\\s*(?:Number|No|:)?\\s*[A-Za-z0-9/\\-]+");
-
-    // Shop Establishment Registration Number
     private static final Pattern SHOP_EST_PATTERN =
             Pattern.compile("(?i)(?:Registration|License)\\s*(?:Number|No|:)?\\s*[A-Za-z0-9/-]+");
-
-    // Trade License Number
     private static final Pattern TRADE_LICENSE_PATTERN =
             Pattern.compile("(?i)(?:Trade License|License)\\s*(?:Number|No|:)?\\s*[A-Za-z0-9/-]+");
 
+    private static final long MAX_FILE_SIZE_BYTES = 5L * 1024 * 1024;
+    private static final byte[] PDF_MAGIC = {0x25, 0x50, 0x44, 0x46}; // "%PDF"
+
     // =========================================================================
-    //  PUBLIC ENTRY POINT
+    //  FILE-FORMAT HELPERS (shared by all *DocumentService beans)
     // =========================================================================
 
     /**
-     * Validates the extracted text against strict rules for the given document type.
+     * Validates the multipart upload as a sane PDF (non-empty, application/pdf
+     * content type, ≤ 5 MB, real %PDF magic bytes at the start). Replaces
+     * 13 identical copies that used to live in each *DocumentService.
+     */
+    public void validateFileFormat(MultipartFile file, String docDisplayName) {
+        if (file == null || file.isEmpty()) {
+            throw new FssaiException(
+                    "No file uploaded. Please upload the " + docDisplayName + " (PDF format).",
+                    FailureCode.INVALID_FILE_FORMAT);
+        }
+        String contentType = file.getContentType();
+        if (!"application/pdf".equals(contentType)) {
+            throw new FssaiException(
+                    "Only PDF files are accepted for " + docDisplayName + ". " +
+                            "The uploaded file has Content-Type \"" + contentType + "\". " +
+                            "Please upload a PDF document, not " + (contentType == null ? "an unknown file type" : contentType) + ".",
+                    FailureCode.INVALID_FILE_FORMAT);
+        }
+        if (file.getSize() > MAX_FILE_SIZE_BYTES) {
+            throw new FssaiException(
+                    "The uploaded file is too large (" + file.getSize() + " bytes). " +
+                            "Maximum allowed size for " + docDisplayName + " is " + MAX_FILE_SIZE_BYTES + " bytes " +
+                            "(5 MB). Please upload a smaller PDF.",
+                    FailureCode.INVALID_FILE_FORMAT);
+        }
+        if (!hasPdfMagicBytes(file)) {
+            throw new FssaiException(
+                    "The uploaded file is not a valid PDF. Expected PDF magic bytes '%PDF' at the " +
+                            "start of the file, but the file does not contain them. Please upload a real PDF document.",
+                    FailureCode.INVALID_FILE_FORMAT);
+        }
+    }
+
+    private boolean hasPdfMagicBytes(MultipartFile file) {
+        try (InputStream is = file.getInputStream()) {
+            byte[] header = new byte[4];
+            return is.read(header) == 4
+                    && header[0] == PDF_MAGIC[0]
+                    && header[1] == PDF_MAGIC[1]
+                    && header[2] == PDF_MAGIC[2]
+                    && header[3] == PDF_MAGIC[3];
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    // =========================================================================
+    //  CONTENT VALIDATION (post-OCR)
+    // =========================================================================
+
+    /**
+     * Validates the OCR'd text against strict rules for the given document type.
      *
-     * @param type            the document type being uploaded
-     * @param extractedText   full text extracted by AWS Textract
-     * @param originalFileName original file name for error messages
-     * @throws FssaiException if validation fails with a detailed, actionable message
+     * @throws FssaiException with code {@link FailureCode#DOCUMENT_VALIDATION_FAILED}
+     *                        or {@link FailureCode#DOCUMENT_TYPE_MISMATCH}
      */
     public void validate(DocumentType type, String extractedText, String originalFileName) {
-        // 1. Ensure Textract extracted meaningful content
         ensureMinTextLength(extractedText, originalFileName);
 
         switch (type) {
@@ -151,30 +180,22 @@ public class DocumentValidationService {
             case DRUG_LICENSE:       validateDrugLicense(extractedText, originalFileName); break;
             case FSSAI:              validateFSSAI(extractedText, originalFileName); break;
             case AADHAAR:            validateAadhaar(extractedText, originalFileName); break;
-            default: throw new FssaiException("Unknown document type: " + type);
+            default: throw new FssaiException("Unknown document type: " + type, FailureCode.INTERNAL_ERROR);
         }
 
-        // 2. Final cross-contamination check: ensure no OTHER document type signatures match
         checkDocumentConflict(type, extractedText, originalFileName);
     }
-
-    // =========================================================================
-    //  VALIDATION HELPERS
-    // =========================================================================
 
     private void ensureMinTextLength(String text, String fileName) {
         if (text == null || text.trim().length() < MIN_EXTRACTED_TEXT_LENGTH) {
             throw new FssaiException(
                     "The uploaded file \"" + fileName + "\" does not contain enough readable text to verify its contents. " +
-                    "Only " + (text == null ? 0 : text.trim().length()) + " characters were extracted. " +
-                    "Please upload a clear, high-quality PDF of the required document."
-            );
+                            "Only " + (text == null ? 0 : text.trim().length()) + " characters were extracted. " +
+                            "Please upload a clear, high-quality PDF of the required document.",
+                    FailureCode.DOCUMENT_VALIDATION_FAILED);
         }
     }
 
-    /**
-     * ALL keywords must be present (case-insensitive).
-     */
     private void requireAllKeywords(String text, String docDisplayName, String fileName,
                                      String... requiredKeywords) {
         List<String> missing = new ArrayList<>();
@@ -187,16 +208,13 @@ public class DocumentValidationService {
             String missingStr = String.join(", ", missing);
             throw new FssaiException(
                     "Uploaded file \"" + fileName + "\" is not a valid " + docDisplayName + ". " +
-                    "Missing required field(s): " + missingStr + ". " +
-                    "These fields MUST be present in the document. " +
-                    "Please upload a correct " + docDisplayName + " document."
-            );
+                            "Missing required field(s): " + missingStr + ". " +
+                            "These fields MUST be present in the document. " +
+                            "Please upload a correct " + docDisplayName + " document.",
+                    FailureCode.DOCUMENT_VALIDATION_FAILED);
         }
     }
 
-    /**
-     * AT LEAST ONE of the given keywords must be present (case-insensitive).
-     */
     private void requireAnyKeyword(String text, String docDisplayName, String fileName,
                                     String fieldName, String... options) {
         for (String opt : options) {
@@ -205,29 +223,27 @@ public class DocumentValidationService {
         String optionsStr = String.join(" or ", options);
         throw new FssaiException(
                 "Uploaded file \"" + fileName + "\" is not a valid " + docDisplayName + ". " +
-                "Required field \"" + fieldName + "\" not found. " +
-                "Expected to find: " + optionsStr + ". " +
-                "Please upload a correct " + docDisplayName + " document."
-        );
+                        "Required field \"" + fieldName + "\" not found. " +
+                        "Expected to find: " + optionsStr + ". " +
+                        "Please upload a correct " + docDisplayName + " document.",
+                FailureCode.DOCUMENT_VALIDATION_FAILED);
     }
 
-    /**
-     * A regex pattern must match somewhere in the text.
-     */
     private void requirePattern(String text, String docDisplayName, String fileName,
                                  String fieldName, Pattern pattern, String example) {
         if (pattern.matcher(text).find()) return;
         throw new FssaiException(
                 "Uploaded file \"" + fileName + "\" is not a valid " + docDisplayName + ". " +
-                "Mandatory \"" + fieldName + "\" could not be found. " +
-                "Expected format: " + example + ". " +
-                "Please upload a correct " + docDisplayName + " document."
-        );
+                        "Mandatory \"" + fieldName + "\" could not be found. " +
+                        "Expected format: " + example + ". " +
+                        "Please upload a correct " + docDisplayName + " document.",
+                FailureCode.DOCUMENT_VALIDATION_FAILED);
     }
 
     /**
-     * Checks whether the extracted text contains strong indicators of being a
-     * DIFFERENT document type and rejects with a helpful message.
+     * Cross-contamination check: detect if a *different* document type's signatures
+     * are present in the OCR text and reject with a dedicated code so the UI can
+     * show "you uploaded X, we need Y".
      */
     private void checkDocumentConflict(DocumentType expectedType, String text, String fileName) {
         String expectedName = getDisplayName(expectedType);
@@ -235,7 +251,6 @@ public class DocumentValidationService {
         for (Map.Entry<String, List<String>> entry : CONFLICT_SIGNATURES.entrySet()) {
             String otherDocName = entry.getKey();
 
-            // Skip our own document type
             if (otherDocName.equalsIgnoreCase(expectedName)) continue;
 
             List<String> signatures = entry.getValue();
@@ -244,14 +259,12 @@ public class DocumentValidationService {
                 if (containsIgnoreCase(text, sig)) matchCount++;
             }
 
-            // If at least 2 unique signature keywords from another document type match,
-            // the file is very likely that other document, not the expected one.
             if (matchCount >= 2) {
                 throw new FssaiException(
                         "Uploaded file \"" + fileName + "\" appears to be a " + otherDocName +
-                        " instead of the required " + expectedName + ". " +
-                        "Please upload the correct " + expectedName + " document."
-                );
+                                " instead of the required " + expectedName + ". " +
+                                "Please upload the correct " + expectedName + " document.",
+                        FailureCode.DOCUMENT_TYPE_MISMATCH);
             }
         }
     }
@@ -287,9 +300,6 @@ public class DocumentValidationService {
     //  INDIVIDUAL DOCUMENT VALIDATIONS
     // =========================================================================
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  1. GST Registration Certificate
-    // ─────────────────────────────────────────────────────────────────────────
     private void validateGST(String text, String fileName) {
         requireAllKeywords(text, "GST Registration Certificate", fileName,
                 "GSTIN",
@@ -299,15 +309,11 @@ public class DocumentValidationService {
                 "GSTIN (Goods and Services Tax Identification Number)",
                 GSTIN_PATTERN,
                 "e.g., 27ABCDE1234F1Z5");
-        // Specific GST certificate expectations
         requireAnyKeyword(text, "GST Registration Certificate", fileName,
                 "Issuing Authority / Government",
                 "Tax Department", "Government of India", "GST Council");
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  2. PAN Card
-    // ─────────────────────────────────────────────────────────────────────────
     private void validatePAN(String text, String fileName) {
         requireAllKeywords(text, "PAN Card", fileName,
                 "Income Tax Department",
@@ -317,14 +323,10 @@ public class DocumentValidationService {
                 "PAN (Permanent Account Number)",
                 PAN_PATTERN,
                 "10-character alphanumeric (e.g., ABCDE1234F)");
-        // PAN cards also typically have
         requireAnyKeyword(text, "PAN Card", fileName, "Government / Authority",
                 "Government of India", "Income Tax");
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  3. Shop & Establishment License (under Shops and Establishments Act)
-    // ─────────────────────────────────────────────────────────────────────────
     private void validateShopEstablishment(String text, String fileName) {
         requireAllKeywords(text, "Shop & Establishment License", fileName,
                 "Shops and Establishments Act",
@@ -342,9 +344,6 @@ public class DocumentValidationService {
                 "Government", "Municipal", "Labour Department", "Labour Commissioner");
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  4. Trade License
-    // ─────────────────────────────────────────────────────────────────────────
     private void validateTradeLicense(String text, String fileName) {
         requireAllKeywords(text, "Trade License", fileName,
                 "Trade License",
@@ -360,9 +359,6 @@ public class DocumentValidationService {
                 "Valid", "Validity", "Issue Date", "Issued");
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  5. Udyam MSME Registration
-    // ─────────────────────────────────────────────────────────────────────────
     private void validateMSME(String text, String fileName) {
         requireAllKeywords(text, "Udyam MSME Registration", fileName,
                 "Udyam",
@@ -378,9 +374,6 @@ public class DocumentValidationService {
                 "UDYAM-XX-XX-XXXXXXX format");
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  6. Professional Tax Registration
-    // ─────────────────────────────────────────────────────────────────────────
     private void validateProfessionalTax(String text, String fileName) {
         requireAllKeywords(text, "Professional Tax Registration", fileName,
                 "Professional Tax",
@@ -398,9 +391,6 @@ public class DocumentValidationService {
                 "Government of", "State", "Sales Tax", "Commercial Tax");
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  7. Trademark Certificate
-    // ─────────────────────────────────────────────────────────────────────────
     private void validateTrademark(String text, String fileName) {
         requireAllKeywords(text, "Trademark Certificate", fileName,
                 "Trademark",
@@ -417,9 +407,6 @@ public class DocumentValidationService {
                 "Registry", "Government of India", "Intellectual Property");
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  8. Property Tax Certificate
-    // ─────────────────────────────────────────────────────────────────────────
     private void validatePropertyTax(String text, String fileName) {
         requireAllKeywords(text, "Property Tax Certificate", fileName,
                 "Property Tax",
@@ -436,9 +423,6 @@ public class DocumentValidationService {
                 "An alphanumeric property ID or assessment number");
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  9. Import Export Code (IEC)
-    // ─────────────────────────────────────────────────────────────────────────
     private void validateIEC(String text, String fileName) {
         requireAllKeywords(text, "Import Export Code (IEC)", fileName,
                 "Import Export Code",
@@ -454,9 +438,6 @@ public class DocumentValidationService {
                 "DGFT", "Foreign Trade", "Ministry of Commerce");
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  10. Pollution Control Certificate (CTE / CTO)
-    // ─────────────────────────────────────────────────────────────────────────
     private void validatePollutionControl(String text, String fileName) {
         requireAllKeywords(text, "Pollution Control Certificate", fileName,
                 "Pollution Control",
@@ -472,9 +453,6 @@ public class DocumentValidationService {
                 "Certificate", "Order", "Number", "Validity", "Valid");
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  11. Fire Safety Certificate (NOC from Fire Department)
-    // ─────────────────────────────────────────────────────────────────────────
     private void validateFireSafety(String text, String fileName) {
         requireAllKeywords(text, "Fire Safety Certificate", fileName,
                 "Fire Safety",
@@ -491,11 +469,7 @@ public class DocumentValidationService {
                 "Valid", "Validity", "Building", "Premises", "Occupancy");
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  12. Labour License / Workmen Compensation Policy
-    // ─────────────────────────────────────────────────────────────────────────
     private void validateLabourLicense(String text, String fileName) {
-        // Must match at least one of the two categories
         boolean isLabourLicense = containsIgnoreCase(text, "Labour License")
                 || containsIgnoreCase(text, "Contract Labour")
                 || containsIgnoreCase(text, "Labour Department");
@@ -506,15 +480,14 @@ public class DocumentValidationService {
         if (!isLabourLicense && !isWorkmenComp) {
             throw new FssaiException(
                     "Uploaded file \"" + fileName + "\" is not a valid Labour License / Workmen Compensation Policy. " +
-                    "Required fields were not found. " +
-                    "Expected to find either: " +
-                    "\"Labour License\" or \"Contract Labour\" (for Labour License), " +
-                    "or BOTH \"Workmen\" AND \"Compensation\" (for Workmen Compensation Policy). " +
-                    "Please upload a correct Labour License or Workmen Compensation document."
-            );
+                            "Required fields were not found. " +
+                            "Expected to find either: " +
+                            "\"Labour License\" or \"Contract Labour\" (for Labour License), " +
+                            "or BOTH \"Workmen\" AND \"Compensation\" (for Workmen Compensation Policy). " +
+                            "Please upload a correct Labour License or Workmen Compensation document.",
+                    FailureCode.DOCUMENT_VALIDATION_FAILED);
         }
 
-        // Additional requirement: must have some license/policy number
         requireAnyKeyword(text, "Labour License / Workmen Compensation", fileName,
                 "License/Policy Number",
                 "License Number", "License No", "Policy Number", "Policy No", "Registration Number");
@@ -525,9 +498,6 @@ public class DocumentValidationService {
                 "An alphanumeric license or policy number");
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  13. Shop Insurance Policy
-    // ─────────────────────────────────────────────────────────────────────────
     private void validateShopInsurance(String text, String fileName) {
         requireAllKeywords(text, "Shop Insurance Policy", fileName,
                 "Insurance",
@@ -547,9 +517,6 @@ public class DocumentValidationService {
                 "Insurance Company", "Insurance Co", "Insurer");
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  14. Drug License (21-21 / 20B / 20D under Drugs and Cosmetics Act)
-    // ─────────────────────────────────────────────────────────────────────────
     private void validateDrugLicense(String text, String fileName) {
         requireAllKeywords(text, "Drug License", fileName,
                 "Drug License");
@@ -568,9 +535,6 @@ public class DocumentValidationService {
                 "Sale", "Wholesale", "Retail", "Manufacturing", "Distribution");
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  15. FSSAI License (Food Safety and Standards Authority of India)
-    // ─────────────────────────────────────────────────────────────────────────
     private void validateFSSAI(String text, String fileName) {
         requireAllKeywords(text, "FSSAI License", fileName,
                 "FSSAI",
@@ -585,9 +549,6 @@ public class DocumentValidationService {
                 "Food Business Operator", "FBO", "Valid", "Validity", "Category");
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  16. Aadhaar Card
-    // ─────────────────────────────────────────────────────────────────────────
     private void validateAadhaar(String text, String fileName) {
         requireAllKeywords(text, "Aadhaar Card", fileName,
                 "Government of India",
