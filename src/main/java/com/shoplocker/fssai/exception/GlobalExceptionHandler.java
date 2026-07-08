@@ -133,6 +133,18 @@ public class GlobalExceptionHandler {
     }
 
     /** Catch-all. Logged with stack trace; the client only sees a generic message + a stable code. */
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<FssaiErrorResponse> handleNotFound(org.springframework.web.servlet.resource.NoResourceFoundException ex, jakarta.servlet.http.HttpServletRequest request) {
+        log.info("Route not found: {} {} - {}", request.getMethod(), request.getRequestURI(), ex.getMessage());
+        FssaiErrorResponse body = FssaiErrorResponse.builder()
+                .status(FailureCode.NOT_FOUND.getHttpStatus().value())
+                .code(FailureCode.NOT_FOUND.getCode())
+                .message("The requested resource was not found: " + request.getRequestURI())
+                .timestamp(java.time.LocalDateTime.now())
+                .build();
+        return ResponseEntity.status(FailureCode.NOT_FOUND.getHttpStatus()).body(body);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<FssaiErrorResponse> handleGeneral(Exception ex) {
         log.error("Unhandled exception reached the global handler", ex);
