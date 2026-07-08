@@ -13,18 +13,18 @@ import java.util.Optional;
 @Service
 public class MSMEDocumentService {
 
-    private final MSMEDocumentRepository repository;
+    private final MSMEDocumentRepository msmeDocumentRepository;
     private final ShopService shopService;
     private final S3Service s3Service;
     private final TextractService textractService;
     private final DocumentValidationService documentValidationService;
 
-    public MSMEDocumentService(MSMEDocumentRepository repository,
+    public MSMEDocumentService(MSMEDocumentRepository msmeDocumentRepository,
                                ShopService shopService,
                                S3Service s3Service,
                                TextractService textractService,
                                DocumentValidationService documentValidationService) {
-        this.repository = repository;
+        this.msmeDocumentRepository = msmeDocumentRepository;
         this.shopService = shopService;
         this.s3Service = s3Service;
         this.textractService = textractService;
@@ -33,30 +33,34 @@ public class MSMEDocumentService {
 
     public void uploadMSME(Long shopId, MultipartFile file) {
         documentValidationService.validateFileFormat(file, "Udyam MSME Registration");
+        byte[] fileBytes = documentValidationService.readBytes(file);
+        documentValidationService.assertPdfMagicBytes(fileBytes, "Udyam MSME Registration");
 
-        // Extract text via AWS Textract and validate document content
-        String extractedText = textractService.extractText(file);
+        String extractedText = textractService.extractText(fileBytes, file.getOriginalFilename());
         documentValidationService.validate(DocumentType.MSME, extractedText, file.getOriginalFilename());
 
         Shop shop = shopService.getShopById(shopId);
-        Optional<MSMEDocument> existing = repository.findByShop(shop);
-
-        MSMEDocument doc;
+        Optional<MSMEDocument> existing = msmeDocumentRepository.findByShop(shop);
+        MSMEDocument document;
         if (existing.isPresent()) {
-            doc = existing.get();
+            document = existing.get();
         } else {
-            doc = new MSMEDocument();
-            doc.setShop(shop);
+            document = new MSMEDocument();
+            document.setShop(shop);
         }
 
-        String fileKey = "msme/shop_" + shopId + "/msme_certificate.pdf";
-        String fileUrl = s3Service.uploadFile(file, fileKey);
+        String fileKey = getFileKey(shopId);
+        String fileUrl = s3Service.uploadFile(fileBytes, file.getContentType(), fileKey);
 
-        doc.setOriginalFileName(file.getOriginalFilename());
-        doc.setUploadedFileName(fileKey);
-        doc.setFileUrl(fileUrl);
-        doc.setUploadedAt(LocalDateTime.now());
+        document.setOriginalFileName(file.getOriginalFilename());
+        document.setUploadedFileName(fileKey);
+        document.setFileUrl(fileUrl);
+        document.setUploadedAt(LocalDateTime.now());
 
-        repository.save(doc);
+        msmeDocumentRepository.save(document);
+    }
+
+    private String getFileKey(Long shopId) {
+        return "msme/shop_" + shopId + "/msme_registration.pdf";
     }
 }

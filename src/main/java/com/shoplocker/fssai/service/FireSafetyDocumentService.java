@@ -13,7 +13,7 @@ import java.util.Optional;
 @Service
 public class FireSafetyDocumentService {
 
-    private final FireSafetyDocumentRepository repository;
+    private final FireSafetyDocumentRepository fireSafetyDocumentRepository;
     private final ShopService shopService;
     private final S3Service s3Service;
     private final TextractService textractService;
@@ -24,7 +24,7 @@ public class FireSafetyDocumentService {
                                      S3Service s3Service,
                                      TextractService textractService,
                                      DocumentValidationService documentValidationService) {
-        this.repository = repository;
+        this.fireSafetyDocumentRepository = repository;
         this.shopService = shopService;
         this.s3Service = s3Service;
         this.textractService = textractService;
@@ -33,30 +33,32 @@ public class FireSafetyDocumentService {
 
     public void uploadFireSafety(Long shopId, MultipartFile file) {
         documentValidationService.validateFileFormat(file, "Fire Safety Certificate");
+        byte[] fileBytes = documentValidationService.readBytes(file);
+        documentValidationService.assertPdfMagicBytes(fileBytes, "Fire Safety Certificate");
 
-        // Extract text via AWS Textract and validate document content
-        String extractedText = textractService.extractText(file);
+        String extractedText = textractService.extractText(fileBytes, file.getOriginalFilename());
         documentValidationService.validate(DocumentType.FIRE_SAFETY, extractedText, file.getOriginalFilename());
 
         Shop shop = shopService.getShopById(shopId);
-        Optional<FireSafetyDocument> existing = repository.findByShop(shop);
+        Optional<FireSafetyDocument> existing = fireSafetyDocumentRepository.findByShop(shop);
+        FireSafetyDocument document = existing.orElseGet(() -> {
+            FireSafetyDocument d = new FireSafetyDocument();
+            d.setShop(shop);
+            return d;
+        });
 
-        FireSafetyDocument doc;
-        if (existing.isPresent()) {
-            doc = existing.get();
-        } else {
-            doc = new FireSafetyDocument();
-            doc.setShop(shop);
-        }
+        String fileKey = getFileKey(shopId);
+        String fileUrl = s3Service.uploadFile(fileBytes, file.getContentType(), fileKey);
 
-        String fileKey = "fire-safety/shop_" + shopId + "/fire_safety.pdf";
-        String fileUrl = s3Service.uploadFile(file, fileKey);
+        document.setOriginalFileName(file.getOriginalFilename());
+        document.setUploadedFileName(fileKey);
+        document.setFileUrl(fileUrl);
+        document.setUploadedAt(LocalDateTime.now());
 
-        doc.setOriginalFileName(file.getOriginalFilename());
-        doc.setUploadedFileName(fileKey);
-        doc.setFileUrl(fileUrl);
-        doc.setUploadedAt(LocalDateTime.now());
+        fireSafetyDocumentRepository.save(document);
+    }
 
-        repository.save(doc);
+    private String getFileKey(Long shopId) {
+        return "fire-safety/shop_" + shopId + "/fire_safety_certificate.pdf";
     }
 }

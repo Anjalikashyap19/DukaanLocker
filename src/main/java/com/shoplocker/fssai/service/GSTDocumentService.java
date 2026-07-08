@@ -32,46 +32,42 @@ public class GSTDocumentService {
     }
 
     public void uploadGST(Long shopId, MultipartFile file) {
-
+        // 1. Cheap metadata validation (no IO).
         documentValidationService.validateFileFormat(file, "GST Registration Certificate");
 
-        // Extract text via AWS Textract and validate document content
-        String extractedText = textractService.extractText(file);
+        // 2. Read the file into memory ONCE — single contact with the source.
+        byte[] fileBytes = documentValidationService.readBytes(file);
+
+        // 3. Confirm %PDF magic bytes using the already-loaded byte[].
+        documentValidationService.assertPdfMagicBytes(fileBytes, "GST Registration Certificate");
+
+        // 4. OCR directly from byte[] (no S3 round-trip).
+        String extractedText = textractService.extractText(fileBytes, file.getOriginalFilename());
+
+        // 5. Content validation — throws on any mismatch.
         documentValidationService.validate(DocumentType.GST, extractedText, file.getOriginalFilename());
 
-        // Get shop
+        // 6. Only after both validations pass: upload the SAME bytes to S3.
         Shop shop = shopService.getShopById(shopId);
+        Optional<GSTDocument> existing = gstDocumentRepository.findByShop(shop);
+        GSTDocument document = existing.orElseGet(() -> {
+            GSTDocument d = new GSTDocument();
+            d.setShop(shop);
+            return d;
+        });
 
-        // Check if GST already exists
-        Optional<GSTDocument> existingDocument = gstDocumentRepository.findByShop(shop);
+        String fileKey = getFileKey(shopId);
+        String fileUrl = s3Service.uploadFile(fileBytes, file.getContentType(), fileKey);
 
-        GSTDocument gstDocument;
+        document.setOriginalFileName(file.getOriginalFilename());
+        document.setUploadedFileName(fileKey);
+        document.setFileUrl(fileUrl);
+        document.setUploadedAt(LocalDateTime.now());
 
-        if (existingDocument.isPresent()) {
-            gstDocument = existingDocument.get();   // UPDATE existing row
-        } else {
-            gstDocument = new GSTDocument();        // CREATE new row
-            gstDocument.setShop(shop);
-        }
-
-        // Fixed S3 key (same for every upload of same shop)
-        String fileKey = generateGSTFileName(shopId);
-
-        // Upload to S3 (same key => overwrite)
-        String fileUrl = s3Service.uploadFile(file, fileKey);
-
-        // Update metadata
-        gstDocument.setOriginalFileName(file.getOriginalFilename());
-        gstDocument.setUploadedFileName(fileKey);
-        gstDocument.setFileUrl(fileUrl);
-        gstDocument.setUploadedAt(LocalDateTime.now());
-
-        // Save
-        gstDocumentRepository.save(gstDocument);
+        gstDocumentRepository.save(document);
     }
 
-    private String generateGSTFileName(Long shopId) {
-
+    private String getFileKey(Long shopId) {
         return "gst/shop_" + shopId + "/gst_certificate.pdf";
     }
 }

@@ -13,18 +13,18 @@ import java.util.Optional;
 @Service
 public class PropertyTaxDocumentService {
 
-    private final PropertyTaxDocumentRepository repository;
+    private final PropertyTaxDocumentRepository propertyTaxDocumentRepository;
     private final ShopService shopService;
     private final S3Service s3Service;
     private final TextractService textractService;
     private final DocumentValidationService documentValidationService;
 
-    public PropertyTaxDocumentService(PropertyTaxDocumentRepository repository,
+    public PropertyTaxDocumentService(PropertyTaxDocumentRepository propertyTaxDocumentRepository,
                                       ShopService shopService,
                                       S3Service s3Service,
                                       TextractService textractService,
                                       DocumentValidationService documentValidationService) {
-        this.repository = repository;
+        this.propertyTaxDocumentRepository = propertyTaxDocumentRepository;
         this.shopService = shopService;
         this.s3Service = s3Service;
         this.textractService = textractService;
@@ -33,30 +33,32 @@ public class PropertyTaxDocumentService {
 
     public void uploadPropertyTax(Long shopId, MultipartFile file) {
         documentValidationService.validateFileFormat(file, "Property Tax Certificate");
+        byte[] fileBytes = documentValidationService.readBytes(file);
+        documentValidationService.assertPdfMagicBytes(fileBytes, "Property Tax Certificate");
 
-        // Extract text via AWS Textract and validate document content
-        String extractedText = textractService.extractText(file);
+        String extractedText = textractService.extractText(fileBytes, file.getOriginalFilename());
         documentValidationService.validate(DocumentType.PROPERTY_TAX, extractedText, file.getOriginalFilename());
 
         Shop shop = shopService.getShopById(shopId);
-        Optional<PropertyTaxDocument> existing = repository.findByShop(shop);
+        Optional<PropertyTaxDocument> existing = propertyTaxDocumentRepository.findByShop(shop);
+        PropertyTaxDocument document = existing.orElseGet(() -> {
+            PropertyTaxDocument d = new PropertyTaxDocument();
+            d.setShop(shop);
+            return d;
+        });
 
-        PropertyTaxDocument doc;
-        if (existing.isPresent()) {
-            doc = existing.get();
-        } else {
-            doc = new PropertyTaxDocument();
-            doc.setShop(shop);
-        }
+        String fileKey = getFileKey(shopId);
+        String fileUrl = s3Service.uploadFile(fileBytes, file.getContentType(), fileKey);
 
-        String fileKey = "property-tax/shop_" + shopId + "/property_tax.pdf";
-        String fileUrl = s3Service.uploadFile(file, fileKey);
+        document.setOriginalFileName(file.getOriginalFilename());
+        document.setUploadedFileName(fileKey);
+        document.setFileUrl(fileUrl);
+        document.setUploadedAt(LocalDateTime.now());
 
-        doc.setOriginalFileName(file.getOriginalFilename());
-        doc.setUploadedFileName(fileKey);
-        doc.setFileUrl(fileUrl);
-        doc.setUploadedAt(LocalDateTime.now());
+        propertyTaxDocumentRepository.save(document);
+    }
 
-        repository.save(doc);
+    private String getFileKey(Long shopId) {
+        return "property-tax/shop_" + shopId + "/property_tax_certificate.pdf";
     }
 }

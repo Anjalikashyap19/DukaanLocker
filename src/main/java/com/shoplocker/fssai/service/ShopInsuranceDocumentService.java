@@ -1,8 +1,8 @@
 package com.shoplocker.fssai.service;
 
 import com.shoplocker.fssai.entity.DocumentType;
-import com.shoplocker.fssai.entity.ShopInsuranceDocument;
 import com.shoplocker.fssai.entity.Shop;
+import com.shoplocker.fssai.entity.ShopInsuranceDocument;
 import com.shoplocker.fssai.repository.ShopInsuranceDocumentRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -13,7 +13,7 @@ import java.util.Optional;
 @Service
 public class ShopInsuranceDocumentService {
 
-    private final ShopInsuranceDocumentRepository repository;
+    private final ShopInsuranceDocumentRepository shopInsuranceDocumentRepository;
     private final ShopService shopService;
     private final S3Service s3Service;
     private final TextractService textractService;
@@ -24,7 +24,7 @@ public class ShopInsuranceDocumentService {
                                         S3Service s3Service,
                                         TextractService textractService,
                                         DocumentValidationService documentValidationService) {
-        this.repository = repository;
+        this.shopInsuranceDocumentRepository = repository;
         this.shopService = shopService;
         this.s3Service = s3Service;
         this.textractService = textractService;
@@ -33,30 +33,32 @@ public class ShopInsuranceDocumentService {
 
     public void uploadShopInsurance(Long shopId, MultipartFile file) {
         documentValidationService.validateFileFormat(file, "Shop Insurance");
+        byte[] fileBytes = documentValidationService.readBytes(file);
+        documentValidationService.assertPdfMagicBytes(fileBytes, "Shop Insurance");
 
-        // Extract text via AWS Textract and validate document content
-        String extractedText = textractService.extractText(file);
+        String extractedText = textractService.extractText(fileBytes, file.getOriginalFilename());
         documentValidationService.validate(DocumentType.SHOP_INSURANCE, extractedText, file.getOriginalFilename());
 
         Shop shop = shopService.getShopById(shopId);
-        Optional<ShopInsuranceDocument> existing = repository.findByShop(shop);
+        Optional<ShopInsuranceDocument> existing = shopInsuranceDocumentRepository.findByShop(shop);
+        ShopInsuranceDocument document = existing.orElseGet(() -> {
+            ShopInsuranceDocument d = new ShopInsuranceDocument();
+            d.setShop(shop);
+            return d;
+        });
 
-        ShopInsuranceDocument doc;
-        if (existing.isPresent()) {
-            doc = existing.get();
-        } else {
-            doc = new ShopInsuranceDocument();
-            doc.setShop(shop);
-        }
+        String fileKey = getFileKey(shopId);
+        String fileUrl = s3Service.uploadFile(fileBytes, file.getContentType(), fileKey);
 
-        String fileKey = "shop-insurance/shop_" + shopId + "/shop_insurance.pdf";
-        String fileUrl = s3Service.uploadFile(file, fileKey);
+        document.setOriginalFileName(file.getOriginalFilename());
+        document.setUploadedFileName(fileKey);
+        document.setFileUrl(fileUrl);
+        document.setUploadedAt(LocalDateTime.now());
 
-        doc.setOriginalFileName(file.getOriginalFilename());
-        doc.setUploadedFileName(fileKey);
-        doc.setFileUrl(fileUrl);
-        doc.setUploadedAt(LocalDateTime.now());
+        shopInsuranceDocumentRepository.save(document);
+    }
 
-        repository.save(doc);
+    private String getFileKey(Long shopId) {
+        return "shop-insurance/shop_" + shopId + "/shop_insurance.pdf";
     }
 }

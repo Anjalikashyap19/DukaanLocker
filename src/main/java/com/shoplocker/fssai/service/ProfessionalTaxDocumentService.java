@@ -13,18 +13,18 @@ import java.util.Optional;
 @Service
 public class ProfessionalTaxDocumentService {
 
-    private final ProfessionalTaxDocumentRepository repository;
+    private final ProfessionalTaxDocumentRepository professionalTaxDocumentRepository;
     private final ShopService shopService;
     private final S3Service s3Service;
     private final TextractService textractService;
     private final DocumentValidationService documentValidationService;
 
-    public ProfessionalTaxDocumentService(ProfessionalTaxDocumentRepository repository,
+    public ProfessionalTaxDocumentService(ProfessionalTaxDocumentRepository professionalTaxDocumentRepository,
                                           ShopService shopService,
                                           S3Service s3Service,
                                           TextractService textractService,
                                           DocumentValidationService documentValidationService) {
-        this.repository = repository;
+        this.professionalTaxDocumentRepository = professionalTaxDocumentRepository;
         this.shopService = shopService;
         this.s3Service = s3Service;
         this.textractService = textractService;
@@ -33,30 +33,32 @@ public class ProfessionalTaxDocumentService {
 
     public void uploadProfessionalTax(Long shopId, MultipartFile file) {
         documentValidationService.validateFileFormat(file, "Professional Tax Registration");
+        byte[] fileBytes = documentValidationService.readBytes(file);
+        documentValidationService.assertPdfMagicBytes(fileBytes, "Professional Tax Registration");
 
-        // Extract text via AWS Textract and validate document content
-        String extractedText = textractService.extractText(file);
+        String extractedText = textractService.extractText(fileBytes, file.getOriginalFilename());
         documentValidationService.validate(DocumentType.PROFESSIONAL_TAX, extractedText, file.getOriginalFilename());
 
         Shop shop = shopService.getShopById(shopId);
-        Optional<ProfessionalTaxDocument> existing = repository.findByShop(shop);
+        Optional<ProfessionalTaxDocument> existing = professionalTaxDocumentRepository.findByShop(shop);
+        ProfessionalTaxDocument document = existing.orElseGet(() -> {
+            ProfessionalTaxDocument d = new ProfessionalTaxDocument();
+            d.setShop(shop);
+            return d;
+        });
 
-        ProfessionalTaxDocument doc;
-        if (existing.isPresent()) {
-            doc = existing.get();
-        } else {
-            doc = new ProfessionalTaxDocument();
-            doc.setShop(shop);
-        }
+        String fileKey = getFileKey(shopId);
+        String fileUrl = s3Service.uploadFile(fileBytes, file.getContentType(), fileKey);
 
-        String fileKey = "professional-tax/shop_" + shopId + "/professional_tax.pdf";
-        String fileUrl = s3Service.uploadFile(file, fileKey);
+        document.setOriginalFileName(file.getOriginalFilename());
+        document.setUploadedFileName(fileKey);
+        document.setFileUrl(fileUrl);
+        document.setUploadedAt(LocalDateTime.now());
 
-        doc.setOriginalFileName(file.getOriginalFilename());
-        doc.setUploadedFileName(fileKey);
-        doc.setFileUrl(fileUrl);
-        doc.setUploadedAt(LocalDateTime.now());
+        professionalTaxDocumentRepository.save(document);
+    }
 
-        repository.save(doc);
+    private String getFileKey(Long shopId) {
+        return "professional-tax/shop_" + shopId + "/professional_tax_registration.pdf";
     }
 }

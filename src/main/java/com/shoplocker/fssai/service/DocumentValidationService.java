@@ -6,20 +6,27 @@ import com.shoplocker.fssai.exception.FssaiException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.InputStream;
+import java.io.IOException;
 import java.util.*;
 import java.util.regex.Pattern;
 
 /**
- * Validates uploaded documents at two levels:
+ * Validates uploaded documents at three levels:
  * <ol>
- *   <li>{@link #validateFileFormat(MultipartFile, String)} — basic file format (PDF, size, magic bytes).
- *       Throws {@link FailureCode#INVALID_FILE_FORMAT}.</li>
- *   <li>{@link #validate(DocumentType, String, String)} — content keywords / ID regex after OCR.
- *       Throws {@link FailureCode#DOCUMENT_VALIDATION_FAILED} for missing fields and
- *       {@link FailureCode#DOCUMENT_TYPE_MISMATCH} when the file appears to be a different
- *       document type entirely.</li>
+ *   <li>{@link #validateFileFormat(MultipartFile, String)} — basic file
+ *       metadata (size, content type). Cheap, no IO.</li>
+ *   <li>{@link #assertPdfMagicBytes(byte[], String)} — confirms the file is a
+ *       real PDF (operates on an already-loaded byte[]).</li>
+ *   <li>{@link #validate(DocumentType, String, String)} — content keywords /
+ *       ID regex after OCR. Throws {@link FailureCode#DOCUMENT_VALIDATION_FAILED}
+ *       for missing fields and {@link FailureCode#DOCUMENT_TYPE_MISMATCH} when
+ *       the file appears to be a different document type entirely.</li>
  * </ol>
+ *
+ * <p>Together with {@link #readBytes(MultipartFile)} this lets the upload
+ * pipeline read the {@code MultipartFile} exactly once (inside
+ * {@code readBytes}) and then reuse the same {@code byte[]} for Textract,
+ * S3, and any future downstream consumer.</p>
  */
 @Service
 public class DocumentValidationService {
@@ -83,10 +90,21 @@ public class DocumentValidationService {
             Pattern.compile("\\b[0-9]{6,7}\\b");
     private static final Pattern FIRE_NOC_PATTERN =
             Pattern.compile("(?i)(?:NOC|Certificate)\\s*[:\\.]?\\s*[A-Za-z0-9/-]+");
-    private static final Pattern POLICY_PATTERN =
-            Pattern.compile("(?i)Policy\\s*(?:Number|No|#|:)?\\s*[A-Za-z0-9/\\-]+");
+    // Three branches so we accept any real PT enrollment-number format:
+    //   1. PTEC/PTRC/PTC literal prefix + 4+ alphanumeric (e.g. PTEC123456, PTRC987654)
+    //   2. "Professional Tax Enrollment Certificate/Cert/Number/No" + alphanumeric
+    //   3. "Professional Tax Number/No" + alphanumeric (real certs that omit "Enrollment")
     private static final Pattern PTEC_PATTERN =
-            Pattern.compile("(?i)(?:PTEC|Professional Tax)\\s*(?:Number|No|:)?\\s*[A-Za-z0-9/-]+");
+            Pattern.compile("(?i)(?:PTEC|PTRC|PTC)\\s*[-/:#.]?\\s*[A-Za-z0-9/-]{4,}" +
+                    "|Professional\\s+Tax\\s+[Ee]nrol?ment\\s+(?:Certificate|Cert|Number|No)\\s*[:-]?\\s*[A-Za-z0-9/-]{2,}" +
+                    "|Professional\\s+Tax\\s+(?:Number|No)\\s*[:-]?\\s*[A-Za-z0-9/-]{2,}");
+
+    // Shop Insurance Policy: accept common policy-number formats and Certificate of Insurance.
+    // We need an ID suffix (reject bare "Insurance Policy" alone) - same tightening rationale as PTEC_PATTERN.
+    private static final Pattern POLICY_PATTERN =
+            Pattern.compile("(?i)Policy\s*[-/:#.]?\s*[A-Za-z0-9/-]{4,}" +
+                    "|Certificate\s+of\s+Insurance\s*[:-]?\s*[A-Za-z0-9/-]{3,}" +
+                    "|Insurance\s+(?:Certificate|Policy)\s*[:-/]?\s*[A-Za-z0-9/-]{3,}");
     private static final Pattern PROPERTY_ID_PATTERN =
             Pattern.compile("(?i)(?:Property|Assessment|Ward)\\s*(?:ID|Number|No|#|:)?\\s*[A-Za-z0-9/\\-]+");
     private static final Pattern LABOUR_LICENSE_PATTERN =
@@ -100,13 +118,16 @@ public class DocumentValidationService {
     private static final byte[] PDF_MAGIC = {0x25, 0x50, 0x44, 0x46}; // "%PDF"
 
     // =========================================================================
-    //  FILE-FORMAT HELPERS (shared by all *DocumentService beans)
+    //  FILE-FORMAT HELPERS (cheap metadata + magic-byte check on byte[])
     // =========================================================================
 
     /**
-     * Validates the multipart upload as a sane PDF (non-empty, application/pdf
-     * content type, ≤ 5 MB, real %PDF magic bytes at the start). Replaces
-     * 13 identical copies that used to live in each *DocumentService.
+     * Cheap metadata-only validation: file present, has PDF content-type, and
+     * fits under the 5 MB ceiling. Does NOT touch the file contents.
+     *
+     * <p>After this returns, callers should {@link #readBytes(MultipartFile)}
+     * to fetch the bytes once, then {@link #assertPdfMagicBytes(byte[], String)}
+     * to confirm the file is a real PDF before sending to Textract.</p>
      */
     public void validateFileFormat(MultipartFile file, String docDisplayName) {
         if (file == null || file.isEmpty()) {
@@ -129,24 +150,41 @@ public class DocumentValidationService {
                             "(5 MB). Please upload a smaller PDF.",
                     FailureCode.INVALID_FILE_FORMAT);
         }
-        if (!hasPdfMagicBytes(file)) {
+    }
+
+    /**
+     * Read the {@link MultipartFile} into a byte array — the SINGLE point of
+     * contact between the upload pipeline and the multipart source. The same
+     * {@code byte[]} is then passed to {@link TextractService} and
+     * {@link S3Service} so the file is read from disk at most once per request.
+     */
+    public byte[] readBytes(MultipartFile file) {
+        try {
+            return file.getBytes();
+        } catch (IOException e) {
             throw new FssaiException(
-                    "The uploaded file is not a valid PDF. Expected PDF magic bytes '%PDF' at the " +
-                            "start of the file, but the file does not contain them. Please upload a real PDF document.",
-                    FailureCode.INVALID_FILE_FORMAT);
+                    "We couldn't read your file just now. Please try uploading it again — if the problem persists, contact support.",
+                    FailureCode.INVALID_FILE_FORMAT, e);
         }
     }
 
-    private boolean hasPdfMagicBytes(MultipartFile file) {
-        try (InputStream is = file.getInputStream()) {
-            byte[] header = new byte[4];
-            return is.read(header) == 4
-                    && header[0] == PDF_MAGIC[0]
-                    && header[1] == PDF_MAGIC[1]
-                    && header[2] == PDF_MAGIC[2]
-                    && header[3] == PDF_MAGIC[3];
-        } catch (Exception e) {
-            return false;
+    /**
+     * Confirms the first 4 bytes of {@code fileBytes} spell out {@code %PDF}.
+     * Operating on the byte[] (not on a fresh stream) keeps the I/O cost at
+     * zero — the bytes were already loaded by {@link #readBytes(MultipartFile)}.
+     */
+    public void assertPdfMagicBytes(byte[] fileBytes, String docDisplayName) {
+        if (fileBytes == null || fileBytes.length < 4) {
+            throw new FssaiException(
+                    "The uploaded file for " + docDisplayName + " is empty or truncated. Please re-upload a complete PDF.",
+                    FailureCode.INVALID_FILE_FORMAT);
+        }
+        if (fileBytes[0] != PDF_MAGIC[0] || fileBytes[1] != PDF_MAGIC[1] ||
+                fileBytes[2] != PDF_MAGIC[2] || fileBytes[3] != PDF_MAGIC[3]) {
+            throw new FssaiException(
+                    "The uploaded file is not a valid " + docDisplayName + " PDF. Expected PDF magic bytes '%PDF' at the " +
+                            "start of the file, but the file does not contain them. Please upload a real PDF document.",
+                    FailureCode.INVALID_FILE_FORMAT);
         }
     }
 
@@ -162,6 +200,14 @@ public class DocumentValidationService {
      */
     public void validate(DocumentType type, String extractedText, String originalFileName) {
         ensureMinTextLength(extractedText, originalFileName);
+
+        // Cross-contamination FIRST. If the OCR'd text matches another document
+        // type's signatures (>=2 of that type's keywords), surface
+        // DOCUMENT_TYPE_MISMATCH so the UI can tell the user
+        // "you uploaded X, we need Y" — the most actionable error. This runs
+        // before the per-type validators so a wholly wrong upload doesn't get
+        // dismissed as a long list of "missing fields".
+        checkDocumentConflict(type, extractedText, originalFileName);
 
         switch (type) {
             case GST:                validateGST(extractedText, originalFileName); break;
@@ -182,8 +228,6 @@ public class DocumentValidationService {
             case AADHAAR:            validateAadhaar(extractedText, originalFileName); break;
             default: throw new FssaiException("Unknown document type: " + type, FailureCode.INTERNAL_ERROR);
         }
-
-        checkDocumentConflict(type, extractedText, originalFileName);
     }
 
     private void ensureMinTextLength(String text, String fileName) {

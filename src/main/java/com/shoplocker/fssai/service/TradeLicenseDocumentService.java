@@ -1,8 +1,8 @@
 package com.shoplocker.fssai.service;
 
 import com.shoplocker.fssai.entity.DocumentType;
-import com.shoplocker.fssai.entity.TradeLicenseDocument;
 import com.shoplocker.fssai.entity.Shop;
+import com.shoplocker.fssai.entity.TradeLicenseDocument;
 import com.shoplocker.fssai.repository.TradeLicenseDocumentRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -13,7 +13,7 @@ import java.util.Optional;
 @Service
 public class TradeLicenseDocumentService {
 
-    private final TradeLicenseDocumentRepository repository;
+    private final TradeLicenseDocumentRepository tradeLicenseDocumentRepository;
     private final ShopService shopService;
     private final S3Service s3Service;
     private final TextractService textractService;
@@ -24,7 +24,7 @@ public class TradeLicenseDocumentService {
                                        S3Service s3Service,
                                        TextractService textractService,
                                        DocumentValidationService documentValidationService) {
-        this.repository = repository;
+        this.tradeLicenseDocumentRepository = repository;
         this.shopService = shopService;
         this.s3Service = s3Service;
         this.textractService = textractService;
@@ -33,30 +33,32 @@ public class TradeLicenseDocumentService {
 
     public void uploadTradeLicense(Long shopId, MultipartFile file) {
         documentValidationService.validateFileFormat(file, "Trade License");
+        byte[] fileBytes = documentValidationService.readBytes(file);
+        documentValidationService.assertPdfMagicBytes(fileBytes, "Trade License");
 
-        // Extract text via AWS Textract and validate document content
-        String extractedText = textractService.extractText(file);
+        String extractedText = textractService.extractText(fileBytes, file.getOriginalFilename());
         documentValidationService.validate(DocumentType.TRADE_LICENSE, extractedText, file.getOriginalFilename());
 
         Shop shop = shopService.getShopById(shopId);
-        Optional<TradeLicenseDocument> existing = repository.findByShop(shop);
+        Optional<TradeLicenseDocument> existing = tradeLicenseDocumentRepository.findByShop(shop);
+        TradeLicenseDocument document = existing.orElseGet(() -> {
+            TradeLicenseDocument d = new TradeLicenseDocument();
+            d.setShop(shop);
+            return d;
+        });
 
-        TradeLicenseDocument doc;
-        if (existing.isPresent()) {
-            doc = existing.get();
-        } else {
-            doc = new TradeLicenseDocument();
-            doc.setShop(shop);
-        }
+        String fileKey = getFileKey(shopId);
+        String fileUrl = s3Service.uploadFile(fileBytes, file.getContentType(), fileKey);
 
-        String fileKey = "trade-license/shop_" + shopId + "/trade_license.pdf";
-        String fileUrl = s3Service.uploadFile(file, fileKey);
+        document.setOriginalFileName(file.getOriginalFilename());
+        document.setUploadedFileName(fileKey);
+        document.setFileUrl(fileUrl);
+        document.setUploadedAt(LocalDateTime.now());
 
-        doc.setOriginalFileName(file.getOriginalFilename());
-        doc.setUploadedFileName(fileKey);
-        doc.setFileUrl(fileUrl);
-        doc.setUploadedAt(LocalDateTime.now());
+        tradeLicenseDocumentRepository.save(document);
+    }
 
-        repository.save(doc);
+    private String getFileKey(Long shopId) {
+        return "trade-license/shop_" + shopId + "/trade_license.pdf";
     }
 }

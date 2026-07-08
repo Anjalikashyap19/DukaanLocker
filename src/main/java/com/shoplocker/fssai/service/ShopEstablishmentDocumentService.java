@@ -1,8 +1,8 @@
 package com.shoplocker.fssai.service;
 
 import com.shoplocker.fssai.entity.DocumentType;
-import com.shoplocker.fssai.entity.ShopEstablishmentDocument;
 import com.shoplocker.fssai.entity.Shop;
+import com.shoplocker.fssai.entity.ShopEstablishmentDocument;
 import com.shoplocker.fssai.repository.ShopEstablishmentDocumentRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -13,7 +13,7 @@ import java.util.Optional;
 @Service
 public class ShopEstablishmentDocumentService {
 
-    private final ShopEstablishmentDocumentRepository repository;
+    private final ShopEstablishmentDocumentRepository shopEstablishmentDocumentRepository;
     private final ShopService shopService;
     private final S3Service s3Service;
     private final TextractService textractService;
@@ -24,7 +24,7 @@ public class ShopEstablishmentDocumentService {
                                             S3Service s3Service,
                                             TextractService textractService,
                                             DocumentValidationService documentValidationService) {
-        this.repository = repository;
+        this.shopEstablishmentDocumentRepository = repository;
         this.shopService = shopService;
         this.s3Service = s3Service;
         this.textractService = textractService;
@@ -33,30 +33,32 @@ public class ShopEstablishmentDocumentService {
 
     public void uploadShopEstablishment(Long shopId, MultipartFile file) {
         documentValidationService.validateFileFormat(file, "Shop & Establishment License");
+        byte[] fileBytes = documentValidationService.readBytes(file);
+        documentValidationService.assertPdfMagicBytes(fileBytes, "Shop & Establishment License");
 
-        // Extract text via AWS Textract and validate document content
-        String extractedText = textractService.extractText(file);
+        String extractedText = textractService.extractText(fileBytes, file.getOriginalFilename());
         documentValidationService.validate(DocumentType.SHOP_ESTABLISHMENT, extractedText, file.getOriginalFilename());
 
         Shop shop = shopService.getShopById(shopId);
-        Optional<ShopEstablishmentDocument> existing = repository.findByShop(shop);
+        Optional<ShopEstablishmentDocument> existing = shopEstablishmentDocumentRepository.findByShop(shop);
+        ShopEstablishmentDocument document = existing.orElseGet(() -> {
+            ShopEstablishmentDocument d = new ShopEstablishmentDocument();
+            d.setShop(shop);
+            return d;
+        });
 
-        ShopEstablishmentDocument doc;
-        if (existing.isPresent()) {
-            doc = existing.get();
-        } else {
-            doc = new ShopEstablishmentDocument();
-            doc.setShop(shop);
-        }
+        String fileKey = getFileKey(shopId);
+        String fileUrl = s3Service.uploadFile(fileBytes, file.getContentType(), fileKey);
 
-        String fileKey = "shop-establishment/shop_" + shopId + "/shop_establishment.pdf";
-        String fileUrl = s3Service.uploadFile(file, fileKey);
+        document.setOriginalFileName(file.getOriginalFilename());
+        document.setUploadedFileName(fileKey);
+        document.setFileUrl(fileUrl);
+        document.setUploadedAt(LocalDateTime.now());
 
-        doc.setOriginalFileName(file.getOriginalFilename());
-        doc.setUploadedFileName(fileKey);
-        doc.setFileUrl(fileUrl);
-        doc.setUploadedAt(LocalDateTime.now());
+        shopEstablishmentDocumentRepository.save(document);
+    }
 
-        repository.save(doc);
+    private String getFileKey(Long shopId) {
+        return "shop-establishment/shop_" + shopId + "/shop_establishment_license.pdf";
     }
 }

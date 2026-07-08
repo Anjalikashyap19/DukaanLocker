@@ -13,7 +13,7 @@ import java.util.Optional;
 @Service
 public class IECDocumentService {
 
-    private final IECDocumentRepository repository;
+    private final IECDocumentRepository iecDocumentRepository;
     private final ShopService shopService;
     private final S3Service s3Service;
     private final TextractService textractService;
@@ -24,7 +24,7 @@ public class IECDocumentService {
                               S3Service s3Service,
                               TextractService textractService,
                               DocumentValidationService documentValidationService) {
-        this.repository = repository;
+        this.iecDocumentRepository = repository;
         this.shopService = shopService;
         this.s3Service = s3Service;
         this.textractService = textractService;
@@ -33,30 +33,32 @@ public class IECDocumentService {
 
     public void uploadIEC(Long shopId, MultipartFile file) {
         documentValidationService.validateFileFormat(file, "Import Export Code");
+        byte[] fileBytes = documentValidationService.readBytes(file);
+        documentValidationService.assertPdfMagicBytes(fileBytes, "Import Export Code");
 
-        // Extract text via AWS Textract and validate document content
-        String extractedText = textractService.extractText(file);
+        String extractedText = textractService.extractText(fileBytes, file.getOriginalFilename());
         documentValidationService.validate(DocumentType.IEC, extractedText, file.getOriginalFilename());
 
         Shop shop = shopService.getShopById(shopId);
-        Optional<IECDocument> existing = repository.findByShop(shop);
+        Optional<IECDocument> existing = iecDocumentRepository.findByShop(shop);
+        IECDocument document = existing.orElseGet(() -> {
+            IECDocument d = new IECDocument();
+            d.setShop(shop);
+            return d;
+        });
 
-        IECDocument doc;
-        if (existing.isPresent()) {
-            doc = existing.get();
-        } else {
-            doc = new IECDocument();
-            doc.setShop(shop);
-        }
+        String fileKey = getFileKey(shopId);
+        String fileUrl = s3Service.uploadFile(fileBytes, file.getContentType(), fileKey);
 
-        String fileKey = "iec/shop_" + shopId + "/iec_certificate.pdf";
-        String fileUrl = s3Service.uploadFile(file, fileKey);
+        document.setOriginalFileName(file.getOriginalFilename());
+        document.setUploadedFileName(fileKey);
+        document.setFileUrl(fileUrl);
+        document.setUploadedAt(LocalDateTime.now());
 
-        doc.setOriginalFileName(file.getOriginalFilename());
-        doc.setUploadedFileName(fileKey);
-        doc.setFileUrl(fileUrl);
-        doc.setUploadedAt(LocalDateTime.now());
+        iecDocumentRepository.save(document);
+    }
 
-        repository.save(doc);
+    private String getFileKey(Long shopId) {
+        return "iec/shop_" + shopId + "/iec_certificate.pdf";
     }
 }

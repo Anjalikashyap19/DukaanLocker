@@ -13,7 +13,7 @@ import java.util.Optional;
 @Service
 public class LabourLicenseDocumentService {
 
-    private final LabourLicenseDocumentRepository repository;
+    private final LabourLicenseDocumentRepository labourLicenseDocumentRepository;
     private final ShopService shopService;
     private final S3Service s3Service;
     private final TextractService textractService;
@@ -24,7 +24,7 @@ public class LabourLicenseDocumentService {
                                         S3Service s3Service,
                                         TextractService textractService,
                                         DocumentValidationService documentValidationService) {
-        this.repository = repository;
+        this.labourLicenseDocumentRepository = repository;
         this.shopService = shopService;
         this.s3Service = s3Service;
         this.textractService = textractService;
@@ -33,30 +33,32 @@ public class LabourLicenseDocumentService {
 
     public void uploadLabourLicense(Long shopId, MultipartFile file) {
         documentValidationService.validateFileFormat(file, "Labour License / Workmen Compensation Policy");
+        byte[] fileBytes = documentValidationService.readBytes(file);
+        documentValidationService.assertPdfMagicBytes(fileBytes, "Labour License / Workmen Compensation Policy");
 
-        // Extract text via AWS Textract and validate document content
-        String extractedText = textractService.extractText(file);
+        String extractedText = textractService.extractText(fileBytes, file.getOriginalFilename());
         documentValidationService.validate(DocumentType.LABOUR_LICENSE, extractedText, file.getOriginalFilename());
 
         Shop shop = shopService.getShopById(shopId);
-        Optional<LabourLicenseDocument> existing = repository.findByShop(shop);
+        Optional<LabourLicenseDocument> existing = labourLicenseDocumentRepository.findByShop(shop);
+        LabourLicenseDocument document = existing.orElseGet(() -> {
+            LabourLicenseDocument d = new LabourLicenseDocument();
+            d.setShop(shop);
+            return d;
+        });
 
-        LabourLicenseDocument doc;
-        if (existing.isPresent()) {
-            doc = existing.get();
-        } else {
-            doc = new LabourLicenseDocument();
-            doc.setShop(shop);
-        }
+        String fileKey = getFileKey(shopId);
+        String fileUrl = s3Service.uploadFile(fileBytes, file.getContentType(), fileKey);
 
-        String fileKey = "labour-license/shop_" + shopId + "/labour_license.pdf";
-        String fileUrl = s3Service.uploadFile(file, fileKey);
+        document.setOriginalFileName(file.getOriginalFilename());
+        document.setUploadedFileName(fileKey);
+        document.setFileUrl(fileUrl);
+        document.setUploadedAt(LocalDateTime.now());
 
-        doc.setOriginalFileName(file.getOriginalFilename());
-        doc.setUploadedFileName(fileKey);
-        doc.setFileUrl(fileUrl);
-        doc.setUploadedAt(LocalDateTime.now());
+        labourLicenseDocumentRepository.save(document);
+    }
 
-        repository.save(doc);
+    private String getFileKey(Long shopId) {
+        return "labour-license/shop_" + shopId + "/labour_license.pdf";
     }
 }

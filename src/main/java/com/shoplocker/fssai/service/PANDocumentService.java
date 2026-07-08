@@ -32,14 +32,28 @@ public class PANDocumentService {
     }
 
     public void uploadPAN(Long shopId, MultipartFile file) {
+        // 1. Cheap metadata validation (no IO).
         documentValidationService.validateFileFormat(file, "PAN/TAN");
 
-        // Extract text via AWS Textract and validate document content
-        String extractedText = textractService.extractText(file);
+        // 2. Read the file into memory ONCE. This is the only point we touch
+        //    the underlying multipart source — everything downstream reuses
+        //    the same byte[].
+        byte[] fileBytes = documentValidationService.readBytes(file);
+
+        // 3. Confirm the bytes really start with %PDF (operates on the
+        //    already-loaded byte[] — zero extra IO cost).
+        documentValidationService.assertPdfMagicBytes(fileBytes, "PAN/TAN");
+
+        // 4. OCR directly from the byte[] (no S3 round-trip).
+        String extractedText = textractService.extractText(fileBytes, file.getOriginalFilename());
+
+        // 5. Content validation — throws DOCUMENT_VALIDATION_FAILED or
+        //    DOCUMENT_TYPE_MISMATCH on failure. Nothing past this point runs
+        //    if validation fails.
         documentValidationService.validate(DocumentType.PAN, extractedText, file.getOriginalFilename());
 
+        // 6. Only after every check passed: upload the same byte[] to S3.
         Shop shop = shopService.getShopById(shopId);
-
         Optional<PANDocument> existingDocument = panDocumentRepository.findByShop(shop);
 
         PANDocument panDocument;
@@ -50,8 +64,8 @@ public class PANDocumentService {
             panDocument.setShop(shop);
         }
 
-        String fileKey = "pan/shop_" + shopId + "/pan_card.pdf";
-        String fileUrl = s3Service.uploadFile(file, fileKey);
+        String fileKey = getFileKey(shopId);
+        String fileUrl = s3Service.uploadFile(fileBytes, file.getContentType(), fileKey);
 
         panDocument.setOriginalFileName(file.getOriginalFilename());
         panDocument.setUploadedFileName(fileKey);
@@ -59,5 +73,9 @@ public class PANDocumentService {
         panDocument.setUploadedAt(LocalDateTime.now());
 
         panDocumentRepository.save(panDocument);
+    }
+
+    private String getFileKey(Long shopId) {
+        return "pan/shop_" + shopId + "/pan_card.pdf";
     }
 }

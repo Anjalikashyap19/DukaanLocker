@@ -2,7 +2,6 @@ package com.shoplocker.fssai.service;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -11,8 +10,28 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
 
-import java.io.IOException;
-
+/**
+ * Uploads ALREADY-VALIDATED file bytes to S3.
+ *
+ * <p>This service intentionally does NOT validate the file. By the time it is
+ * called, the caller (i.e. a {@code *DocumentService}) has already:
+ * <ol>
+ *   <li>Checked basic file format (size, content type, PDF magic bytes)</li>
+ *   <li>Run OCR via {@link TextractService} on the same {@code byte[]}</li>
+ *   <li>Validated the OCR'd content against the expected document type</li>
+ * </ol>
+ *
+ * <p>Only after all three gates pass is {@code uploadFile} called. Anything
+ * that lands in S3 is therefore guaranteed to be a real, correctly-typed
+ * document — no garbage, no false-positive uploads.
+ *
+ * <p>Failure semantics:</p>
+ * <ul>
+ *   <li>{@code S3_UPLOAD_FAILED} (502) — AWS S3 itself errored.</li>
+ * </ul>
+ *
+ * <p>User-facing messages stay generic; raw AWS errors live in {@code cause}.</p>
+ */
 @Service
 public class S3Service {
 
@@ -25,32 +44,22 @@ public class S3Service {
         this.s3Client = s3Client;
     }
 
-    /**
-     * Uploads the file bytes to S3.
-     *
-     * <p>Failure semantics:</p>
-     * <ul>
-     *   <li>{@code INVALID_FILE_FORMAT} (400) — could not read the bytes in process.</li>
-     *   <li>{@code S3_UPLOAD_FAILED} (502) — AWS S3 itself errored.</li>
-     * </ul>
-     *
-     * <p>User-facing messages stay generic; the {@code cause} carries the
-     * full AWS error for server-side logs.</p>
-     */
-    public String uploadFile(MultipartFile file, String fileKey) {
+    public String uploadFile(byte[] fileBytes, String contentType, String fileKey) {
+        if (fileBytes == null || fileBytes.length == 0) {
+            throw new FssaiException(
+                    "We couldn't save your file because it appears to be empty. Please re-upload the document.",
+                    FailureCode.INVALID_FILE_FORMAT);
+        }
+
         try {
             PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                     .bucket(bucketName)
                     .key(fileKey)
-                    .contentType(file.getContentType())
+                    .contentType(contentType)
                     .build();
-            s3Client.putObject(putObjectRequest, RequestBody.fromBytes(file.getBytes()));
+            s3Client.putObject(putObjectRequest, RequestBody.fromBytes(fileBytes));
             return "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
 
-        } catch (IOException e) {
-            throw new FssaiException(
-                    "We couldn't read your file. Please try uploading it again — if the problem persists, contact support.",
-                    FailureCode.INVALID_FILE_FORMAT, e);
         } catch (Exception e) {
             throw new FssaiException(
                     "We couldn't save your file just now. Please try again in a moment, or contact support if the problem persists.",

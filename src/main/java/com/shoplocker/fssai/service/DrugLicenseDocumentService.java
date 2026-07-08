@@ -13,7 +13,7 @@ import java.util.Optional;
 @Service
 public class DrugLicenseDocumentService {
 
-    private final DrugLicenseDocumentRepository repository;
+    private final DrugLicenseDocumentRepository drugLicenseDocumentRepository;
     private final ShopService shopService;
     private final S3Service s3Service;
     private final TextractService textractService;
@@ -24,7 +24,7 @@ public class DrugLicenseDocumentService {
                                       S3Service s3Service,
                                       TextractService textractService,
                                       DocumentValidationService documentValidationService) {
-        this.repository = repository;
+        this.drugLicenseDocumentRepository = repository;
         this.shopService = shopService;
         this.s3Service = s3Service;
         this.textractService = textractService;
@@ -33,30 +33,32 @@ public class DrugLicenseDocumentService {
 
     public void uploadDrugLicense(Long shopId, MultipartFile file) {
         documentValidationService.validateFileFormat(file, "Drug License");
+        byte[] fileBytes = documentValidationService.readBytes(file);
+        documentValidationService.assertPdfMagicBytes(fileBytes, "Drug License");
 
-        // Extract text via AWS Textract and validate document content
-        String extractedText = textractService.extractText(file);
+        String extractedText = textractService.extractText(fileBytes, file.getOriginalFilename());
         documentValidationService.validate(DocumentType.DRUG_LICENSE, extractedText, file.getOriginalFilename());
 
         Shop shop = shopService.getShopById(shopId);
-        Optional<DrugLicenseDocument> existing = repository.findByShop(shop);
+        Optional<DrugLicenseDocument> existing = drugLicenseDocumentRepository.findByShop(shop);
+        DrugLicenseDocument document = existing.orElseGet(() -> {
+            DrugLicenseDocument d = new DrugLicenseDocument();
+            d.setShop(shop);
+            return d;
+        });
 
-        DrugLicenseDocument doc;
-        if (existing.isPresent()) {
-            doc = existing.get();
-        } else {
-            doc = new DrugLicenseDocument();
-            doc.setShop(shop);
-        }
+        String fileKey = getFileKey(shopId);
+        String fileUrl = s3Service.uploadFile(fileBytes, file.getContentType(), fileKey);
 
-        String fileKey = "drug-license/shop_" + shopId + "/drug_license.pdf";
-        String fileUrl = s3Service.uploadFile(file, fileKey);
+        document.setOriginalFileName(file.getOriginalFilename());
+        document.setUploadedFileName(fileKey);
+        document.setFileUrl(fileUrl);
+        document.setUploadedAt(LocalDateTime.now());
 
-        doc.setOriginalFileName(file.getOriginalFilename());
-        doc.setUploadedFileName(fileKey);
-        doc.setFileUrl(fileUrl);
-        doc.setUploadedAt(LocalDateTime.now());
+        drugLicenseDocumentRepository.save(document);
+    }
 
-        repository.save(doc);
+    private String getFileKey(Long shopId) {
+        return "drug-license/shop_" + shopId + "/drug_license.pdf";
     }
 }
