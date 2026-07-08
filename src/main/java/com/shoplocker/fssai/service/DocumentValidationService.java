@@ -104,7 +104,7 @@ public class DocumentValidationService {
     private static final Pattern POLICY_PATTERN =
             Pattern.compile("(?i)Policy\s*[-/:#.]?\s*[A-Za-z0-9/-]{4,}" +
                     "|Certificate\s+of\s+Insurance\s*[:-]?\s*[A-Za-z0-9/-]{3,}" +
-                    "|Insurance\s+(?:Certificate|Policy)\s*[:-/]?\s*[A-Za-z0-9/-]{3,}");
+                    "|Insurance\s+(?:Certificate|Policy)\s*[:/\\-]?\s*[A-Za-z0-9/-]{3,}");
     private static final Pattern PROPERTY_ID_PATTERN =
             Pattern.compile("(?i)(?:Property|Assessment|Ward)\\s*(?:ID|Number|No|#|:)?\\s*[A-Za-z0-9/\\-]+");
     private static final Pattern LABOUR_LICENSE_PATTERN =
