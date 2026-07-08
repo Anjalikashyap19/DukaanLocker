@@ -101,10 +101,12 @@
 			<version>4.0.0</version>
 		</dependency>
 
-	</dependencies>
-
-
-	<dependencyManagement>
+	        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.4</version>
+        </dependency>
+    </dependencies><dependencyManagement>
 		<dependencies>
 			<dependency>
 				<groupId>software.amazon.awssdk</groupId>

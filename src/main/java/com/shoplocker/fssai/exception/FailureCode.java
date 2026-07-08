@@ -12,6 +12,7 @@ public enum FailureCode {
 
     /** Uploaded file was missing, empty, oversized, wrong content type, or had bad PDF magic bytes. */
     INVALID_FILE_FORMAT        ("invalid_file_format",        HttpStatus.BAD_REQUEST),
+    UNSUPPORTED_DOCUMENT_FORMAT("unsupported_document_format", HttpStatus.BAD_REQUEST),
 
     /** AWS SDK call to Textract failed at the AWS side (AccessDenied, throttling, network, etc.). */
     TEXTRACT_FAILURE           ("textract_failure",           HttpStatus.BAD_GATEWAY),
@@ -30,6 +31,10 @@ public enum FailureCode {
 
     /** Resource not found (e.g. shop, license, document). */
     NOT_FOUND                  ("not_found",                  HttpStatus.NOT_FOUND),
+
+    /** Rasterizer itself crashed (native lib failure, OOM, etc.) - NOT for client-bad PDFs.
+     *  Corrupted / encrypted / image-only PDFs use UNSUPPORTED_DOCUMENT_FORMAT (400) instead. */
+    PDF_PROCESSING_ERROR       ("pdf_processing_error",       HttpStatus.INTERNAL_SERVER_ERROR),
 
     /** Unhandled / unexpected exception. */
     INTERNAL_ERROR             ("internal_error",             HttpStatus.INTERNAL_SERVER_ERROR);
