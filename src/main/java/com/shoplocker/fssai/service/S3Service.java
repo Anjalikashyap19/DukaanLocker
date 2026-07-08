@@ -30,11 +30,12 @@ public class S3Service {
      *
      * <p>Failure semantics:</p>
      * <ul>
-     *   <li>{@code INVALID_FILE_FORMAT} (400) — the bytes of {@code file} could not be read in
-     *       this process (typically a corrupt multipart upload).</li>
-     *   <li>{@code S3_UPLOAD_FAILED} (502) — AWS S3 PutObject itself failed
-     *       (AccessDenied, throttling, network). Upstream issue, not the user's fault.</li>
+     *   <li>{@code INVALID_FILE_FORMAT} (400) — could not read the bytes in process.</li>
+     *   <li>{@code S3_UPLOAD_FAILED} (502) — AWS S3 itself errored.</li>
      * </ul>
+     *
+     * <p>User-facing messages stay generic; the {@code cause} carries the
+     * full AWS error for server-side logs.</p>
      */
     public String uploadFile(MultipartFile file, String fileKey) {
         try {
@@ -48,11 +49,11 @@ public class S3Service {
 
         } catch (IOException e) {
             throw new FssaiException(
-                    "Failed to read uploaded file before sending to S3. The file may be corrupted.",
+                    "We couldn't read your file. Please try uploading it again — if the problem persists, contact support.",
                     FailureCode.INVALID_FILE_FORMAT, e);
         } catch (Exception e) {
             throw new FssaiException(
-                    "AWS S3 upload failed: " + e.getMessage(),
+                    "We couldn't save your file just now. Please try again in a moment, or contact support if the problem persists.",
                     FailureCode.S3_UPLOAD_FAILED, e);
         }
     }

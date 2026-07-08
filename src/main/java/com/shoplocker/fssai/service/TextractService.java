@@ -30,11 +30,14 @@ public class TextractService {
      * <p>Failure semantics:</p>
      * <ul>
      *   <li>{@code INVALID_FILE_FORMAT} (400) — the file is unreadable (IOException)
-     *       or Textract returned no text at all (blank / scanned-image-only / scanned at too
-     *       low a resolution). This is a problem with the user's file.</li>
+     *       or Textract returned no text at all (blank / scanned-image-only / low-resolution).</li>
      *   <li>{@code TEXTRACT_FAILURE} (502) — AWS Textract service itself failed
-     *       (AccessDenied, throttle, network). This is an upstream issue, not the user's fault.</li>
+     *       (AccessDenied, throttle, network). Upstream issue.</li>
      * </ul>
+     *
+     * <p>The user-facing message is intentionally generic — raw AWS text
+     * (ARNs, request IDs) is not surfaced to callers but is preserved in
+     * the {@code cause} for server-side observability.</p>
      */
     public String extractText(MultipartFile file) {
         byte[] fileBytes;
@@ -42,7 +45,7 @@ public class TextractService {
             fileBytes = file.getBytes();
         } catch (IOException e) {
             throw new FssaiException(
-                    "Failed to read the uploaded file before OCR. The file may be corrupted or unreadable.",
+                    "We couldn't read your file just now. Please try uploading again — if the problem persists, contact support.",
                     FailureCode.INVALID_FILE_FORMAT, e);
         }
 
@@ -68,9 +71,7 @@ public class TextractService {
             String result = extractedText.toString().trim();
             if (result.isEmpty()) {
                 throw new FssaiException(
-                        "AWS Textract returned no readable text for the uploaded file. " +
-                                "The PDF may be blank, image-based without an OCR layer, or scanned at too " +
-                                "low a resolution to read. Please upload a clearer PDF.",
+                        "We couldn't read any text from this file. It may be a blank PDF, an image-only PDF without an OCR layer, or scanned at too low a resolution. Please upload a clear, text-based PDF of the required document.",
                         FailureCode.INVALID_FILE_FORMAT);
             }
             return result;
@@ -78,9 +79,10 @@ public class TextractService {
         } catch (FssaiException e) {
             throw e;
         } catch (Exception e) {
-            // SDK-level failure (AccessDenied, network, throttling, etc.)
+            // AWS-side failure (AccessDenied, throttle, network). Keep the
+            // user message generic — the full exception is logged via the cause.
             throw new FssaiException(
-                    "AWS Textract call failed: " + e.getMessage(),
+                    "We couldn't verify your file right now — our document verifier is temporarily unavailable. Please try again in a few minutes, or contact support if the problem persists.",
                     FailureCode.TEXTRACT_FAILURE, e);
         }
     }

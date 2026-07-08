@@ -48,6 +48,7 @@ public class GlobalExceptionHandler {
                 .status(failureCode.getHttpStatus().value())
                 .code(failureCode.getCode())
                 .message(ex.getMessage())
+                .details(ex.getDetails())
                 .build();
         return ResponseEntity.status(failureCode.getHttpStatus()).body(body);
     }

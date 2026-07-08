@@ -70,7 +70,7 @@ public class FssaiScraper {
         } catch (Exception e) {
             log.error("Error scraping license {}: {}", licenseNumber, e.getMessage());
             throw new FssaiException(
-                    "Failed to fetch license data from FSSAI portal: " + e.getMessage(),
+                    "We couldn't reach the FSSAI portal right now. Please try again in a few minutes, or contact support if the problem persists.",
                     FailureCode.SCRAPER_FAILURE, e);
         } finally {
             if (context != null) {
@@ -109,7 +109,7 @@ public class FssaiScraper {
             page.waitForTimeout(3000);
         } catch (Exception e) {
             throw new FssaiException(
-                    "Failed to search for license number on FSSAI portal: " + e.getMessage(),
+                    "We couldn't search the FSSAI portal for that license number. Please try again in a few minutes.",
                     FailureCode.SCRAPER_FAILURE, e);
         }
     }

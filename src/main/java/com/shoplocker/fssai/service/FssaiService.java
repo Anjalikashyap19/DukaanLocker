@@ -43,7 +43,7 @@ public class FssaiService {
 
         if (!scraped.isSuccess()) {
             throw new FssaiException(
-                    "Failed to fetch data from FSSAI portal for license " + licenseNumber,
+                    "We couldn't fetch license data for " + licenseNumber + " from the FSSAI portal right now. Please try again in a few minutes, or contact support if the problem persists.",
                     FailureCode.SCRAPER_FAILURE);
         }
 
@@ -67,7 +67,7 @@ public class FssaiService {
     public FssaiResponse getLicense(String licenseNumber) {
         FssaiLicense lic = repository.findByLicenseNumber(licenseNumber)
                 .orElseThrow(() -> new FssaiException(
-                        "FSSAI license not found: " + licenseNumber,
+                        "We couldn't find an FSSAI license with the number \"" + licenseNumber + "\". Please check the number and try again.",
                         FailureCode.NOT_FOUND));
         return mapToResponse(lic);
     }

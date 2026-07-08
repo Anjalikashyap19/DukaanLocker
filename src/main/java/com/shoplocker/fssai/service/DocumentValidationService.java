@@ -206,12 +206,17 @@ public class DocumentValidationService {
         }
         if (!missing.isEmpty()) {
             String missingStr = String.join(", ", missing);
+            java.util.List<String> details = new java.util.ArrayList<>();
+            details.add("expected_document_type: " + docDisplayName);
+            for (String m : missing) {
+                details.add("missing_field: " + m);
+            }
             throw new FssaiException(
-                    "Uploaded file \"" + fileName + "\" is not a valid " + docDisplayName + ". " +
-                            "Missing required field(s): " + missingStr + ". " +
-                            "These fields MUST be present in the document. " +
+                    "This file doesn't look like a " + docDisplayName + ". " +
+                            "We're missing these required field(s): " + missingStr + ". " +
                             "Please upload a correct " + docDisplayName + " document.",
-                    FailureCode.DOCUMENT_VALIDATION_FAILED);
+                    FailureCode.DOCUMENT_VALIDATION_FAILED,
+                    details);
         }
     }
 
@@ -261,10 +266,14 @@ public class DocumentValidationService {
 
             if (matchCount >= 2) {
                 throw new FssaiException(
-                        "Uploaded file \"" + fileName + "\" appears to be a " + otherDocName +
-                                " instead of the required " + expectedName + ". " +
+                        "This file doesn't look like the " + expectedName + " we expected. " +
+                                "Its contents appear to be a " + otherDocName + ". " +
                                 "Please upload the correct " + expectedName + " document.",
-                        FailureCode.DOCUMENT_TYPE_MISMATCH);
+                        FailureCode.DOCUMENT_TYPE_MISMATCH,
+                        java.util.List.of(
+                                "expected_document_type: " + expectedName,
+                                "detected_document_type: " + otherDocName
+                        ));
             }
         }
     }
