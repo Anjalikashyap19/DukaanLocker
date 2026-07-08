@@ -68,6 +68,15 @@ public class TextractService {
                     fileBytes.length, fileName);
             try {
                 return fallbackViaRasterizedImages(fileBytes, fileName);
+            } catch (FssaiException preprocessorError) {
+                // Inner guard: PdfPreprocessor already mapped this to the right failure
+                // code (e.g. UNSUPPORTED_DOCUMENT_FORMAT 400 for password / corrupted /
+                // too-many-pages). MUST come before the broad Exception catch below -
+                // FssaiException is a RuntimeException, so the generic catch would
+                // otherwise swallow the specific 400 and re-map it to a generic 500
+                // PDF_PROCESSING_ERROR. The top-level guard in extractText() catches it
+                // from here and lets it propagate to GlobalExceptionHandler unchanged.
+                throw preprocessorError;
             } catch (UnsupportedDocumentException fallbackRejection) {
                 // Textract rejected the rasterized JPEG too - file is fundamentally
                 // unprocessable. Return the actionable 400.
