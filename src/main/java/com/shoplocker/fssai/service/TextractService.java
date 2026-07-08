@@ -88,11 +88,12 @@ public class TextractService {
             throw e;
         } catch (UnsupportedDocumentException e) {
             // Deterministic failure: Textract's strict parser rejects the PDF because it falls outside
-            // its supported spec (PDF > 1.7, encrypted, AcroForms, broken XREF). A retry will not fix this -
-            // the bytes are rejected every time. User must flatten (Print > Save as PDF) and re-upload.
-            // Other Textract failures (throttling, IAM, size) remain 502 - distinct operational responses.
+            // its supported spec (PDF 2.0 in some regions, password-protected, AcroForms, or a corrupted
+            // XREF table). A retry will not fix this - the bytes are rejected every time. User must
+            // flatten (Print > Save as PDF) and re-upload. Other Textract failures (throttling, IAM, size)
+            // remain 502 - distinct operational responses.
             throw new FssaiException(
-                    "Our system cannot process this specific PDF format (it may be encrypted, an unsupported version, or contain complex forms). Please open the file, select 'Print', choose 'Save as PDF', and upload the new flattened file.",
+                    "This PDF uses features our system can't read. The easiest fix: open the file, select 'Print', choose 'Save as PDF', and upload the flattened file.",
                     FailureCode.UNSUPPORTED_DOCUMENT_FORMAT, e);
         } catch (Exception e) {
             // AWS-side failure (AccessDenied, throttle, network). Generic user message;
