@@ -10,6 +10,7 @@ import software.amazon.awssdk.services.textract.model.BlockType;
 import java.util.List;
 import software.amazon.awssdk.services.textract.model.DetectDocumentTextRequest;
 import software.amazon.awssdk.services.textract.model.DetectDocumentTextResponse;
+import software.amazon.awssdk.services.textract.model.UnsupportedDocumentException;
 import software.amazon.awssdk.services.textract.model.Document;
 
 /**
@@ -85,6 +86,14 @@ public class TextractService {
 
         } catch (FssaiException e) {
             throw e;
+        } catch (UnsupportedDocumentException e) {
+            // Deterministic failure: Textract's strict parser rejects the PDF because it falls outside
+            // its supported spec (PDF > 1.7, encrypted, AcroForms, broken XREF). A retry will not fix this -
+            // the bytes are rejected every time. User must flatten (Print > Save as PDF) and re-upload.
+            // Other Textract failures (throttling, IAM, size) remain 502 - distinct operational responses.
+            throw new FssaiException(
+                    "Our system cannot process this specific PDF format (it may be encrypted, an unsupported version, or contain complex forms). Please open the file, select 'Print', choose 'Save as PDF', and upload the new flattened file.",
+                    FailureCode.UNSUPPORTED_DOCUMENT_FORMAT, e);
         } catch (Exception e) {
             // AWS-side failure (AccessDenied, throttle, network). Generic user message;
             // the full exception is logged via the cause.
