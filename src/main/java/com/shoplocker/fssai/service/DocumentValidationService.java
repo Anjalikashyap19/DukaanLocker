@@ -369,30 +369,37 @@ public class DocumentValidationService {
     // =========================================================================
 
     private void validateGST(String text, String fileName) {
+        // "GSTIN" is the strongest discriminator — keep it REQUIRED.
+        // Real certs may print only the short form "GST" instead of the long
+        // form "Goods and Services Tax", and "Registration Certificate" is
+        // sometimes just "Certificate of Registration". Accept any of those.
         requireAllKeywords(text, "GST Registration Certificate", fileName,
-                "GSTIN",
-                "Registration Certificate",
-                "Goods and Services Tax");
+                "GSTIN");
+        requireAnyKeyword(text, "GST Registration Certificate", fileName,
+                "Tax name (full or short form)",
+                "Goods and Services Tax", "Goods & Services Tax", "GST", "G.S.T.");
+        requireAnyKeyword(text, "GST Registration Certificate", fileName,
+                "Certificate wording",
+                "Registration Certificate", "Certificate of Registration", "GST Registration Certificate");
         requirePattern(text, "GST Registration Certificate", fileName,
                 "GSTIN (Goods and Services Tax Identification Number)",
                 GSTIN_PATTERN,
                 "e.g., 27ABCDE1234F1Z5");
-        requireAnyKeyword(text, "GST Registration Certificate", fileName,
-                "Issuing Authority / Government",
-                "Tax Department", "Government of India", "GST Council");
     }
 
     private void validatePAN(String text, String fileName) {
+        // "PAN" itself is the strongest discriminator — keep it REQUIRED.
+        // The header on real cards varies: "Income Tax Department", just
+        // "Income Tax", or even just the PAN line. Accept any.
         requireAllKeywords(text, "PAN Card", fileName,
-                "Income Tax Department",
-                "Permanent Account Number",
                 "PAN");
+        requireAnyKeyword(text, "PAN Card", fileName,
+                "Card heading",
+                "Income Tax Department", "Income Tax", "Permanent Account Number");
         requirePattern(text, "PAN Card", fileName,
                 "PAN (Permanent Account Number)",
                 PAN_PATTERN,
                 "10-character alphanumeric (e.g., ABCDE1234F)");
-        requireAnyKeyword(text, "PAN Card", fileName, "Government / Authority",
-                "Government of India", "Income Tax");
     }
 
     private void validateShopEstablishment(String text, String fileName) {
@@ -428,14 +435,21 @@ public class DocumentValidationService {
     }
 
     private void validateMSME(String text, String fileName) {
+        // "Udyam" is the strongest discriminator — keep it REQUIRED.
+        // Real Udyam certs do NOT always print "Government of India" verbatim,
+        // and "MSME" can appear as the long "Micro, Small & Medium Enterprises".
+        // The Udyam registration-number regex below is the actual hard gate.
         requireAllKeywords(text, "Udyam MSME Registration", fileName,
-                "Udyam",
-                "MSME",
-                "Registration Certificate",
-                "Government of India");
+                "Udyam");
+        requireAnyKeyword(text, "Udyam MSME Registration", fileName,
+                "Scheme / ministry name (full or short form)",
+                "MSME", "Micro, Small & Medium Enterprises", "Small & Medium Enterprises");
+        requireAnyKeyword(text, "Udyam MSME Registration", fileName,
+                "Certificate wording",
+                "Registration Certificate", "Certificate of Registration", "Registration");
         requireAnyKeyword(text, "Udyam MSME Registration", fileName,
                 "Ministry / Governing Body",
-                "Ministry of Micro", "Ministry of MSME", "Small & Medium Enterprises");
+                "Ministry of Micro", "Ministry of MSME", "Small & Medium Enterprises", "Government of India");
         requirePattern(text, "Udyam MSME Registration", fileName,
                 "Udyam Registration Number",
                 UDYAM_PATTERN,
@@ -492,18 +506,22 @@ public class DocumentValidationService {
     }
 
     private void validateIEC(String text, String fileName) {
+        // "IEC" is the strongest discriminator — keep it REQUIRED. Real IEC
+        // certs do NOT always print "Directorate General of Foreign Trade" in
+        // full; they often just say "DGFT". And the all-caps "Government of
+        // India" headline is sometimes OCR'd inconsistently.
         requireAllKeywords(text, "Import Export Code (IEC)", fileName,
-                "Import Export Code",
-                "IEC",
-                "Government of India",
-                "Directorate General of Foreign Trade");
+                "IEC");
+        requireAnyKeyword(text, "Import Export Code (IEC)", fileName,
+                "Document heading",
+                "Import Export Code", "Importer Exporter Code", "IEC Certificate", "IEC Allotment");
+        requireAnyKeyword(text, "Import Export Code (IEC)", fileName,
+                "Issuing Authority",
+                "Directorate General of Foreign Trade", "DGFT", "Government of India", "Ministry of Commerce", "Foreign Trade");
         requirePattern(text, "Import Export Code (IEC)", fileName,
                 "IEC Number (10-character alphanumeric)",
                 IEC_PATTERN,
                 "10-character alphanumeric code (e.g., AA1234567890)");
-        requireAnyKeyword(text, "Import Export Code (IEC)", fileName,
-                "DGFT / Issuing Office",
-                "DGFT", "Foreign Trade", "Ministry of Commerce");
     }
 
     private void validatePollutionControl(String text, String fileName) {
@@ -604,26 +622,38 @@ public class DocumentValidationService {
     }
 
     private void validateFSSAI(String text, String fileName) {
+        // "FSSAI" is the strongest discriminator — keep it REQUIRED.
+        // The long form "Food Safety and Standards Authority of India" gets
+        // OCR'd inconsistently; accept short forms too. The 14-digit number
+        // regex below is the actual hard gate.
         requireAllKeywords(text, "FSSAI License", fileName,
-                "FSSAI",
-                "License Number",
-                "Food Safety and Standards Authority of India");
+                "FSSAI");
+        requireAnyKeyword(text, "FSSAI License", fileName,
+                "License phrasing",
+                "License Number", "License No", "Licence Number", "Licence No", "Certificate");
+        requireAnyKeyword(text, "FSSAI License", fileName,
+                "Issuing Authority (full or short form)",
+                "Food Safety and Standards Authority of India", "Food Safety and Standards Authority", "FSSAI Authority", "Government of India");
         requirePattern(text, "FSSAI License", fileName,
                 "FSSAI License Number (14-digit)",
                 FSSAI_PATTERN,
                 "14-digit FSSAI license number");
         requireAnyKeyword(text, "FSSAI License", fileName,
                 "Business / Validity",
-                "Food Business Operator", "FBO", "Valid", "Validity", "Category");
+                "Food Business Operator", "FBO", "Valid", "Validity", "Category", "Kind of Business");
     }
 
     private void validateAadhaar(String text, String fileName) {
+        // Real Aadhaar cards don't always print "Government of India" verbatim —
+        // sometimes only the Aadhaar branding. Keep only "Aadhaar" as the hard
+        // requirement and accept any of the common header variants below.
+        // The 12-digit Aadhaar-number regex below is the actual hard gate.
         requireAllKeywords(text, "Aadhaar Card", fileName,
-                "Government of India",
                 "Aadhaar");
         requireAnyKeyword(text, "Aadhaar Card", fileName,
-                "UIDAI / Unique Identification",
-                "UIDAI", "Unique Identification Authority", "Unique Identification");
+                "Header / brand",
+                "Government of India", "Unique Identification Authority", "UIDAI",
+                "Unique Identification", "Aadhaar Card");
         requirePattern(text, "Aadhaar Card", fileName,
                 "12-digit Aadhaar Number",
                 AADHAAR_PATTERN,
