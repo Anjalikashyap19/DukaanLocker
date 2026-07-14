@@ -35,3 +35,4 @@ build/
 ### Environment ###
 .env
 *.log
+app.jar
