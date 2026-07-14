@@ -43,7 +43,7 @@ public class DocumentValidationService {
                 List.of("Permanent Account Number", "Income Tax Department"));
         CONFLICT_SIGNATURES.put("Aadhaar Card",
                 List.of("Aadhaar", "UIDAI", "Unique Identification Authority"));
-        CONFLICT_SIGNATURES.put("FSSAI License",
+        CONFLICT_SIGNATURES.put("FSSAI Food License",
                 List.of("FSSAI", "Food Safety and Standards Authority"));
         CONFLICT_SIGNATURES.put("Udyam MSME Registration",
                 List.of("Udyam", "Ministry of Micro, Small & Medium Enterprises"));
@@ -239,7 +239,7 @@ public class DocumentValidationService {
             case LABOUR_LICENSE:     validateLabourLicense(extractedText, originalFileName); break;
             case SHOP_INSURANCE:     validateShopInsurance(extractedText, originalFileName); break;
             case DRUG_LICENSE:       validateDrugLicense(extractedText, originalFileName); break;
-            case FSSAI:              validateFSSAI(extractedText, originalFileName); break;
+            case FSSAI_FOOD_LICENSE: validateFssaiFoodLicense(extractedText, originalFileName); break;
             case AADHAAR:            validateAadhaar(extractedText, originalFileName); break;
             default: throw new FssaiException("Unknown document type: " + type, FailureCode.INTERNAL_ERROR);
         }
@@ -358,7 +358,7 @@ public class DocumentValidationService {
             case LABOUR_LICENSE:     return "Labour License / Workmen Compensation";
             case SHOP_INSURANCE:     return "Shop Insurance Policy";
             case DRUG_LICENSE:       return "Drug License";
-            case FSSAI:              return "FSSAI License";
+            case FSSAI_FOOD_LICENSE: return "FSSAI Food License";
             case AADHAAR:            return "Aadhaar Card";
             default:                 return type.name();
         }
@@ -621,24 +621,24 @@ public class DocumentValidationService {
                 "Sale", "Wholesale", "Retail", "Manufacturing", "Distribution");
     }
 
-    private void validateFSSAI(String text, String fileName) {
+    private void validateFssaiFoodLicense(String text, String fileName) {
         // "FSSAI" is the strongest discriminator — keep it REQUIRED.
         // The long form "Food Safety and Standards Authority of India" gets
         // OCR'd inconsistently; accept short forms too. The 14-digit number
         // regex below is the actual hard gate.
-        requireAllKeywords(text, "FSSAI License", fileName,
+        requireAllKeywords(text, "FSSAI Food License", fileName,
                 "FSSAI");
-        requireAnyKeyword(text, "FSSAI License", fileName,
+        requireAnyKeyword(text, "FSSAI Food License", fileName,
                 "License phrasing",
                 "License Number", "License No", "Licence Number", "Licence No", "Certificate");
-        requireAnyKeyword(text, "FSSAI License", fileName,
+        requireAnyKeyword(text, "FSSAI Food License", fileName,
                 "Issuing Authority (full or short form)",
                 "Food Safety and Standards Authority of India", "Food Safety and Standards Authority", "FSSAI Authority", "Government of India");
-        requirePattern(text, "FSSAI License", fileName,
+        requirePattern(text, "FSSAI Food License", fileName,
                 "FSSAI License Number (14-digit)",
                 FSSAI_PATTERN,
                 "14-digit FSSAI license number");
-        requireAnyKeyword(text, "FSSAI License", fileName,
+        requireAnyKeyword(text, "FSSAI Food License", fileName,
                 "Business / Validity",
                 "Food Business Operator", "FBO", "Valid", "Validity", "Category", "Kind of Business");
     }

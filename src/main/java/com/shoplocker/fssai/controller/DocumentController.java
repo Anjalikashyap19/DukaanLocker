@@ -22,6 +22,7 @@ public class DocumentController {
     private final LabourLicenseDocumentService labourLicenseDocumentService;
     private final ShopInsuranceDocumentService shopInsuranceDocumentService;
     private final DrugLicenseDocumentService drugLicenseDocumentService;
+    private final FssaiFoodLicenseDocumentService fssaiFoodLicenseDocumentService;
 
     public DocumentController(PANDocumentService panDocumentService,
                               ShopEstablishmentDocumentService shopEstablishmentDocumentService,
@@ -35,7 +36,8 @@ public class DocumentController {
                               FireSafetyDocumentService fireSafetyDocumentService,
                               LabourLicenseDocumentService labourLicenseDocumentService,
                               ShopInsuranceDocumentService shopInsuranceDocumentService,
-                              DrugLicenseDocumentService drugLicenseDocumentService) {
+                              DrugLicenseDocumentService drugLicenseDocumentService,
+                              FssaiFoodLicenseDocumentService fssaiFoodLicenseDocumentService) {
         this.panDocumentService = panDocumentService;
         this.shopEstablishmentDocumentService = shopEstablishmentDocumentService;
         this.tradeLicenseDocumentService = tradeLicenseDocumentService;
@@ -49,6 +51,7 @@ public class DocumentController {
         this.labourLicenseDocumentService = labourLicenseDocumentService;
         this.shopInsuranceDocumentService = shopInsuranceDocumentService;
         this.drugLicenseDocumentService = drugLicenseDocumentService;
+        this.fssaiFoodLicenseDocumentService = fssaiFoodLicenseDocumentService;
     }
 
     // ─── PAN / TAN ──────────────────────────────────────────────────────────────
@@ -153,5 +156,13 @@ public class DocumentController {
                                                     @RequestParam("file") MultipartFile file) {
         drugLicenseDocumentService.uploadDrugLicense(shopId, file);
         return ResponseEntity.ok("Drug License uploaded successfully");
+    }
+
+    // ─── FSSAI Food License ──────────────────────────────────────────────────────
+    @PostMapping(value = "/shops/{shopId}/fssai-food-license/upload", consumes = "multipart/form-data")
+    public ResponseEntity<String> uploadFssaiFoodLicense(@PathVariable Long shopId,
+                                                         @RequestParam("file") MultipartFile file) {
+        fssaiFoodLicenseDocumentService.uploadFssaiFoodLicense(shopId, file);
+        return ResponseEntity.ok("FSSAI Food License uploaded successfully");
     }
 }
