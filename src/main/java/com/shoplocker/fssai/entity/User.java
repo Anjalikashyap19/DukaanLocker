@@ -45,6 +45,20 @@ public class User {
     @Enumerated(EnumType.STRING)
     private Role role=Role.MANAGER;
 
+    // BCrypt-encoded password. Required by AuthService.register() and CustomUserDetailsService
+    // (the latter reads it to build Spring Security's UserDetails). Never serialized to the
+    // API client — AuthResponse explicitly does not include this field. Length is intentionally
+    // generous (BCrypt hashes are ~60 chars; we leave headroom for future algorithm changes).
+    @Column(length = 100)
+    private String password;
+
+    // Whether the account is active. Defaulted to true so any pre-existing/new user is enabled
+    // out of the box; AuthService.register() sets this to true explicitly. CustomUserDetailsService
+    // maps !enabled to Spring's UserDetails.disabled so the DaoAuthenticationProvider refuses
+    // signing-in BEFORE running the BCrypt compare (no timing-attack probe on stale hashes).
+    @Column(nullable = false)
+    private boolean enabled = true;
+
 
     //getters and setters
 

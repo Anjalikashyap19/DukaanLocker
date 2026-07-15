@@ -32,6 +32,18 @@ public enum FailureCode {
     /** Resource not found (e.g. shop, license, document). */
     NOT_FOUND                  ("not_found",                  HttpStatus.NOT_FOUND),
 
+    // ---- Auth / registration failures (added by JwtAuth feature) ----
+    /** Defensive shape failure detected server-side on /api/auth/register (e.g. mobile regex miss). */
+    INVALID_REQUEST            ("invalid_request",            HttpStatus.BAD_REQUEST),
+    /** /api/auth/register tried to reuse an existing email (case-insensitive). */
+    DUPLICATE_EMAIL            ("duplicate_email",            HttpStatus.CONFLICT),
+    /** /api/auth/register tried to reuse an existing mobile number. */
+    DUPLICATE_MOBILE           ("duplicate_mobile",           HttpStatus.CONFLICT),
+    /** /api/auth/login email+password did not match (or email unknown — same code by design). */
+    INVALID_CREDENTIALS        ("invalid_credentials",        HttpStatus.UNAUTHORIZED),
+    /** /api/auth/login hit a User that has been disabled in the DB. */
+    DISABLED_USER              ("disabled_user",              HttpStatus.FORBIDDEN),
+
     /** Rasterizer itself crashed (native lib failure, OOM, etc.) - NOT for client-bad PDFs.
      *  Corrupted / encrypted / image-only PDFs use UNSUPPORTED_DOCUMENT_FORMAT (400) instead. */
     PDF_PROCESSING_ERROR       ("pdf_processing_error",       HttpStatus.INTERNAL_SERVER_ERROR),

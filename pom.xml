@@ -106,6 +106,35 @@
             <artifactId>pdfbox</artifactId>
             <version>3.0.4</version>
         </dependency>
+
+        <!-- Spring Security 6 (managed by spring-boot-starter-parent 3.5.3) — required by the JWT auth
+             pipeline in src/main/java/com/shoplocker/fssai/security/*. Without this, SecurityFilterChain
+             + PasswordEncoder + AuthenticationManager beans can't be wired. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!-- JJWT 0.12.x for HS256-signed JWTs used by JwtService. jjwt-api is compile scope because
+             JwtService/JwtAuthenticationFilter directly use Jwts.builder() / Jwts.parser(). The
+             impl + jackson modules are runtime because they're consumed only via ServiceLoader. -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>0.12.6</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>0.12.6</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>0.12.6</version>
+            <scope>runtime</scope>
+        </dependency>
     </dependencies><dependencyManagement>
 		<dependencies>
 			<dependency>
