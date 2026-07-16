@@ -48,6 +48,26 @@ public enum FailureCode {
      *  Corrupted / encrypted / image-only PDFs use UNSUPPORTED_DOCUMENT_FORMAT (400) instead. */
     PDF_PROCESSING_ERROR       ("pdf_processing_error",       HttpStatus.INTERNAL_SERVER_ERROR),
 
+    // ---- Shop / Manager / Assignment errors ----
+    /** Shop not found. */
+    SHOP_NOT_FOUND             ("shop_not_found",             HttpStatus.NOT_FOUND),
+    /** Manager not found. */
+    MANAGER_NOT_FOUND          ("manager_not_found",          HttpStatus.NOT_FOUND),
+    /** User not found. */
+    USER_NOT_FOUND             ("user_not_found",             HttpStatus.NOT_FOUND),
+    /** Document not found. */
+    DOCUMENT_NOT_FOUND         ("document_not_found",         HttpStatus.NOT_FOUND),
+    /** Assignment not found. */
+    ASSIGNMENT_NOT_FOUND       ("assignment_not_found",       HttpStatus.NOT_FOUND),
+
+    /** Duplicate manager-shop assignment. */
+    DUPLICATE_ASSIGNMENT       ("duplicate_assignment",       HttpStatus.CONFLICT),
+
+    /** Unauthorized access. */
+    UNAUTHORIZED               ("unauthorized",               HttpStatus.UNAUTHORIZED),
+    /** Forbidden role or resource access. */
+    FORBIDDEN                  ("forbidden",                  HttpStatus.FORBIDDEN),
+
     /** Unhandled / unexpected exception. */
     INTERNAL_ERROR             ("internal_error",             HttpStatus.INTERNAL_SERVER_ERROR);
 

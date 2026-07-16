@@ -1,87 +1,58 @@
-package com.shoplocker.fssai.entity;
+package com.shoplocker.fssai.dto;
 
-import jakarta.persistence.*;
-import lombok.Data;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.shoplocker.fssai.entity.BusinessScale;
 
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "shops")
-@Data
-public class Shop {
+/**
+ * Response DTO for shop data. Does NOT expose password or full User entity details.
+ */
+public class ShopResponse {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
-    @NotBlank(message = "shop name is required")
-    @Column(nullable = false)
     private String shopName;
-
-    @NotBlank(message = "owner name is required")
-    @Column(nullable = false)
     private String ownerName;
-
-    @NotBlank(message = "mobile number is required")
-    @Pattern(
-            regexp = "^[0-9]{10}$",
-            message = "Mobile number must be 10 digits"
-    )
-    @Column(unique = true)
     private String mobile;
-
-    @NotBlank(message = "category is required")
-    @Column(nullable = false)
     private String category;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
     private BusinessScale scale;
-
-    @NotBlank(message = "state is required")
-    @Column(nullable = false)
     private String state;
-
-    @NotBlank(message = "city is required")
-    @Column(nullable = false)
     private String city;
-
     private String branchName;
-
-    @Column(columnDefinition = "TEXT")
     private String address;
-
-    @Pattern(regexp = "^[0-9]{6}$", message = "Pincode must be exactly 6 digits")
     private String pincode;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "owner_id", nullable = false)
-    @JsonIgnoreProperties({"password", "createdByAdmin", "enabled"})
-    private User owner;
-
-    @Column(name = "created_at", updatable = false)
+    private Long ownerUserId;
+    private String ownerEmail;
     private LocalDateTime createdAt;
-
-    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
-    }
+    public ShopResponse() {}
 
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+    public ShopResponse(Long id, String shopName, String ownerName, String mobile,
+                        String category, BusinessScale scale, String state, String city,
+                        String branchName, String address, String pincode,
+                        Long ownerUserId, String ownerEmail,
+                        LocalDateTime createdAt, LocalDateTime updatedAt) {
+        this.id = id;
+        this.shopName = shopName;
+        this.ownerName = ownerName;
+        this.mobile = mobile;
+        this.category = category;
+        this.scale = scale;
+        this.state = state;
+        this.city = city;
+        this.branchName = branchName;
+        this.address = address;
+        this.pincode = pincode;
+        this.ownerUserId = ownerUserId;
+        this.ownerEmail = ownerEmail;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
     }
 
     // Getters and Setters
 
     public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
     public String getShopName() { return shopName; }
     public void setShopName(String shopName) { this.shopName = shopName; }
@@ -113,8 +84,11 @@ public class Shop {
     public String getPincode() { return pincode; }
     public void setPincode(String pincode) { this.pincode = pincode; }
 
-    public User getOwner() { return owner; }
-    public void setOwner(User owner) { this.owner = owner; }
+    public Long getOwnerUserId() { return ownerUserId; }
+    public void setOwnerUserId(Long ownerUserId) { this.ownerUserId = ownerUserId; }
+
+    public String getOwnerEmail() { return ownerEmail; }
+    public void setOwnerEmail(String ownerEmail) { this.ownerEmail = ownerEmail; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

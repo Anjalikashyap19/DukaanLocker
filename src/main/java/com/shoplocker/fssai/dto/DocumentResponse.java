@@ -1,76 +1,48 @@
-package com.shoplocker.fssai.entity;
+package com.shoplocker.fssai.dto;
 
-import jakarta.persistence.*;
+import com.shoplocker.fssai.entity.DocumentStatus;
+import com.shoplocker.fssai.entity.DocumentType;
+
 import java.time.LocalDateTime;
 
 /**
- * Unified document entity representing any compliance document uploaded for a shop.
- * Each row corresponds to a specific DocumentType for a specific shop.
- * Supports versioning via the version field (incremented on re-upload).
+ * Response DTO for document data. Used in document checklist listing.
+ * For documents not yet uploaded, id is null and status is NOT_UPLOADED.
  */
-@Entity
-@Table(name = "documents",
-       uniqueConstraints = @UniqueConstraint(columnNames = {"shop_id", "document_type"}))
-public class Document {
+public class DocumentResponse {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shop_id", nullable = false)
-    private Shop shop;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "document_type", nullable = false)
+    private Long shopId;
     private DocumentType documentType;
-
-    @Column(name = "file_name")
     private String fileName;
-
-    @Column(name = "file_url")
     private String fileUrl;
-
-    @Column(name = "document_number")
     private String documentNumber;
-
-    @Column(name = "issue_date")
     private LocalDateTime issueDate;
-
-    @Column(name = "expiry_date")
     private LocalDateTime expiryDate;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private DocumentStatus status = DocumentStatus.NOT_UPLOADED;
-
-    @Column(nullable = false)
-    private int version = 0;
-
-    @Column(name = "uploaded_at")
+    private DocumentStatus status;
+    private int version;
     private LocalDateTime uploadedAt;
-
-    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    public Document() {}
+    public DocumentResponse() {}
 
-    public Document(Shop shop, DocumentType documentType) {
-        this.shop = shop;
+    public DocumentResponse(Long id, Long shopId, DocumentType documentType,
+                            String fileName, String fileUrl, String documentNumber,
+                            LocalDateTime issueDate, LocalDateTime expiryDate,
+                            DocumentStatus status, int version,
+                            LocalDateTime uploadedAt, LocalDateTime updatedAt) {
+        this.id = id;
+        this.shopId = shopId;
         this.documentType = documentType;
-        this.status = DocumentStatus.NOT_UPLOADED;
-        this.version = 0;
-    }
-
-    @PrePersist
-    protected void onCreate() {
-        uploadedAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        this.fileName = fileName;
+        this.fileUrl = fileUrl;
+        this.documentNumber = documentNumber;
+        this.issueDate = issueDate;
+        this.expiryDate = expiryDate;
+        this.status = status;
+        this.version = version;
+        this.uploadedAt = uploadedAt;
+        this.updatedAt = updatedAt;
     }
 
     // Getters and Setters
@@ -78,8 +50,8 @@ public class Document {
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
-    public Shop getShop() { return shop; }
-    public void setShop(Shop shop) { this.shop = shop; }
+    public Long getShopId() { return shopId; }
+    public void setShopId(Long shopId) { this.shopId = shopId; }
 
     public DocumentType getDocumentType() { return documentType; }
     public void setDocumentType(DocumentType documentType) { this.documentType = documentType; }

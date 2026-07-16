@@ -1,119 +1,95 @@
 package com.shoplocker.fssai.entity;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.Data;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
-import jakarta.persistence.Column;
 import jakarta.validation.constraints.Email;
-import com.shoplocker.fssai.entity.Role;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
+
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "users")
 @Data
-
-
 public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @NotBlank(message ="user name is required")
+    @NotBlank(message = "user name is required")
     private String userName;
 
-    @NotBlank(message ="mobile number is required ")
+    @NotBlank(message = "mobile number is required ")
     @Pattern(
             regexp = "^[0-9]{10}$",
-            message="mobile number must be 10 digits"
+            message = "mobile number must be 10 digits"
     )
-    @Column(unique=true)
+    @Column(unique = true)
     private String mobileNumber;
 
-
     @Email
-    @Column(unique=true)
+    @Column(unique = true)
     private String emailId;
 
-
     @Enumerated(EnumType.STRING)
-    private Role role=Role.MANAGER;
+    private Role role = Role.MANAGER;
 
-    // BCrypt-encoded password. Required by AuthService.register() and CustomUserDetailsService
-    // (the latter reads it to build Spring Security's UserDetails). Never serialized to the
-    // API client — AuthResponse explicitly does not include this field. Length is intentionally
-    // generous (BCrypt hashes are ~60 chars; we leave headroom for future algorithm changes).
     @Column(length = 100)
     private String password;
 
-    // Whether the account is active. Defaulted to true so any pre-existing/new user is enabled
-    // out of the box; AuthService.register() sets this to true explicitly. CustomUserDetailsService
-    // maps !enabled to Spring's UserDetails.disabled so the DaoAuthenticationProvider refuses
-    // signing-in BEFORE running the BCrypt compare (no timing-attack probe on stale hashes).
     @Column(nullable = false)
     private boolean enabled = true;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by_admin_id")
+    private User createdByAdmin;
 
-    //getters and setters
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
 
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 
-    public Long getId() {
-        return id;
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
     }
 
-    public String getEmailId() {
-        return emailId;
-    }
-    public void setEmailId(String emailId){
-        this.emailId=emailId;
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
     }
 
+    // Getters and Setters (explicit — @Data generates them too, but keeping for clarity)
 
-    public String getMobileNumber() {
-        return mobileNumber;
-    }
+    public Long getId() { return id; }
 
-    public void setMobileNumber(String mobileNumber) {
-        this.mobileNumber = mobileNumber;
-    }
+    public String getEmailId() { return emailId; }
+    public void setEmailId(String emailId) { this.emailId = emailId; }
 
-    public String getUserName() {
-        return userName;
-    }
+    public String getMobileNumber() { return mobileNumber; }
+    public void setMobileNumber(String mobileNumber) { this.mobileNumber = mobileNumber; }
 
-    public void setUserName(String userName){
-        this.userName =userName;
-    }
+    public String getUserName() { return userName; }
+    public void setUserName(String userName) { this.userName = userName; }
 
-    public Role getRole(){
-        return role;
-    }
-    public  void setRole(Role role){
-        this.role=role;
-    }
+    public Role getRole() { return role; }
+    public void setRole(Role role) { this.role = role; }
 
-    public String getPassword() {
-        return password;
-    }
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
 
-    public void setPassword(String password) {
-        this.password = password;
-    }
+    public boolean isEnabled() { return enabled; }
+    public void setEnabled(boolean enabled) { this.enabled = enabled; }
 
-    public boolean isEnabled() {
-        return enabled;
-    }
+    public User getCreatedByAdmin() { return createdByAdmin; }
+    public void setCreatedByAdmin(User createdByAdmin) { this.createdByAdmin = createdByAdmin; }
 
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-    }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }
-
-
-
