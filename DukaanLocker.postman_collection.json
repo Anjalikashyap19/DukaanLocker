@@ -1,0 +1,115 @@
+{
+  "info": {
+    "name": "DukaanLocker API",
+    "description": "REST API for fetching and managing FSSAI license information\n\n## Swagger UI\n- **Swagger UI**: http://localhost:8081/swagger-ui.html\n- **OpenAPI Spec**: http://localhost:8081/api-docs",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "opencode"
+  },
+  "item": [
+    {
+      "name": "Fetch FSSAI License",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"licenseNumber\": \"12345678901234\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8081/api/fssai/fetch",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8081",
+          "path": ["api", "fssai", "fetch"]
+        },
+        "description": "Scrapes the FSSAI portal for the given license number and saves the data to the database."
+      },
+      "response": [
+        {
+          "name": "Success (License Fetched)",
+          "status": "Created",
+          "code": 201,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"success\": true,\n  \"licenseNumber\": \"12345678901234\",\n  \"businessName\": \"M/s ABC Traders\",\n  \"address\": \"123, Main Street, New Delhi - 110001\",\n  \"status\": \"Active\",\n  \"validityDate\": \"31-03-2027\",\n  \"licenseType\": \"Central\",\n  \"pdfPath\": \"downloads/fssai/12345678901234.pdf\",\n  \"message\": null\n}"
+        },
+        {
+          "name": "Validation Error",
+          "status": "Bad Request",
+          "code": 400,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"status\": 400,\n  \"message\": \"Validation failed\",\n  \"details\": [\"licenseNumber: License number must be exactly 14 digits\"],\n  \"timestamp\": \"2026-06-02T10:00:00.000+00:00\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Get FSSAI License",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8081/api/fssai/12345678901234",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8081",
+          "path": ["api", "fssai", ":licenseNumber"],
+          "variable": [
+            {
+              "key": "licenseNumber",
+              "value": "12345678901234",
+              "description": "14-digit FSSAI license number"
+            }
+          ]
+        },
+        "description": "Retrieves a previously fetched FSSAI license from the database."
+      },
+      "response": [
+        {
+          "name": "Success (License Found)",
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"success\": true,\n  \"licenseNumber\": \"12345678901234\",\n  \"businessName\": \"M/s ABC Traders\",\n  \"address\": \"123, Main Street, New Delhi - 110001\",\n  \"status\": \"Active\",\n  \"validityDate\": \"31-03-2027\",\n  \"licenseType\": \"Central\",\n  \"pdfPath\": \"downloads/fssai/12345678901234.pdf\",\n  \"message\": null\n}"
+        },
+        {
+          "name": "Not Found",
+          "status": "Bad Request",
+          "code": 400,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"status\": 400,\n  \"message\": \"FSSAI license not found: 12345678901234\",\n  \"details\": null,\n  \"timestamp\": \"2026-06-02T10:00:00.000+00:00\"\n}"
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081",
+      "type": "string"
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Temurin JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pom.xml') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      - name: Ensure mvnw is executable
+        run: chmod +x mvnw
+
+      - name: Build & verify (compile, test, package)
+        run: ./mvnw -B verify
+
+      - name: Upload built JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: app
+          path: target/*.jar
+          if-no-files-found: error
+          retention-days: 7

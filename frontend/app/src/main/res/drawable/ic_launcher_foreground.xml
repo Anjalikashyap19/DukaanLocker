@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Outer circle in primary blue -->
+    <path
+        android:pathData="M54,16 A38,38 0 1,1 16,54 A38,38 0 1,1 54,16 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#2563EB"
+        android:strokeWidth="3"
+        android:strokeAlpha="0.6"/>
+
+    <!-- Lock shackle in teal -->
+    <path
+        android:pathData="M43,64 L43,48 A11,11 0 0,1 65,48 L65,64"
+        android:fillColor="#00000000"
+        android:strokeColor="#0F766E"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"/>
+
+    <!-- Lock body in white -->
+    <path
+        android:pathData="M36,64 L72,64 C74,64 76,66 76,68 L76,88 C76,90 74,92 72,92 L36,92 C34,92 32,90 32,88 L32,68 C32,66 34,64 36,64 Z"
+        android:fillColor="#FFFFFF"/>
+
+    <!-- Keyhole circle -->
+    <path
+        android:pathData="M50,75 A4,4 0 1,1 58,75 A4,4 0 1,1 50,75 Z"
+        android:fillColor="#1A1A1A"/>
+
+    <!-- Keyhole rectangle -->
+    <path
+        android:pathData="M51.5,79 L56.5,79 L56.5,86 L51.5,86 Z"
+        android:fillColor="#1A1A1A"/>
+
+    <!-- Roof line in cyan accent -->
+    <path
+        android:pathData="M44,22 L54,12 L64,22"
+        android:fillColor="#00000000"
+        android:strokeColor="#06B6D4"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:strokeAlpha="0.7"/>
+</vector>
