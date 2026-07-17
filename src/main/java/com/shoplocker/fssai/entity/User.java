@@ -17,6 +17,9 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @OneToMany(mappedBy = "user")
+    private List<Shop> shops;
+
     @NotBlank(message = "user name is required")
     private String userName;
 
