@@ -1,5 +1,5 @@
 package com.shoplocker.fssai.entity;
-
+import java.util.List;
 import jakarta.persistence.*;
 import lombok.Data;
 import jakarta.validation.constraints.NotBlank;
