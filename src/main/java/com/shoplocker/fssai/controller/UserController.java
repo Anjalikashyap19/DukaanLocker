@@ -15,7 +15,7 @@ import com.shoplocker.fssai.service.UserService;
 import org.springframework.web.bind.annotation.DeleteMapping;
 
 import jakarta.validation.Valid;
-
+import com.shoplocker.fssai.dto.UserResponse;
 
 @RestController
 @RequestMapping("/users")
@@ -33,15 +33,21 @@ public class UserController {
     }
 
     @GetMapping
-    public List<User> getAllUser(){
-        return userService.getAllUsers();
+    public List<UserResponse> getAllUser() {
+
+        return userService.getAllUsers()
+                .stream()
+                .map(userService::toUserResponse)
+                .toList();
     }
 
     @GetMapping("/{id}")
-    public User getUserById(@PathVariable Long id){
-        return userService.getUserById(id);
-    }
+    public UserResponse getUserById(@PathVariable Long id){
 
+        return userService.toUserResponse(
+                userService.getUserById(id)
+        );
+    }
     @DeleteMapping("/{id}")
     public String deleteUser(@PathVariable Long id ){
         userService.deleteUser(id);

@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Pattern;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.time.LocalDateTime;
-
+import com.fasterxml.jackson.annotation.JsonBackReference;
 @Entity
 @Table(name = "shops")
 @Data
@@ -60,6 +60,7 @@ public class Shop {
     private String pincode;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JsonBackReference
     @JoinColumn(name = "user_id", nullable = false)
     @JsonIgnoreProperties({"password", "createdByAdmin", "enabled"})
     private User owner;

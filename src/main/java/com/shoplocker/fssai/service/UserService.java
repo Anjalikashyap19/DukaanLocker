@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 
 import com.shoplocker.fssai.entity.User;
 import com.shoplocker.fssai.repository.UserRepository;
-
+import com.shoplocker.fssai.dto.UserResponse;
 @Service
 public class UserService {
 
@@ -31,5 +31,19 @@ public class UserService {
 
     public void deleteUser(Long id) {
         userRepository.deleteById(id);
+    }
+
+
+    public UserResponse toUserResponse(User user) {
+        return new UserResponse(
+                user.getId(),
+                user.getUserName(),
+                user.getMobileNumber(),
+                user.getEmailId(),
+                user.getRole(),
+                user.isEnabled(),
+                user.getCreatedAt(),
+                user.getUpdatedAt()
+        );
     }
 }

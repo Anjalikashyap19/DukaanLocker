@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Email;
 
 import java.time.LocalDateTime;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 @Entity
 @Table(name = "users")
 @Data
@@ -18,7 +19,7 @@ public class User {
     private Long id;
 
     @OneToMany(mappedBy = "owner")
-    @JsonIgnore
+    @JsonManagedReference
     private List<Shop> shops;
 
     @NotBlank(message = "user name is required")
@@ -38,7 +39,7 @@ public class User {
 
     @Enumerated(EnumType.STRING)
     private Role role = Role.MANAGER;
-
+    @JsonIgnore
     @Column(length = 100)
     private String password;
 
