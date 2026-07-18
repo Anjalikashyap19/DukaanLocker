@@ -18,6 +18,7 @@ public class User {
     private Long id;
 
     @OneToMany(mappedBy = "owner")
+    @JsonIgnore
     private List<Shop> shops;
 
     @NotBlank(message = "user name is required")
