@@ -41,6 +41,21 @@ public class UserService {
 
     public UserResponse toUserResponse(User user) {
 
+        return new UserResponse(
+                user.getId(),
+                user.getUserName(),
+                user.getMobileNumber(),
+                user.getEmailId(),
+                user.getRole(),
+                user.isEnabled(),
+                user.getCreatedAt(),
+                user.getUpdatedAt(),
+                null
+        );
+    }
+
+    public UserResponse toUserDetailResponse(User user) {
+
         List<ShopResponse> shops = user.getShops()
                 .stream()
                 .map(shopService::toShopResponse)
