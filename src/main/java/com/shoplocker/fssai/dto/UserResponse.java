@@ -2,7 +2,8 @@ package com.shoplocker.fssai.dto;
 
 import com.shoplocker.fssai.entity.Role;
 import java.time.LocalDateTime;
-
+import java.util.List;
+import com.shoplocker.fssai.dto.ShopResponse;
 public class UserResponse {
 
     private Long id;
@@ -13,19 +14,22 @@ public class UserResponse {
     private boolean enabled;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-
+    private List<ShopResponse> shops;
     public UserResponse() {
     }
 
-    public UserResponse(Long id,
-                        String userName,
-                        String mobileNumber,
-                        String emailId,
-                        Role role,
-                        boolean enabled,
-                        LocalDateTime createdAt,
-                        LocalDateTime updatedAt) {
-
+    public UserResponse(
+            Long id,
+            String userName,
+            String mobileNumber,
+            String emailId,
+            Role role,
+            boolean enabled,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt,
+            List<ShopResponse> shops
+    )
+    {
         this.id = id;
         this.userName = userName;
         this.mobileNumber = mobileNumber;
@@ -34,6 +38,15 @@ public class UserResponse {
         this.enabled = enabled;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+        this.shops = shops;
+    }
+
+    public List<ShopResponse> getShops() {
+        return shops;
+    }
+
+    public void setShops(List<ShopResponse> shops) {
+        this.shops = shops;
     }
 
     public Long getId() {

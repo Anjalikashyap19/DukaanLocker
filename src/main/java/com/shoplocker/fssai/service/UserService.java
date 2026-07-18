@@ -16,6 +16,9 @@ public class UserService {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private ShopService shopService;
+
     public User saveUser(User user) {
         return userRepository.save(user);
     }
@@ -35,6 +38,13 @@ public class UserService {
 
 
     public UserResponse toUserResponse(User user) {
+
+        List<ShopResponse> shops = user.getShops()
+                .stream()
+                .map(shopService::toShopResponse)
+                .toList();
+
+
         return new UserResponse(
                 user.getId(),
                 user.getUserName(),
@@ -43,7 +53,8 @@ public class UserService {
                 user.getRole(),
                 user.isEnabled(),
                 user.getCreatedAt(),
-                user.getUpdatedAt()
+                user.getUpdatedAt(),
+                shops
         );
     }
 }
