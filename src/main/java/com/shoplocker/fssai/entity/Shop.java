@@ -21,6 +21,7 @@ public class Shop {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+
     @NotBlank(message = "shop name is required")
     @Column(nullable = false)
     private String shopName;
@@ -62,7 +63,7 @@ public class Shop {
     private String pincode;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "owner_id", nullable = false)
+    @JoinColumn(name = "user_id", nullable = false)
     @JsonIgnoreProperties({"password", "createdByAdmin", "enabled"})
     private User owner;
 
