@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 import com.shoplocker.fssai.entity.User;
 import com.shoplocker.fssai.repository.UserRepository;
 import com.shoplocker.fssai.dto.UserResponse;
+import com.shoplocker.fssai.dto.ShopResponse;
+import com.shoplocker.fssai.service.ShopService;
 @Service
 public class UserService {
 
