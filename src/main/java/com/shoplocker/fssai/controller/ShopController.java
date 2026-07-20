@@ -5,6 +5,7 @@ import java.util.List;
 import com.shoplocker.fssai.dto.CreateShopRequest;
 import com.shoplocker.fssai.dto.DocumentResponse;
 import com.shoplocker.fssai.dto.ShopResponse;
+import com.shoplocker.fssai.dto.UpdateShopRequest;
 import com.shoplocker.fssai.entity.DocumentType;
 import com.shoplocker.fssai.entity.Shop;
 import com.shoplocker.fssai.entity.User;
@@ -57,6 +58,19 @@ public class ShopController {
         String email = auth.getName();
         ShopResponse response = shopService.createShop(request, email);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PutMapping("/{shopId}")
+    public ResponseEntity<ShopResponse> updateShop(
+            @PathVariable Long shopId,
+            @Valid @RequestBody UpdateShopRequest request) {
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        User user = shopAccessService.getAuthenticatedUser(auth);
+
+        shopAccessService.validateShopAccess(user, shopId);
+
+        return ResponseEntity.ok(shopService.updateShop(shopId, request));
     }
 
     @Operation(summary = "Get my shops", description = "ADMIN only. Returns shops owned by the logged-in user.")

@@ -11,6 +11,8 @@ import java.util.Optional;
 public interface ShopRepository extends JpaRepository<Shop, Long> {
     boolean existsByMobile(String mobile);
 
+    boolean existsByMobileAndIdNot(String mobile, Long id);
+
     List<Shop> findByOwnerId(Long ownerId);
 
     Optional<Shop> findByIdAndOwnerId(Long id, Long ownerId);

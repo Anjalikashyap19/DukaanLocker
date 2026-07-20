@@ -5,6 +5,7 @@ import java.util.List;
 import com.shoplocker.fssai.dto.CreateShopRequest;
 import com.shoplocker.fssai.dto.DocumentResponse;
 import com.shoplocker.fssai.dto.ShopResponse;
+import com.shoplocker.fssai.dto.UpdateShopRequest;
 import com.shoplocker.fssai.entity.*;
 import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
@@ -33,6 +34,56 @@ public class ShopService {
 
     @Autowired
     private RequiredDocumentService requiredDocumentService;
+
+    @Transactional
+    public ShopResponse updateShop(Long id, UpdateShopRequest request) {
+
+        Shop shop = getShopById(id);
+
+        if (request.getShopName() != null) {
+            shop.setShopName(request.getShopName());
+        }
+        if (request.getOwnerName() != null) {
+            shop.setOwnerName(request.getOwnerName());
+        }
+        if (request.getMobile() != null) {
+            // Check for duplicate mobile, excluding the current shop
+            if (shopRepository.existsByMobileAndIdNot(request.getMobile(), id)) {
+                throw new FssaiException("Mobile number already exists", FailureCode.DUPLICATE_MOBILE);
+            }
+            shop.setMobile(request.getMobile());
+        }
+        if (request.getCategory() != null) {
+            shop.setCategory(request.getCategory().toUpperCase());
+        }
+        if (request.getScale() != null) {
+            try {
+                shop.setScale(BusinessScale.valueOf(request.getScale().toUpperCase()));
+            } catch (IllegalArgumentException e) {
+                throw new FssaiException("Invalid scale: " + request.getScale(), FailureCode.INVALID_REQUEST);
+            }
+        }
+        if (request.getState() != null) {
+            shop.setState(request.getState());
+        }
+        if (request.getCity() != null) {
+            shop.setCity(request.getCity());
+        }
+        if (request.getBranchName() != null) {
+            shop.setBranchName(request.getBranchName());
+        }
+        if (request.getAddress() != null) {
+            shop.setAddress(request.getAddress());
+        }
+        if (request.getPincode() != null) {
+            shop.setPincode(request.getPincode());
+        }
+
+        Shop updated = shopRepository.save(shop);
+
+        return toShopResponse(updated);
+    }
+
 
     @Autowired
     private S3Service s3Service;
