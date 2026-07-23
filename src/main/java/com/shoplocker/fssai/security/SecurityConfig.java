@@ -70,6 +70,7 @@ public class SecurityConfig {
                     // ── Public (no JWT required) ──────────────────────────────
                     .requestMatchers(
                             "/api/auth/**",
+                            "/api/location/**",
                             "/swagger-ui/**",
                             "/swagger-ui.html",
                             "/v3/api-docs",

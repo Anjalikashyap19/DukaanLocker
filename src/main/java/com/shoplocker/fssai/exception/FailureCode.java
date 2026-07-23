@@ -29,6 +29,9 @@ public enum FailureCode {
     /** FSSAI portal scraper (Playwright) failed to fetch or parse a license on the government site. */
     SCRAPER_FAILURE            ("scraper_failure",            HttpStatus.BAD_GATEWAY),
 
+    /** Ola Maps API call failed (network, auth, rate-limit, or invalid response). */
+    OLA_MAPS_API_FAILURE       ("ola_maps_api_failure",       HttpStatus.BAD_GATEWAY),
+
     /** Resource not found (e.g. shop, license, document). */
     NOT_FOUND                  ("not_found",                  HttpStatus.NOT_FOUND),
 
@@ -47,6 +50,8 @@ public enum FailureCode {
     /** Rasterizer itself crashed (native lib failure, OOM, etc.) - NOT for client-bad PDFs.
      *  Corrupted / encrypted / image-only PDFs use UNSUPPORTED_DOCUMENT_FORMAT (400) instead. */
     PDF_PROCESSING_ERROR       ("pdf_processing_error",       HttpStatus.INTERNAL_SERVER_ERROR),
+
+    // ---- Location / External API errors ----
 
     // ---- Shop / Manager / Assignment errors ----
     /** Shop not found. */
