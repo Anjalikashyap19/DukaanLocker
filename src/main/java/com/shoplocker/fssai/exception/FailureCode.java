@@ -65,6 +65,9 @@ public enum FailureCode {
     /** Assignment not found. */
     ASSIGNMENT_NOT_FOUND       ("assignment_not_found",       HttpStatus.NOT_FOUND),
 
+    /** Wizard business profile not found. */
+    WIZARD_PROFILE_NOT_FOUND   ("wizard_profile_not_found",   HttpStatus.NOT_FOUND),
+
     /** Duplicate manager-shop assignment. */
     DUPLICATE_ASSIGNMENT       ("duplicate_assignment",       HttpStatus.CONFLICT),
 

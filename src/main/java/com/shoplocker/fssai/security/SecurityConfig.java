@@ -88,6 +88,7 @@ public class SecurityConfig {
                     .requestMatchers("/api/managers/**").hasRole("ADMIN")
                     .requestMatchers("/users/**").hasRole("ADMIN")
                     // ── Authenticated (any valid JWT) — access checked in service layer ──
+                    .requestMatchers("/api/business-profile/**").authenticated()
                     .requestMatchers(HttpMethod.GET, "/api/shops/*").authenticated()
                     .requestMatchers(HttpMethod.GET, "/api/shops/*/documents").authenticated()
                     .requestMatchers(HttpMethod.PUT, "/api/shops/*/documents/**").authenticated()
