@@ -42,10 +42,11 @@ public class BusinessProfileService {
             throw new FssaiException("Invalid operationScope: must be CITY, STATE, or NATIONAL", FailureCode.INVALID_REQUEST);
         }
 
-        // Validate digital readiness
-        String digitalReadiness = request.getDigitalReadiness().toUpperCase();
-        if (!digitalReadiness.equals("PHYSICAL") && !digitalReadiness.equals("SCATTERED") && !digitalReadiness.equals("DIGITAL")) {
-            throw new FssaiException("Invalid digitalReadiness: must be PHYSICAL, SCATTERED, or DIGITAL", FailureCode.INVALID_REQUEST);
+        // Validate business presence
+        String businessPresence = request.getBusinessPresence().toUpperCase();
+        if (!businessPresence.equals("SINGLE_PHYSICAL") && !businessPresence.equals("MULTIPLE_LOCATIONS") 
+                && !businessPresence.equals("DIGITAL_ONLINE") && !businessPresence.equals("BOTH_PHYSICAL_DIGITAL")) {
+            throw new FssaiException("Invalid businessPresence: must be SINGLE_PHYSICAL, MULTIPLE_LOCATIONS, DIGITAL_ONLINE, or BOTH_PHYSICAL_DIGITAL", FailureCode.INVALID_REQUEST);
         }
 
         // Check if profile already exists
@@ -62,8 +63,7 @@ public class BusinessProfileService {
         profile.setCrossCategory(request.isCrossCategory());
         profile.setMultipleBranches(request.isMultipleBranches());
         profile.setOperationScope(operationScope);
-        profile.setDigitalReadiness(digitalReadiness);
-        profile.setTotalBusinesses(request.getTotalBusinesses());
+        profile.setBusinessPresence(businessPresence);
 
         BusinessProfile saved = businessProfileRepository.save(profile);
         return toProfileResponse(saved);
@@ -100,8 +100,7 @@ public class BusinessProfileService {
                 profile.isCrossCategory(),
                 profile.isMultipleBranches(),
                 profile.getOperationScope(),
-                profile.getDigitalReadiness(),
-                profile.getTotalBusinesses(),
+                profile.getBusinessPresence(),
                 profile.getCreatedAt(),
                 profile.getUpdatedAt()
         );
