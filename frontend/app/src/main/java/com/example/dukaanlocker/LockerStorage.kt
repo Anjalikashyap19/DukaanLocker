@@ -10,6 +10,8 @@ import java.util.UUID
 data class UserAccount(
     val mobile: String,
     val name: String,
+    val email: String = "",
+    val password: String = "",
     val role: String,           // "OWNER" or "MANAGER"
     val managerCode: String = ""
 )
@@ -75,6 +77,7 @@ object LockerStorage {
     fun saveUser(ctx: Context, u: UserAccount) {
         pref(ctx).edit().putString(K_USER, JSONObject().apply {
             put("mobile", u.mobile); put("name", u.name)
+            put("email", u.email); put("password", u.password)
             put("role", u.role); put("managerCode", u.managerCode)
         }.toString()).apply()
     }
@@ -82,8 +85,11 @@ object LockerStorage {
     fun getUser(ctx: Context): UserAccount? = try {
         pref(ctx).getString(K_USER, null)?.let { s ->
             JSONObject(s).let {
-                UserAccount(it.getString("mobile"), it.getString("name"),
-                    it.getString("role"), it.optString("managerCode", ""))
+                UserAccount(
+                    it.getString("mobile"), it.getString("name"),
+                    it.optString("email", ""), it.optString("password", ""),
+                    it.getString("role"), it.optString("managerCode", "")
+                )
             }
         }
     } catch (e: Exception) { null }
