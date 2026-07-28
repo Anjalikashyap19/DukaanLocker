@@ -26,6 +26,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
@@ -36,6 +37,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.sp
 import com.example.dukaanlocker.R
@@ -143,7 +145,7 @@ fun LoginScreen(
         // ── Top section: Logo + Title ────────────────────────────────────────
         Spacer(modifier = Modifier.height(24.dp))
 
-        // App Logo (custom launcher icon)
+        // App Logo (custom launcher icon vector)
         Box(
             modifier = Modifier
                 .size(80.dp)
@@ -153,10 +155,11 @@ fun LoginScreen(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
+            Image(
                 painter = painterResource(id = R.drawable.ic_launcher_foreground),
                 contentDescription = "DukaanLocker Logo",
-                modifier = Modifier.size(56.dp)
+                modifier = Modifier.size(56.dp),
+                contentScale = ContentScale.Fit
             )
         }
 
@@ -352,14 +355,14 @@ private fun RoleSelectionContent(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Divider(modifier = Modifier.weight(1f), color = colors.border.copy(alpha = 0.5f))
+            HorizontalDivider(modifier = Modifier.weight(1f), color = colors.border.copy(alpha = 0.5f))
             Text(
                 "  Returning User?  ",
                 fontSize = 10.sp,
                 color = colors.textSecondary.copy(alpha = 0.6f),
                 letterSpacing = 1.sp
             )
-            Divider(modifier = Modifier.weight(1f), color = colors.border.copy(alpha = 0.5f))
+            HorizontalDivider(modifier = Modifier.weight(1f), color = colors.border.copy(alpha = 0.5f))
         }
 
         Spacer(modifier = Modifier.height(18.dp))

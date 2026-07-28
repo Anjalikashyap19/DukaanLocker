@@ -204,7 +204,7 @@ fun OwnerHomeScreen(
                     Text("Mobile: +91 ${user.mobile}", color = colors.textSecondary, fontSize = 14.sp)
                     Text("Role: ${user.role}", color = colors.primary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Divider(color = colors.border)
+                    HorizontalDivider(color = colors.border)
                     TextButton(onClick = {
                         showSettings = false
                         onToggleTheme()
@@ -221,7 +221,7 @@ fun OwnerHomeScreen(
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
-                    Divider(color = colors.border)
+                    HorizontalDivider(color = colors.border)
                     Spacer(modifier = Modifier.height(8.dp))
                     TextButton(onClick = {
                         showSettings = false
@@ -834,7 +834,7 @@ fun CertificateViewerDialog(
                         fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color.Gray, textAlign = TextAlign.Center
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    Divider(color = colors.primary, thickness = 2.dp, modifier = Modifier.width(180.dp))
+                    HorizontalDivider(color = colors.primary, thickness = 2.dp, modifier = Modifier.width(180.dp))
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(doc.name.uppercase(), fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = Color.Black, textAlign = TextAlign.Center)
                 }
@@ -873,6 +873,6 @@ private fun CertificateField(label: String, value: String, isHighlight: Boolean 
         Text(value, fontSize = if (isHighlight) 14.sp else 12.sp, fontWeight = if (isHighlight) FontWeight.Bold else FontWeight.Normal,
             color = textColor, fontFamily = if (isHighlight) FontFamily.Monospace else FontFamily.Default)
         Spacer(modifier = Modifier.height(2.dp))
-        Divider(color = Color.LightGray.copy(alpha = 0.5f), thickness = 0.5.dp)
+        HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f), thickness = 0.5.dp)
     }
 }

@@ -340,6 +340,9 @@ fun AddBusinessScreen(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("SAVE BUSINESS", fontWeight = FontWeight.Bold, fontSize = 16.sp, letterSpacing = 1.sp)
             }
+
+            // Bottom spacing for system navigation bar
+            Spacer(modifier = Modifier.navigationBarsPadding())
         }
     }
 }

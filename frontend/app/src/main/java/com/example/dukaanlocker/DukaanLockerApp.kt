@@ -1,5 +1,6 @@
 package com.example.dukaanlocker
 
+import android.app.Activity
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -14,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
 import com.example.dukaanlocker.ui.screens.*
 import com.example.dukaanlocker.ui.theme.*
 import java.text.SimpleDateFormat
@@ -122,6 +124,18 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}) {
 
     // Status bar background color — dark bg for dark theme, light bg for light theme
     val statusBarBg = if (isDarkTheme) DarkBg else Color(0xFFF8FAFC)
+
+    // Update system status bar and nav bar icon colors to match app theme
+    val activity = context as? Activity
+    SideEffect {
+        activity?.let { act ->
+            val controller = WindowCompat.getInsetsController(act.window, act.window.decorView)
+            // Dark theme → white icons (light appearance = false)
+            // Light theme → dark icons (light appearance = true)
+            controller.isAppearanceLightStatusBars = !isDarkTheme
+            controller.isAppearanceLightNavigationBars = !isDarkTheme
+        }
+    }
 
     DukaanLockerTheme(darkTheme = isDarkTheme) {
         Surface(

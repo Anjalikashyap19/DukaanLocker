@@ -175,7 +175,7 @@ private fun ManagerCard(
             }
 
             Spacer(modifier = Modifier.height(10.dp))
-            Divider(color = colors.border, thickness = 0.5.dp)
+            HorizontalDivider(color = colors.border, thickness = 0.5.dp)
             Spacer(modifier = Modifier.height(10.dp))
 
             Text("Assigned Businesses:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = colors.textSecondary)
