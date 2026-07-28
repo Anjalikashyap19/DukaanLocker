@@ -20,7 +20,6 @@ android {
 
     buildTypes {
         debug {
-            // Keep debug fast for development — 54MB is normal for debug builds
             isMinifyEnabled = false
         }
         release {
@@ -33,7 +32,6 @@ android {
         }
     }
 
-    // Android App Bundle — smaller downloads, Play Store's preferred format
     bundle {
         language {
             enableSplit = false
@@ -67,6 +65,17 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
+
+    // Networking
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.gson)
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.logging)
+    implementation(libs.gson)
+    implementation(libs.coroutines.core)
+    implementation(libs.coroutines.android)
+    implementation(libs.coil.compose)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

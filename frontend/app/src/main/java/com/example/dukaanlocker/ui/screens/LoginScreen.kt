@@ -113,12 +113,22 @@ fun LoginScreen(
 
     val regStrength = remember(regPassword) { evaluatePasswordStrength(regPassword) }
 
+    // Backend requires: 8+ chars, uppercase, lowercase, digit, special char
+    fun isStrongPassword(pw: String): Boolean {
+        if (pw.length < 8) return false
+        if (!pw.any { it.isUpperCase() }) return false
+        if (!pw.any { it.isLowerCase() }) return false
+        if (!pw.any { it.isDigit() }) return false
+        if (!pw.any { !it.isLetterOrDigit() }) return false
+        return true
+    }
+
     // ── Validate & submit register ──
     fun validateAndRegister() {
         regNameError = regName.isBlank()
         regEmailError = !isValidEmail(regEmail)
         regMobileError = regMobile.length != 10
-        regPasswordError = regPassword.length < 6
+        regPasswordError = !isStrongPassword(regPassword)
         if (!regNameError && !regEmailError && !regMobileError && !regPasswordError) {
             regIsChecking = true
             onRegister(regName.trim(), regEmail.trim(), regPassword, regMobile)
@@ -254,14 +264,20 @@ fun LoginScreen(
                     onRegister = { validateAndRegister() }
                 )
 
-                // ── MANAGER LOGIN ──────────────────────────────────────────
-                false -> ManagerLoginForm(
+                // ── MANAGER LOGIN (uses email + password via owner login) ──────────
+                false -> OwnerLoginForm(
                     colors = colors,
-                    accessCode = accessCode,
-                    onAccessCodeChange = { accessCode = it.uppercase().take(6); codeError = false },
-                    codeError = codeError,
-                    onBack = { selectedView = null },
-                    onLogin = { onManagerLogin(accessCode) }
+                    email = loginEmail,
+                    onEmailChange = { loginEmail = it; loginEmailError = false },
+                    emailError = loginEmailError,
+                    password = loginPassword,
+                    onPasswordChange = { loginPassword = it; loginPasswordError = false },
+                    passwordVisible = loginPasswordVisible,
+                    onTogglePasswordVisible = { loginPasswordVisible = !loginPasswordVisible },
+                    passwordError = loginPasswordError,
+                    isChecking = loginIsChecking,
+                    onBack = { selectedView = null; loginIsChecking = false },
+                    onLogin = { validateAndLogin() }
                 )
             }
         }
@@ -612,7 +628,7 @@ private fun RegisterForm(
                 value = password,
                 onValueChange = onPasswordChange,
                 label = { Text("Password", color = colors.textSecondary) },
-                placeholder = { Text("Min 6 characters", color = colors.textSecondary.copy(alpha = 0.4f)) },
+                placeholder = { Text("8+ chars, upper, lower, digit, special", color = colors.textSecondary.copy(alpha = 0.4f)) },
                 leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
                 trailingIcon = {
                     IconButton(onClick = onTogglePasswordVisible, modifier = Modifier.size(32.dp)) {
@@ -628,7 +644,7 @@ private fun RegisterForm(
                 isError = passwordError,
                 supportingText = {
                     if (passwordError) {
-                        Text("Password must be at least 6 characters", color = Color.Red)
+                        Text("Must be 8+ chars with uppercase, lowercase, digit & special char", color = Color.Red)
                     } else if (password.isNotEmpty()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             // Strength bar
@@ -675,7 +691,7 @@ private fun RegisterForm(
             // Register Button
             Button(
                 onClick = onRegister,
-                enabled = name.isNotBlank() && email.isNotBlank() && password.length >= 6 && mobile.length == 10 && !isChecking,
+                enabled = name.isNotBlank() && email.isNotBlank() && password.length >= 8 && mobile.length == 10 && !isChecking,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),
