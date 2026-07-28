@@ -420,6 +420,7 @@ private fun BusinessPresenceQuestion(
             ScopeOption("PHYSICAL", "Single Physical Store", "One brick & mortar location", Icons.Default.Store, selected, onSelect)
             ScopeOption("SCATTERED", "Multiple Locations", "Multiple physical branches", Icons.Default.Business, selected, onSelect)
             ScopeOption("DIGITAL", "Digital / Online Only", "Online store or digital presence", Icons.Default.Computer, selected, onSelect)
+            ScopeOption("BOTH", "Both Physical & Digital", "Physical store plus online presence", Icons.Default.DevicesOther, selected, onSelect)
         }
     }
 }
