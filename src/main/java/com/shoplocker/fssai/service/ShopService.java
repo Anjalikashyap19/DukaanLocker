@@ -90,9 +90,7 @@ public class ShopService {
 
     @Transactional
     public ShopResponse createShop(CreateShopRequest request, String userEmail) {
-        if (shopRepository.existsByMobile(request.getMobile())) {
-            throw new FssaiException("Mobile number already exists", FailureCode.DUPLICATE_MOBILE);
-        }
+
 
         User owner = userRepository.findByEmailId(userEmail)
                 .orElseThrow(() -> new FssaiException("User not found: " + userEmail, FailureCode.USER_NOT_FOUND));
