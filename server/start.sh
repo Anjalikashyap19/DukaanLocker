@@ -26,7 +26,7 @@ elif command -v ss >/dev/null 2>&1 && ss -ltn | awk '{print $4}' | grep -qE '[:.
   exit 1
 fi
 
-set -a; source .env; set +a
+set -a; source ../.env; set +a
 
 # Auto-detect the EC2 public IPv4 if EXTERNAL_URL wasn't set in .env. The
 # 169.254.169.254 IMDS endpoint is reachable only from inside an EC2 instance;
