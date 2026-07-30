@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -278,6 +279,7 @@ private fun BusinessCard(
     val secured = documents.count { it.status != "MISSING" }
     val total = documents.size.coerceAtLeast(1)
     val progress = secured.toFloat() / total.toFloat()
+    val bizManagers = managers.filter { business.id in it.assignedBusinessIds }
 
     Card(
         modifier = Modifier
@@ -285,80 +287,77 @@ private fun BusinessCard(
             .clickable(onClick = onSelect),
         colors = CardDefaults.cardColors(containerColor = colors.cardBg),
         border = BorderStroke(1.dp, colors.border),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(12.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            // Top row: icon + name + edit
+        Column(modifier = Modifier.padding(14.dp)) {
+            // ── Row 1: icon + name + category + edit ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(10.dp))
                         .background(colors.primary.copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary, modifier = Modifier.size(26.dp))
+                    Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary, modifier = Modifier.size(22.dp))
                 }
-                Spacer(modifier = Modifier.width(14.dp))
+                Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(business.name, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, maxLines = 1)
-                    Spacer(modifier = Modifier.height(1.dp))
+                    Text(business.name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, maxLines = 1)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(business.category, fontSize = 11.sp, color = colors.textSecondary, maxLines = 1)
-                        Text("  •  ", fontSize = 11.sp, color = colors.textSecondary.copy(alpha = 0.3f))
+                        Text(
+                            business.category, fontSize = 11.sp, color = colors.textSecondary,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Text(" • ", fontSize = 11.sp, color = colors.textSecondary.copy(alpha = 0.3f))
                         Text(business.scale, fontSize = 11.sp, color = colors.textSecondary)
                     }
-                    Spacer(modifier = Modifier.height(1.dp))
-                    Text(business.ownerName, fontSize = 12.sp, color = colors.textPrimary.copy(alpha = 0.8f), fontWeight = FontWeight.Medium)
                 }
-                IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
+                IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit", tint = colors.textSecondary, modifier = Modifier.size(16.dp))
                 }
             }
 
-            // Location: City, State
-            Spacer(modifier = Modifier.height(6.dp))
+            // ── Row 2: Owner + City, State + Branch (compact) ──
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
-                modifier = Modifier.padding(start = 62.dp),
+                modifier = Modifier.padding(start = 52.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.LocationOn, contentDescription = null, tint = colors.textSecondary.copy(alpha = 0.6f), modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    buildString {
-                        if (business.city.isNotBlank()) append(business.city)
-                        if (business.city.isNotBlank() && business.state.isNotBlank()) append(", ")
-                        if (business.state.isNotBlank()) append(business.state)
-                    },
-                    fontSize = 11.sp, color = colors.textSecondary, maxLines = 1
-                )
-            }
-
-            // Branch info
-            if (business.branchName.isNotBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.padding(start = 62.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Business, contentDescription = null, tint = colors.textSecondary.copy(alpha = 0.6f), modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
+                Text(business.ownerName, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = colors.textPrimary.copy(alpha = 0.8f))
+                if (business.city.isNotBlank() || business.state.isNotBlank()) {
+                    Text("  •  ", fontSize = 11.sp, color = colors.textSecondary.copy(alpha = 0.3f))
+                    Icon(Icons.Default.LocationOn, contentDescription = null, tint = colors.textSecondary.copy(alpha = 0.5f), modifier = Modifier.size(12.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Text(
+                        buildString {
+                            if (business.city.isNotBlank()) append(business.city)
+                            if (business.city.isNotBlank() && business.state.isNotBlank()) append(", ")
+                            if (business.state.isNotBlank()) append(business.state)
+                        },
+                        fontSize = 11.sp, color = colors.textSecondary, maxLines = 1
+                    )
+                }
+                if (business.branchName.isNotBlank()) {
+                    Text("  •  ", fontSize = 11.sp, color = colors.textSecondary.copy(alpha = 0.3f))
+                    Icon(Icons.Default.Business, contentDescription = null, tint = colors.textSecondary.copy(alpha = 0.5f), modifier = Modifier.size(12.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
                     Text(business.branchName, fontSize = 11.sp, color = colors.textSecondary, maxLines = 1)
                 }
             }
 
-            // Assigned managers
-            val bizManagers = managers.filter { business.id in it.assignedBusinessIds }
+            // ── Row 3: Managers (if any) ──
             if (bizManagers.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(
-                    modifier = Modifier.padding(start = 62.dp),
+                    modifier = Modifier.padding(start = 52.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.People, contentDescription = null, tint = colors.secondary.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                    Icon(Icons.Default.People, contentDescription = null, tint = colors.secondary.copy(alpha = 0.6f), modifier = Modifier.size(12.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         bizManagers.map { it.managerName }.joinToString(", "),
@@ -367,11 +366,12 @@ private fun BusinessCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-            HorizontalDivider(color = colors.border.copy(alpha = 0.5f), thickness = 0.5.dp)
+            // ── Divider ──
             Spacer(modifier = Modifier.height(10.dp))
+            HorizontalDivider(color = colors.border.copy(alpha = 0.5f), thickness = 0.5.dp)
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Document Progress
+            // ── Document Progress ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -380,7 +380,7 @@ private fun BusinessCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(26.dp)
+                            .size(24.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .background(
                                 if (progress == 1f) colors.success.copy(alpha = 0.15f)
@@ -392,35 +392,28 @@ private fun BusinessCard(
                             Icons.Default.Description,
                             contentDescription = null,
                             tint = if (progress == 1f) colors.success else colors.primary,
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(13.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            if (progress == 1f) "All documents secured" else "Documents ($total required)",
-                            fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary
-                        )
-                        Text(
-                            if (total > 0) "$secured of $total completed"
-                            else "Loading...",
-                            fontSize = 11.sp, color = colors.textSecondary
-                        )
-                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        if (progress == 1f) "All documents secured" else "$secured of $total completed",
+                        fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary
+                    )
                 }
-                Column(horizontalAlignment = Alignment.End) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         "${(progress * 100).toInt()}%",
-                        fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp, fontWeight = FontWeight.Bold,
                         color = if (progress == 1f) colors.success else colors.primary
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Box(modifier = Modifier.width(64.dp).height(5.dp).clip(RoundedCornerShape(3.dp)).background(colors.border)) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(modifier = Modifier.width(56.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(colors.border)) {
                         Box(
                             modifier = Modifier
                                 .fillMaxHeight()
                                 .fillMaxWidth(fraction = progress)
-                                .clip(RoundedCornerShape(3.dp))
+                                .clip(RoundedCornerShape(2.dp))
                                 .background(if (progress == 1f) colors.success else colors.primary)
                         )
                     }

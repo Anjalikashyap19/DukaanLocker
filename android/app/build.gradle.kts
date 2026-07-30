@@ -16,6 +16,8 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "OLA_MAPS_API_KEY", "\"${project.findProperty("OLA_MAPS_API_KEY") ?: ""}\"")
     }
 
     buildTypes {
@@ -52,6 +54,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

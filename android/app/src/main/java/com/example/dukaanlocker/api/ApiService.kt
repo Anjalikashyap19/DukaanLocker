@@ -44,6 +44,14 @@ interface ApiService {
         @Query("expiryDate") expiryDate: String? = null
     ): Response<DocumentResponse>
 
+    @Multipart
+    @POST("docs/shops/{shopId}/{documentType}/upload")
+    suspend fun uploadDocumentViaDocs(
+        @Path("shopId") shopId: Long,
+        @Path("documentType") documentType: String,
+        @Part file: MultipartBody.Part
+    ): Response<okhttp3.ResponseBody>
+
     // ── Managers ─────────────────────────────────────────────────────────────
 
     @POST("api/managers")

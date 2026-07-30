@@ -1,7 +1,10 @@
 package com.example.dukaanlocker
 
 import android.app.Activity
+import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +23,9 @@ import com.example.dukaanlocker.api.*
 import com.example.dukaanlocker.ui.screens.*
 import com.example.dukaanlocker.ui.theme.*
 import kotlinx.coroutines.launch
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -57,6 +63,12 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}) {
     var docForView by remember { mutableStateOf<DocumentResponse?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
+    // ── Upload / Fetch state ──
+    var pendingUploadDoc by remember { mutableStateOf<DocumentItem?>(null) }
+    var isUploading by remember { mutableStateOf(false) }
+    var showFetchDialog by remember { mutableStateOf(false) }
+    var fetchTargetDoc by remember { mutableStateOf<DocumentItem?>(null) }
+
     // ── Helper: Load documents for a shop (accumulates into shopDocuments) ──
     suspend fun loadDocuments(shopId: Long) {
         try {
@@ -66,7 +78,45 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}) {
                 shopDocuments = shopDocuments.filter { it.shopId != shopId } + docs
             }
         } catch (e: Exception) {
-            // Handle offline or error gracefully
+        }
+    }
+
+    val uploadLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null && pendingUploadDoc != null) {
+            scope.launch {
+                isUploading = true
+                isLoading = true
+                try {
+                    val doc = pendingUploadDoc!!
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    val bytes = inputStream?.readBytes() ?: return@launch
+                    inputStream.close()
+                    val mimeType = context.contentResolver.getType(uri) ?: "application/pdf"
+                    val requestBody = bytes.toRequestBody(mimeType.toMediaTypeOrNull())
+                    val fileName = "${doc.type.lowercase()}.pdf"
+                    val filePart = MultipartBody.Part.createFormData("file", fileName, requestBody)
+                    val shopId = doc.businessId.toLongOrNull() ?: return@launch
+                    val urlDocType = doc.type.lowercase().replace("_", "-")
+                    val response = api.uploadDocumentViaDocs(
+                        shopId = shopId,
+                        documentType = urlDocType,
+                        file = filePart
+                    )
+                    if (response.isSuccessful) {
+                        Toast.makeText(context, "${doc.name} uploaded!", Toast.LENGTH_SHORT).show()
+                        loadDocuments(shopId)
+                    } else {
+                        Toast.makeText(context, "Upload failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Upload error: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+                isUploading = false
+                isLoading = false
+                pendingUploadDoc = null
+            }
         }
     }
 
@@ -387,13 +437,12 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}) {
                                     currentScreen = "manage_managers"
                                 },
                                 onFetchDoc = { doc ->
-                                    // Upload document via API
-                                    scope.launch {
-                                        Toast.makeText(context, "Upload feature - select a file to upload ${doc.name}", Toast.LENGTH_SHORT).show()
-                                    }
+                                    fetchTargetDoc = doc
+                                    showFetchDialog = true
                                 },
                                 onUploadDoc = { doc ->
-                                    Toast.makeText(context, "Select a file to upload ${doc.name}", Toast.LENGTH_SHORT).show()
+                                    pendingUploadDoc = doc
+                                    uploadLauncher.launch("*/*")
                                 },
                                 onViewDoc = { doc ->
                                     // Map DocumentItem to DocumentResponse for viewing
@@ -540,10 +589,12 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}) {
                                     )
                                 },
                                 onFetchDoc = { doc ->
-                                    Toast.makeText(context, "Upload feature - select a file", Toast.LENGTH_SHORT).show()
+                                    fetchTargetDoc = doc
+                                    showFetchDialog = true
                                 },
                                 onUploadDoc = { doc ->
-                                    Toast.makeText(context, "Select a file to upload ${doc.name}", Toast.LENGTH_SHORT).show()
+                                    pendingUploadDoc = doc
+                                    uploadLauncher.launch("*/*")
                                 },
                                 onViewDoc = { doc -> },
                                 onDeleteDoc = { doc -> },
@@ -564,6 +615,24 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}) {
                         ) {
                             CircularProgressIndicator(color = if (isDarkTheme) Color.White else Color(0xFF2563EB))
                         }
+                    }
+
+                    // ── Fetch Document Dialog ──
+                    if (showFetchDialog && fetchTargetDoc != null) {
+                        val fetchDoc = fetchTargetDoc!!
+                        val shop = shops.find { it.id.toString() == fetchDoc.businessId }
+                        FetchDocumentDialog(
+                            doc = fetchDoc,
+                            shopName = shop?.shopName ?: "Business",
+                            onDismiss = {
+                                showFetchDialog = false
+                                fetchTargetDoc = null
+                            },
+                            onSuccess = { regNum, issueDate, expiryDate ->
+                                showFetchDialog = false
+                                fetchTargetDoc = null
+                            }
+                        )
                     }
                 }
 

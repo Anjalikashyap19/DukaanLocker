@@ -2,6 +2,7 @@ package com.example.dukaanlocker.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,16 +17,22 @@ import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.dukaanlocker.BuildConfig
 import com.example.dukaanlocker.BusinessProfile
+import com.example.dukaanlocker.api.OlaMapsClient
+import com.example.dukaanlocker.api.OlaPrediction
 import com.example.dukaanlocker.ui.theme.*
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,12 +46,17 @@ fun AddBusinessScreen(
     var ownerName by remember { mutableStateOf(initial?.ownerName ?: "") }
     var category by remember { mutableStateOf(initial?.category ?: "") }
     var scale by remember { mutableStateOf(initial?.scale ?: "Micro") }
+    var branchName by remember { mutableStateOf(initial?.branchName ?: "") }
     var state by remember { mutableStateOf(initial?.state ?: "Maharashtra") }
     var city by remember { mutableStateOf(initial?.city ?: "") }
-    var branchName by remember { mutableStateOf(initial?.branchName ?: "") }
     var showCategoryDropdown by remember { mutableStateOf(false) }
     var showScaleDropdown by remember { mutableStateOf(false) }
     var showStateDropdown by remember { mutableStateOf(false) }
+    var suggestions by remember { mutableStateOf<List<OlaPrediction>>(emptyList()) }
+    var isSearchingLocation by remember { mutableStateOf(false) }
+    var locationSelected by remember { mutableStateOf(false) }
+
+    val olaMapsApi = remember { OlaMapsClient.apiService }
 
     val categories = listOf(
         "Beauty, Salon & Personal Care",
@@ -82,45 +94,80 @@ fun AddBusinessScreen(
     )
     val scales = listOf("Micro", "Small", "Medium", "Large")
     val states = listOf(
-        // States
-        "Andhra Pradesh",
-        "Arunachal Pradesh",
-        "Assam",
-        "Bihar",
-        "Chhattisgarh",
-        "Goa",
-        "Gujarat",
-        "Haryana",
-        "Himachal Pradesh",
-        "Jharkhand",
-        "Karnataka",
-        "Kerala",
-        "Madhya Pradesh",
-        "Maharashtra",
-        "Manipur",
-        "Meghalaya",
-        "Mizoram",
-        "Nagaland",
-        "Odisha",
-        "Punjab",
-        "Rajasthan",
-        "Sikkim",
-        "Tamil Nadu",
-        "Telangana",
-        "Tripura",
-        "Uttar Pradesh",
-        "Uttarakhand",
-        "West Bengal",
-        // Union Territories
-        "Andaman & Nicobar Islands",
-        "Chandigarh",
-        "Dadra & Nagar Haveli and Daman & Diu",
-        "Delhi (NCT)",
-        "Jammu & Kashmir",
-        "Ladakh",
-        "Lakshadweep",
-        "Puducherry"
+        "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
+        "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand",
+        "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur",
+        "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan",
+        "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh",
+        "Uttarakhand", "West Bengal",
+        "Andaman & Nicobar Islands", "Chandigarh",
+        "Dadra & Nagar Haveli and Daman & Diu", "Delhi (NCT)",
+        "Jammu & Kashmir", "Ladakh", "Lakshadweep", "Puducherry"
     )
+
+    LaunchedEffect(branchName) {
+        if (locationSelected || branchName.length < 2 || branchName.isBlank()) {
+            if (branchName.isBlank()) suggestions = emptyList()
+            return@LaunchedEffect
+        }
+        isSearchingLocation = true
+        delay(400)
+        try {
+            val response = olaMapsApi.autocomplete(branchName, BuildConfig.OLA_MAPS_API_KEY)
+            if (response.isSuccessful && branchName.isNotBlank()) {
+                suggestions = response.body()?.predictions
+                    ?.filter { it.description.contains("India", ignoreCase = true) }
+                    ?: emptyList()
+            } else {
+                suggestions = emptyList()
+            }
+        } catch (_: Exception) {
+            suggestions = emptyList()
+        }
+        isSearchingLocation = false
+    }
+
+    fun normalizeStateName(s: String): String =
+        s.lowercase().replace("&", " and ").replace(Regex("[^a-zA-Z\\s]"), "").replace(Regex("\\s+"), " ").trim()
+
+    fun onSuggestionSelected(suggestion: OlaPrediction) {
+        branchName = suggestion.structuredFormatting?.mainText
+            ?: suggestion.description.split(",").first().trim()
+        suggestions = emptyList()
+        locationSelected = true
+
+        val addressText = suggestion.structuredFormatting?.secondaryText ?: suggestion.description
+        val parts = addressText.split(",").map { it.trim() }
+        val filtered = parts.filter { !it.equals("India", ignoreCase = true) }
+        if (filtered.size >= 2) {
+            var extractedCity = ""
+            var extractedState = ""
+            for (i in filtered.indices.reversed()) {
+                val raw = filtered[i]
+                val stripped = raw.replace(Regex("[^a-zA-Z&\\s]"), "").trim()
+                if (stripped.length < 3) continue
+                val norm = normalizeStateName(stripped)
+                val matched = states.firstOrNull { state ->
+                    val ns = normalizeStateName(state)
+                    ns == norm || norm.contains(ns) || ns.contains(norm) ||
+                    norm.replace(" ", "") == ns.replace(" ", "")
+                }
+                if (matched != null) {
+                    extractedState = matched
+                    if (i > 0) extractedCity = filtered[i - 1]
+                    break
+                }
+            }
+            if (extractedState.isNotEmpty()) {
+                city = extractedCity
+                state = extractedState
+            } else {
+                city = filtered[filtered.size - 2]
+            }
+        } else if (filtered.size == 1) {
+            city = filtered[0]
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -253,6 +300,67 @@ fun AddBusinessScreen(
                 }
             }
 
+            // Branch / Location Name (required — with Ola Maps autocomplete)
+            ExposedDropdownMenuBox(
+                expanded = suggestions.isNotEmpty(),
+                onExpandedChange = { if (!it) suggestions = emptyList() }
+            ) {
+                OutlinedTextField(
+                    value = branchName,
+                    onValueChange = { branchName = it; locationSelected = false },
+                    label = { Text("Branch / Location Name *", color = colors.textSecondary) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = colors.primary) },
+                    trailingIcon = {
+                        if (isSearchingLocation) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = colors.primary
+                            )
+                        }
+                    },
+                    singleLine = true,
+                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
+                        focusedLabelColor = colors.primary, cursorColor = colors.primary
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    supportingText = if (branchName.isBlank()) {
+                        { Text("Type to search your location", color = colors.textSecondary.copy(alpha = 0.6f), fontSize = 11.sp) }
+                    } else null
+                )
+                ExposedDropdownMenu(
+                    expanded = suggestions.isNotEmpty(),
+                    onDismissRequest = { suggestions = emptyList() }
+                ) {
+                    suggestions.forEach { suggestion ->
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(
+                                        text = suggestion.structuredFormatting?.mainText
+                                            ?: suggestion.description.split(",").first().trim(),
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = suggestion.structuredFormatting?.secondaryText
+                                            ?: suggestion.description.split(",").drop(1).joinToString(", ").trim(),
+                                        fontSize = 12.sp,
+                                        color = colors.textSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            },
+                            onClick = { onSuggestionSelected(suggestion) }
+                        )
+                    }
+                }
+            }
+
             // State Dropdown
             ExposedDropdownMenuBox(
                 expanded = showStateDropdown,
@@ -296,27 +404,14 @@ fun AddBusinessScreen(
                 shape = RoundedCornerShape(12.dp)
             )
 
-            // Branch Name (conditional)
-            OutlinedTextField(
-                value = branchName,
-                onValueChange = { branchName = it },
-                label = { Text("Branch / Location Name (optional)", color = colors.textSecondary) },
-                leadingIcon = { Icon(Icons.Default.Business, contentDescription = null, tint = colors.primary) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
-                    focusedLabelColor = colors.primary, cursorColor = colors.primary
-                ),
-                shape = RoundedCornerShape(12.dp)
-            )
-
             Spacer(modifier = Modifier.height(8.dp))
 
             // Save Button
+            val formValid = name.isNotBlank() && ownerName.isNotBlank()
+                    && category.isNotBlank() && branchName.isNotBlank()
             Button(
                 onClick = {
-                    if (name.isNotBlank() && ownerName.isNotBlank() && category.isNotBlank()) {
+                    if (formValid) {
                         onSave(
                             BusinessProfile(
                                 id = initial?.id ?: java.util.UUID.randomUUID().toString(),
@@ -327,7 +422,7 @@ fun AddBusinessScreen(
                         )
                     }
                 },
-                enabled = name.isNotBlank() && ownerName.isNotBlank() && category.isNotBlank(),
+                enabled = formValid,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
