@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.StoreMallDirectory
@@ -64,6 +65,7 @@ fun OwnerHomeScreen(
     onViewDoc: (DocumentItem) -> Unit,
     onDeleteDoc: (DocumentItem) -> Unit,
     onLogout: () -> Unit,
+    onBusinessSelected: (String) -> Unit = {},
     isDarkTheme: Boolean = true,
     onToggleTheme: () -> Unit = {}
 ) {
@@ -158,11 +160,14 @@ fun OwnerHomeScreen(
                     }
                 }
 
-                items(businesses) { business ->                        BusinessCard(
+                        items(businesses) { business ->                        BusinessCard(
                             business = business,
                             documents = documents.filter { it.businessId == business.id },
                             managers = managers,
-                            onSelect = { selectedBusinessId = business.id },
+                            onSelect = {
+                                selectedBusinessId = business.id
+                                onBusinessSelected(business.id)
+                            },
                             onEdit = { onEditBusiness(business) }
                         )
                 }
@@ -283,6 +288,90 @@ private fun BusinessCard(
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
+            // Top row: icon + name + edit
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.primary.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary, modifier = Modifier.size(26.dp))
+                }
+                Spacer(modifier = Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(business.name, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, maxLines = 1)
+                    Spacer(modifier = Modifier.height(1.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(business.category, fontSize = 11.sp, color = colors.textSecondary, maxLines = 1)
+                        Text("  •  ", fontSize = 11.sp, color = colors.textSecondary.copy(alpha = 0.3f))
+                        Text(business.scale, fontSize = 11.sp, color = colors.textSecondary)
+                    }
+                    Spacer(modifier = Modifier.height(1.dp))
+                    Text(business.ownerName, fontSize = 12.sp, color = colors.textPrimary.copy(alpha = 0.8f), fontWeight = FontWeight.Medium)
+                }
+                IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
+                }
+            }
+
+            // Location: City, State
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.padding(start = 62.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.LocationOn, contentDescription = null, tint = colors.textSecondary.copy(alpha = 0.6f), modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    buildString {
+                        if (business.city.isNotBlank()) append(business.city)
+                        if (business.city.isNotBlank() && business.state.isNotBlank()) append(", ")
+                        if (business.state.isNotBlank()) append(business.state)
+                    },
+                    fontSize = 11.sp, color = colors.textSecondary, maxLines = 1
+                )
+            }
+
+            // Branch info
+            if (business.branchName.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.padding(start = 62.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Business, contentDescription = null, tint = colors.textSecondary.copy(alpha = 0.6f), modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(business.branchName, fontSize = 11.sp, color = colors.textSecondary, maxLines = 1)
+                }
+            }
+
+            // Assigned managers
+            val bizManagers = managers.filter { business.id in it.assignedBusinessIds }
+            if (bizManagers.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.padding(start = 62.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.People, contentDescription = null, tint = colors.secondary.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        bizManagers.map { it.managerName }.joinToString(", "),
+                        fontSize = 11.sp, color = colors.secondary, maxLines = 1
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider(color = colors.border.copy(alpha = 0.5f), thickness = 0.5.dp)
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Document Progress
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -291,78 +380,51 @@ private fun BusinessCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(colors.primary.copy(alpha = 0.15f)),
+                            .size(26.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                if (progress == 1f) colors.success.copy(alpha = 0.15f)
+                                else colors.primary.copy(alpha = 0.1f)
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary, modifier = Modifier.size(22.dp))
+                        Icon(
+                            Icons.Default.Description,
+                            contentDescription = null,
+                            tint = if (progress == 1f) colors.success else colors.primary,
+                            modifier = Modifier.size(14.dp)
+                        )
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Column {
-                        Text(business.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(business.category, fontSize = 12.sp, color = colors.textSecondary)
-                            Text(" • ", fontSize = 12.sp, color = colors.textSecondary)
-                            Text(business.scale, fontSize = 12.sp, color = colors.textSecondary)
-                        }
+                        Text(
+                            if (progress == 1f) "All documents secured" else "Documents ($total required)",
+                            fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary
+                        )
+                        Text(
+                            if (total > 0) "$secured of $total completed"
+                            else "Loading...",
+                            fontSize = 11.sp, color = colors.textSecondary
+                        )
                     }
                 }
-                IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
-                }
-            }
-
-            if (business.branchName.isNotBlank()) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 52.dp, top = 4.dp)) {
-                    Icon(Icons.Default.Business, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(12.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Branch: ${business.branchName}", fontSize = 11.sp, color = colors.textSecondary)
-                }
-            }
-
-            // Show assigned managers
-            val bizManagers = managers.filter { business.id in it.assignedBusinessIds }
-            if (bizManagers.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier.padding(start = 52.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.People, contentDescription = null, tint = colors.secondary, modifier = Modifier.size(12.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
+                Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        "Managers: ${bizManagers.map { it.managerName }.joinToString(", ")}",
-                        fontSize = 11.sp,
-                        color = colors.secondary.copy(alpha = 0.8f)
+                        "${(progress * 100).toInt()}%",
+                        fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                        color = if (progress == 1f) colors.success else colors.primary
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(modifier = Modifier.width(64.dp).height(5.dp).clip(RoundedCornerShape(3.dp)).background(colors.border)) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(fraction = progress)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(if (progress == 1f) colors.success else colors.primary)
+                        )
+                    }
                 }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Document Progress
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 52.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Description, contentDescription = null, tint = if (progress == 1f) colors.success else colors.primary, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("$secured/$total docs", fontSize = 12.sp, color = colors.textSecondary)
-                }
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier
-                        .width(80.dp)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp)),
-                    color = if (progress == 1f) colors.success else colors.primary,
-                    trackColor = colors.border
-                )
             }
         }
     }

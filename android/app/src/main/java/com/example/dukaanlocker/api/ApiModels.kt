@@ -145,3 +145,25 @@ data class LocationSuggestion(
     @SerializedName("latitude") val latitude: Double,
     @SerializedName("longitude") val longitude: Double
 )
+
+// ── Error Response (matches backend FssaiErrorResponse) ──────────────────────
+
+data class ErrorResponse(
+    @SerializedName("status") val status: Int = 0,
+    @SerializedName("code") val code: String? = null,
+    @SerializedName("message") val message: String? = null,
+    @SerializedName("details") val details: List<String>? = null,
+    @SerializedName("timestamp") val timestamp: String? = null
+)
+
+fun <T> retrofit2.Response<T>.parseErrorMessage(): String {
+    val body = errorBody()?.string()
+    if (body != null) {
+        try {
+            val gson = com.google.gson.Gson()
+            val err = gson.fromJson(body, ErrorResponse::class.java)
+            if (!err.message.isNullOrBlank()) return err.message
+        } catch (_: Exception) {}
+    }
+    return message()
+}

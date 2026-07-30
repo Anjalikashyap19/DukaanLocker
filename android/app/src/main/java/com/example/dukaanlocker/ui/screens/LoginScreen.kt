@@ -76,9 +76,9 @@ private fun isValidEmail(email: String): Boolean {
 // ── Main Login Screen ──────────────────────────────────────────────────────────
 @Composable
 fun LoginScreen(
-    onOwnerLogin: (email: String, password: String) -> Unit,
+    onOwnerLogin: (email: String, password: String, onDone: () -> Unit) -> Unit,
     onManagerLogin: (code: String) -> Unit,
-    onRegister: (name: String, email: String, password: String, mobile: String) -> Unit = { _, _, _, _ -> },
+    onRegister: (name: String, email: String, password: String, mobile: String, onDone: () -> Unit) -> Unit,
     isDarkTheme: Boolean = true,
     onToggleTheme: () -> Unit = {}
 ) {
@@ -131,7 +131,9 @@ fun LoginScreen(
         regPasswordError = !isStrongPassword(regPassword)
         if (!regNameError && !regEmailError && !regMobileError && !regPasswordError) {
             regIsChecking = true
-            onRegister(regName.trim(), regEmail.trim(), regPassword, regMobile)
+            onRegister(regName.trim(), regEmail.trim(), regPassword, regMobile) {
+                regIsChecking = false
+            }
         }
     }
 
@@ -141,7 +143,9 @@ fun LoginScreen(
         loginPasswordError = loginPassword.isBlank()
         if (!loginEmailError && !loginPasswordError) {
             loginIsChecking = true
-            onOwnerLogin(loginEmail.trim(), loginPassword)
+            onOwnerLogin(loginEmail.trim(), loginPassword) {
+                loginIsChecking = false
+            }
         }
     }
 

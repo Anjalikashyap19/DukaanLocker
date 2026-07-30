@@ -27,20 +27,20 @@ jobs:
         with:
           path: |
             ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pom.xml') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('server/pom.xml') }}
           restore-keys: |
             playwright-${{ runner.os }}-
 
       - name: Ensure mvnw is executable
-        run: chmod +x mvnw
+        run: chmod +x server/mvnw
 
       - name: Build & verify (compile, test, package)
-        run: ./mvnw -B verify
+        run: ./server/mvnw -B verify
 
       - name: Upload built JAR
         uses: actions/upload-artifact@v4
         with:
           name: app
-          path: target/*.jar
+          path: server/target/*.jar
           if-no-files-found: error
           retention-days: 7

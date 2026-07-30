@@ -57,7 +57,20 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}) {
     var docForView by remember { mutableStateOf<DocumentResponse?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
-    // ── Helper: Load shops from API ──
+    // ── Helper: Load documents for a shop (accumulates into shopDocuments) ──
+    suspend fun loadDocuments(shopId: Long) {
+        try {
+            val response = api.getShopDocuments(shopId)
+            if (response.isSuccessful) {
+                val docs = response.body() ?: emptyList()
+                shopDocuments = shopDocuments.filter { it.shopId != shopId } + docs
+            }
+        } catch (e: Exception) {
+            // Handle offline or error gracefully
+        }
+    }
+
+    // ── Helper: Load shops + their documents from API ──
     suspend fun loadShops() {
         try {
             val response = if (currentUserRole == "MANAGER") {
@@ -67,18 +80,10 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}) {
             }
             if (response.isSuccessful) {
                 shops = response.body() ?: emptyList()
-            }
-        } catch (e: Exception) {
-            // Handle offline or error gracefully
-        }
-    }
-
-    // ── Helper: Load documents for a shop ──
-    suspend fun loadDocuments(shopId: Long) {
-        try {
-            val response = api.getShopDocuments(shopId)
-            if (response.isSuccessful) {
-                shopDocuments = response.body() ?: emptyList()
+                // Load documents for all shops so each card shows correct doc count
+                for (shop in shops) {
+                    loadDocuments(shop.id)
+                }
             }
         } catch (e: Exception) {
             // Handle offline or error gracefully
@@ -101,8 +106,13 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}) {
     LaunchedEffect(isLoggedIn) {
         if (!isLoggedIn) {
             currentScreen = "login"
-        } else {
+        } else if (currentScreen.isBlank()) {
             currentScreen = "owner_home"
+            loadShops()
+            if (currentUserRole == "ADMIN") {
+                loadManagers()
+            }
+        } else {
             loadShops()
             if (currentUserRole == "ADMIN") {
                 loadManagers()
@@ -154,7 +164,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}) {
                             LoginScreen(
                                 isDarkTheme = isDarkTheme,
                                 onToggleTheme = onToggleTheme,
-                                onOwnerLogin = { email, password ->
+                                onOwnerLogin = { email, password, onDone ->
                                     scope.launch {
                                         isLoading = true
                                         try {
@@ -173,15 +183,16 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}) {
                                                 if (auth.role == "ADMIN") loadManagers()
                                                 Toast.makeText(context, "Welcome, ${auth.userName}!", Toast.LENGTH_SHORT).show()
                                             } else {
-                                                Toast.makeText(context, "Login failed: ${response.message()}", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, "Login failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
                                             }
                                         } catch (e: Exception) {
                                             Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
                                         }
                                         isLoading = false
+                                        onDone()
                                     }
                                 },
-                                onRegister = { name, email, password, mobile ->
+                                onRegister = { name, email, password, mobile, onDone ->
                                     scope.launch {
                                         isLoading = true
                                         try {
@@ -203,12 +214,13 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}) {
                                                 currentScreen = "wizard"
                                                 Toast.makeText(context, "Account created! Welcome, ${auth.userName}!", Toast.LENGTH_SHORT).show()
                                             } else {
-                                                Toast.makeText(context, "Registration failed: ${response.message()}", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, "Registration failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
                                             }
                                         } catch (e: Exception) {
                                             Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
                                         }
                                         isLoading = false
+                                        onDone()
                                     }
                                 },
                                 onManagerLogin = { code ->
@@ -334,6 +346,11 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}) {
                                         branchName = shop.branchName ?: ""
                                     )
                                 },
+                                onBusinessSelected = { bizId ->
+                                    scope.launch {
+                                        loadDocuments(bizId.toLongOrNull() ?: return@launch)
+                                    }
+                                },
                                 documents = shopDocuments.map { doc ->
                                     DocumentItem(
                                         id = doc.id.toString(),
@@ -452,7 +469,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}) {
                                                 loadManagers()
                                                 Toast.makeText(context, "Manager '$name' created! ID: ${newMgr.id}", Toast.LENGTH_LONG).show()
                                             } else {
-                                                Toast.makeText(context, "Failed: ${response.message()}", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, "Failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
                                             }
                                         } catch (e: Exception) {
                                             Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
