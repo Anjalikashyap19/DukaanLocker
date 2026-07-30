@@ -2,6 +2,8 @@ package com.shoplocker.fssai.service;
 
 import com.shoplocker.fssai.entity.BusinessScale;
 import com.shoplocker.fssai.entity.DocumentType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
@@ -16,6 +18,8 @@ import java.util.Set;
  */
 @Service
 public class RequiredDocumentService {
+
+    private static final Logger log = LoggerFactory.getLogger(RequiredDocumentService.class);
 
     private static final Map<String, Set<DocumentType>> CATEGORY_DOCUMENTS = new HashMap<>();
     private static final Set<DocumentType> DEFAULT_DOCUMENTS = new HashSet<>();
@@ -67,7 +71,7 @@ public class RequiredDocumentService {
                 DocumentType.MSME,
                 DocumentType.SHOP_INSURANCE);
 
-        // GROCERY
+        // GROCERY — Food retail, wholesale, fruits & vegetables need FSSAI license
         Set<DocumentType> grocery = new HashSet<>();
         Collections.addAll(grocery,
                 DocumentType.PAN,
@@ -78,7 +82,7 @@ public class RequiredDocumentService {
                 DocumentType.SHOP_INSURANCE);
         CATEGORY_DOCUMENTS.put("GROCERY", grocery);
 
-        // RESTAURANT
+        // RESTAURANT — Hotels & eateries need FSSAI + fire safety
         Set<DocumentType> restaurant = new HashSet<>();
         Collections.addAll(restaurant,
                 DocumentType.PAN,
@@ -86,10 +90,11 @@ public class RequiredDocumentService {
                 DocumentType.FSSAI_FOOD_LICENSE,
                 DocumentType.TRADE_LICENSE,
                 DocumentType.MSME,
+                DocumentType.FIRE_SAFETY,
                 DocumentType.SHOP_INSURANCE);
         CATEGORY_DOCUMENTS.put("RESTAURANT", restaurant);
 
-        // IMPORT_EXPORT
+        // IMPORT_EXPORT — Logistics & agriculture need IEC instead of shop insurance
         Set<DocumentType> importExport = new HashSet<>();
         Collections.addAll(importExport,
                 DocumentType.PAN,
@@ -99,7 +104,7 @@ public class RequiredDocumentService {
                 DocumentType.TRADE_LICENSE);
         CATEGORY_DOCUMENTS.put("IMPORT_EXPORT", importExport);
 
-        // MANUFACTURING
+        // MANUFACTURING — Factories & workshops need pollution, fire, IEC
         Set<DocumentType> manufacturing = new HashSet<>();
         Collections.addAll(manufacturing,
                 DocumentType.PAN,
@@ -112,7 +117,7 @@ public class RequiredDocumentService {
                 DocumentType.SHOP_INSURANCE);
         CATEGORY_DOCUMENTS.put("MANUFACTURING", manufacturing);
 
-        // MEDICAL / PHARMACY
+        // MEDICAL / PHARMACY — Healthcare & pharmacy need drug license
         Set<DocumentType> medical = new HashSet<>();
         Collections.addAll(medical,
                 DocumentType.PAN,
@@ -124,7 +129,7 @@ public class RequiredDocumentService {
         CATEGORY_DOCUMENTS.put("MEDICAL", medical);
         CATEGORY_DOCUMENTS.put("PHARMACY", medical);
 
-        // CLOTHING / FASHION
+        // CLOTHING — Garments & textiles, base set
         Set<DocumentType> clothing = new HashSet<>();
         Collections.addAll(clothing,
                 DocumentType.PAN,
@@ -133,40 +138,52 @@ public class RequiredDocumentService {
                 DocumentType.MSME,
                 DocumentType.SHOP_INSURANCE);
         CATEGORY_DOCUMENTS.put("CLOTHING", clothing);
-        CATEGORY_DOCUMENTS.put("FASHION", clothing);
 
-        // ELECTRONICS
+        // FASHION — Jewellery & cosmetics need trademark for brand protection
+        Set<DocumentType> fashion = new HashSet<>();
+        Collections.addAll(fashion,
+                DocumentType.PAN,
+                DocumentType.GST,
+                DocumentType.TRADE_LICENSE,
+                DocumentType.MSME,
+                DocumentType.TRADEMARK,
+                DocumentType.SHOP_INSURANCE);
+        CATEGORY_DOCUMENTS.put("FASHION", fashion);
+
+        // ELECTRONICS — Electrical & telecom need trademark for brand compliance
         Set<DocumentType> electronics = new HashSet<>();
         Collections.addAll(electronics,
                 DocumentType.PAN,
                 DocumentType.GST,
                 DocumentType.TRADE_LICENSE,
                 DocumentType.MSME,
+                DocumentType.TRADEMARK,
                 DocumentType.SHOP_INSURANCE);
         CATEGORY_DOCUMENTS.put("ELECTRONICS", electronics);
 
-        // HARDWARE
+        // HARDWARE — Construction & industrial goods need pollution control
         Set<DocumentType> hardware = new HashSet<>();
         Collections.addAll(hardware,
                 DocumentType.PAN,
                 DocumentType.GST,
                 DocumentType.TRADE_LICENSE,
                 DocumentType.MSME,
+                DocumentType.POLLUTION_CONTROL,
                 DocumentType.SHOP_INSURANCE);
         CATEGORY_DOCUMENTS.put("HARDWARE", hardware);
 
-        // SALON / BEAUTY
-        Set<DocumentType> salon = new HashSet<>();
-        Collections.addAll(salon,
+        // BEAUTY — Salons & personal care need professional tax
+        Set<DocumentType> beauty = new HashSet<>();
+        Collections.addAll(beauty,
                 DocumentType.PAN,
                 DocumentType.GST,
                 DocumentType.TRADE_LICENSE,
                 DocumentType.MSME,
+                DocumentType.PROFESSIONAL_TAX,
                 DocumentType.SHOP_INSURANCE);
-        CATEGORY_DOCUMENTS.put("SALON", salon);
-        CATEGORY_DOCUMENTS.put("BEAUTY", salon);
+        CATEGORY_DOCUMENTS.put("BEAUTY", beauty);
 
-        // GENERAL STORE (default)
+        // GENERAL STORE (default) — Retail, IT, education, banking etc.
         Set<DocumentType> general = new HashSet<>();
         Collections.addAll(general,
                 DocumentType.PAN,
@@ -190,14 +207,19 @@ public class RequiredDocumentService {
         // Resolve frontend display name to internal key if an alias exists
         String alias = CATEGORY_ALIASES.get(key);
         if (alias != null) {
+            log.info("Category alias resolved: '{}' -> '{}' ({} docs)", key, alias, CATEGORY_DOCUMENTS.getOrDefault(alias, DEFAULT_DOCUMENTS).size());
             key = alias;
+        } else {
+            log.warn("No alias found for category '{}' — falling back to raw key lookup", key);
         }
         Set<DocumentType> docs = CATEGORY_DOCUMENTS.get(key);
         if (docs != null) {
+            log.info("Found document set for key '{}': {} docs", key, docs.size());
             return new HashSet<>(docs);
         }
 
         // For unknown categories, return the default set
+        log.warn("Unknown category key '{}' — returning default {} docs", key, DEFAULT_DOCUMENTS.size());
         return new HashSet<>(DEFAULT_DOCUMENTS);
     }
 }
