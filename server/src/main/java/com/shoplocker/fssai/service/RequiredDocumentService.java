@@ -63,13 +63,12 @@ public class RequiredDocumentService {
     }
 
     static {
-        // Default set used when a category has no specific map entry
+        // Default set — used when a category has no alias AND no direct key match
+        // Intentionally smaller than GENERAL_STORE so we can tell if aliasing is working
         Collections.addAll(DEFAULT_DOCUMENTS,
                 DocumentType.PAN,
                 DocumentType.GST,
-                DocumentType.TRADE_LICENSE,
-                DocumentType.MSME,
-                DocumentType.SHOP_INSURANCE);
+                DocumentType.TRADE_LICENSE);
 
         // GROCERY — Food retail, wholesale, fruits & vegetables need FSSAI license
         Set<DocumentType> grocery = new HashSet<>();
@@ -129,14 +128,13 @@ public class RequiredDocumentService {
         CATEGORY_DOCUMENTS.put("MEDICAL", medical);
         CATEGORY_DOCUMENTS.put("PHARMACY", medical);
 
-        // CLOTHING — Garments & textiles, base set
+        // CLOTHING — Garments & textiles (no shop insurance typically needed)
         Set<DocumentType> clothing = new HashSet<>();
         Collections.addAll(clothing,
                 DocumentType.PAN,
                 DocumentType.GST,
                 DocumentType.TRADE_LICENSE,
-                DocumentType.MSME,
-                DocumentType.SHOP_INSURANCE);
+                DocumentType.MSME);
         CATEGORY_DOCUMENTS.put("CLOTHING", clothing);
 
         // FASHION — Jewellery & cosmetics need trademark for brand protection
