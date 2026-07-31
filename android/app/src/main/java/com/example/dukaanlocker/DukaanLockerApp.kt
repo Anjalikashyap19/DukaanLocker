@@ -30,7 +30,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 @Composable
-fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}) {
+fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (String) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val api = remember { ApiClient.getApiService(context) }
@@ -52,7 +52,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}) {
     var managers by remember { mutableStateOf<List<ManagerResponse>>(emptyList()) }
 
     // ── Navigation state ──
-    var currentScreen by remember { mutableStateOf("") }
+    var currentScreen by remember { mutableStateOf("splash") }
     var editShopTarget by remember { mutableStateOf<ShopResponse?>(null) }
     var selectedBottomTab by remember { mutableStateOf("home") }
 
@@ -154,15 +154,8 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}) {
 
     // ── Determine initial screen ──
     LaunchedEffect(isLoggedIn) {
-        if (!isLoggedIn) {
-            currentScreen = "login"
-        } else if (currentScreen.isBlank()) {
+        if (isLoggedIn) {
             currentScreen = "owner_home"
-            loadShops()
-            if (currentUserRole == "ADMIN") {
-                loadManagers()
-            }
-        } else {
             loadShops()
             if (currentUserRole == "ADMIN") {
                 loadManagers()
@@ -177,7 +170,11 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}) {
     }
 
     // Status bar background color
-    val statusBarBg = if (isDarkTheme) DarkBg else Color(0xFFF8FAFC)
+    val statusBarBg = when {
+        currentScreen == "onboarding" -> Color(0xFF2563EB)
+        isDarkTheme -> DarkBg
+        else -> Color(0xFFF8FAFC)
+    }
 
     // Update system status bar and nav bar icon colors to match app theme
     val activity = context as? Activity
@@ -210,10 +207,31 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}) {
                         .fillMaxWidth()
                 ) {
                     when (currentScreen) {
+                        "splash" -> {
+                            SplashScreen(
+                                isDarkTheme = isDarkTheme,
+                                onSplashDone = { currentScreen = "onboarding" }
+                            )
+                        }
+
+                        "onboarding" -> {
+                            MainScreen(
+                                isDarkTheme = isDarkTheme,
+                                onToggleTheme = onToggleTheme,
+                                onGetStarted = {
+                                    currentScreen = "login"
+                                },
+                                onLanguageChanged = onLanguageChanged
+                            )
+                        }
+
                         "login" -> {
                             LoginScreen(
                                 isDarkTheme = isDarkTheme,
                                 onToggleTheme = onToggleTheme,
+                                onBackToMain = {
+                                    currentScreen = "onboarding"
+                                },
                                 onOwnerLogin = { email, password, onDone ->
                                     scope.launch {
                                         isLoading = true

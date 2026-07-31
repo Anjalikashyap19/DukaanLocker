@@ -232,6 +232,13 @@ object LockerStorage {
     fun getTheme(ctx: Context): Boolean =
         pref(ctx).getBoolean(K_THEME, true) // default to dark
 
+    // ── Language ────────────────────────────────────────────────────────────
+    fun saveLanguage(ctx: Context, code: String) =
+        pref(ctx).edit().putString("language", code).apply()
+
+    fun getLanguage(ctx: Context): String =
+        pref(ctx).getString("language", "en") ?: "en"
+
     private fun pref(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }
 

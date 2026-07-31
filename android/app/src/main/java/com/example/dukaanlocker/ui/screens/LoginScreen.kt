@@ -26,8 +26,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -37,10 +35,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.Image
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.sp
-import com.example.dukaanlocker.R
+import com.example.dukaanlocker.ui.components.LauncherLogo
 import com.example.dukaanlocker.ui.theme.*
 
 // ── Password Strength ──────────────────────────────────────────────────────────
@@ -79,6 +75,7 @@ fun LoginScreen(
     onOwnerLogin: (email: String, password: String, onDone: () -> Unit) -> Unit,
     onManagerLogin: (code: String) -> Unit,
     onRegister: (name: String, email: String, password: String, mobile: String, onDone: () -> Unit) -> Unit,
+    onBackToMain: () -> Unit,
     isDarkTheme: Boolean = true,
     onToggleTheme: () -> Unit = {}
 ) {
@@ -156,26 +153,37 @@ fun LoginScreen(
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // ── Top section: Logo + Title ────────────────────────────────────────
-        Spacer(modifier = Modifier.height(24.dp))
+        // ── Top section: Back + Logo + Title ─────────────────────────────────
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // App Logo (custom launcher icon vector)
-        Box(
-            modifier = Modifier
-                .size(80.dp)
-                .clip(CircleShape)
-                .background(
-                    Brush.radialGradient(colors = listOf(colors.primary.copy(alpha = 0.15f), colors.background))
-                ),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                contentDescription = "DukaanLocker Logo",
-                modifier = Modifier.size(56.dp),
-                contentScale = ContentScale.Fit
-            )
+            TextButton(
+                onClick = onBackToMain,
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+            ) {
+                Icon(
+                    Icons.Default.ArrowBack,
+                    contentDescription = "Back to home",
+                    modifier = Modifier.size(20.dp),
+                    tint = colors.textSecondary
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    "Home",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.textSecondary
+                )
+            }
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // App Logo (launcher icon)
+        LauncherLogo(modifier = Modifier.size(104.dp))
 
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -184,7 +192,6 @@ fun LoginScreen(
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             color = colors.primary,
-            fontFamily = FontFamily.Monospace,
             letterSpacing = 3.sp
         )
 
