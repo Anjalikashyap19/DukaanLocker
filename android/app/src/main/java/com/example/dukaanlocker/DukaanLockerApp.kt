@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.example.dukaanlocker.api.*
 import com.example.dukaanlocker.ui.screens.*
+import com.example.dukaanlocker.ui.strings.LocalAppLanguage
 import com.example.dukaanlocker.ui.theme.*
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -58,6 +59,9 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
 
     // ── Theme state ──
     var isDarkTheme by remember { mutableStateOf(LockerStorage.getTheme(context)) }
+
+    // ── Language state ──
+    var language by remember { mutableStateOf(LockerStorage.getLanguage(context)) }
 
     // ── Dialog states ──
     var docForView by remember { mutableStateOf<DocumentResponse?>(null) }
@@ -186,26 +190,27 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
         }
     }
 
-    DukaanLockerTheme(darkTheme = isDarkTheme) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = statusBarBg
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Status bar background
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .background(statusBarBg)
-                )
+    CompositionLocalProvider(LocalAppLanguage provides language) {
+        DukaanLockerTheme(darkTheme = isDarkTheme) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = statusBarBg
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Status bar background
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .statusBarsPadding()
+                            .background(statusBarBg)
+                    )
 
-                // Main content area
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                ) {
+                    // Main content area
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
                     when (currentScreen) {
                         "splash" -> {
                             SplashScreen(
@@ -221,7 +226,11 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                 onGetStarted = {
                                     currentScreen = "login"
                                 },
-                                onLanguageChanged = onLanguageChanged
+                                onLanguageChanged = { code ->
+                                    language = code
+                                    LockerStorage.saveLanguage(context, code)
+                                    onLanguageChanged(code)
+                                }
                             )
                         }
 
@@ -671,6 +680,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                         isDarkTheme = isDarkTheme
                     )
                 }
+            }
             }
         }
     }

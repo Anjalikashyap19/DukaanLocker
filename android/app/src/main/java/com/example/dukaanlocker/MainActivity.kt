@@ -15,7 +15,6 @@ class MainActivity : ComponentActivity() {
             DukaanLockerApp(
                 onLanguageChanged = { code ->
                     LockerStorage.saveLanguage(this, code)
-                    recreate()
                 }
             )
         }

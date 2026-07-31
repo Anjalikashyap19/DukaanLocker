@@ -37,6 +37,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.dukaanlocker.ui.components.LauncherLogo
+import com.example.dukaanlocker.ui.strings.AppStrings
+import com.example.dukaanlocker.ui.strings.LocalAppLanguage
 import com.example.dukaanlocker.ui.theme.*
 
 // ── Password Strength ──────────────────────────────────────────────────────────
@@ -80,6 +82,7 @@ fun LoginScreen(
     onToggleTheme: () -> Unit = {}
 ) {
     val colors = LocalAppColors.current
+    val lang = LocalAppLanguage.current
     // null = role selection, "register" = register form, true = owner login, false = manager login
     var selectedView by remember { mutableStateOf<Any?>(null) }
 
@@ -172,7 +175,7 @@ fun LoginScreen(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    "Home",
+                    AppStrings.get(lang, "Home"),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     color = colors.textSecondary
@@ -196,7 +199,7 @@ fun LoginScreen(
         )
 
         Text(
-            text = "Secure Business Document Vault",
+            text = AppStrings.get(lang, "Secure Business Document Vault"),
             fontSize = 12.sp,
             color = colors.textSecondary,
             modifier = Modifier.padding(top = 2.dp)
@@ -216,7 +219,7 @@ fun LoginScreen(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    if (isDarkTheme) "Light" else "Dark",
+                    AppStrings.get(lang, if (isDarkTheme) "Light" else "Dark"),
                     fontSize = 11.sp,
                     color = colors.textSecondary
                 )
@@ -236,6 +239,7 @@ fun LoginScreen(
                 // ── ROLE SELECTION ──────────────────────────────────────────
                 null -> RoleSelectionContent(
                     colors = colors,
+                    lang = lang,
                     onSelectRegister = { selectedView = "register" },
                     onSelectOwnerLogin = { selectedView = true },
                     onSelectManagerLogin = { selectedView = false }
@@ -244,6 +248,7 @@ fun LoginScreen(
                 // ── OWNER LOGIN (Email + Password only) ────────────────────
                 true -> OwnerLoginForm(
                     colors = colors,
+                    lang = lang,
                     email = loginEmail,
                     onEmailChange = { loginEmail = it; loginEmailError = false },
                     emailError = loginEmailError,
@@ -260,6 +265,7 @@ fun LoginScreen(
                 // ── REGISTER FORM ──────────────────────────────────────────
                 "register" -> RegisterForm(
                     colors = colors,
+                    lang = lang,
                     name = regName, onNameChange = { regName = it; regNameError = false },
                     nameError = regNameError,
                     email = regEmail, onEmailChange = { regEmail = it; regEmailError = false },
@@ -278,6 +284,7 @@ fun LoginScreen(
                 // ── MANAGER LOGIN (uses email + password via owner login) ──────────
                 false -> OwnerLoginForm(
                     colors = colors,
+                    lang = lang,
                     email = loginEmail,
                     onEmailChange = { loginEmail = it; loginEmailError = false },
                     emailError = loginEmailError,
@@ -295,7 +302,7 @@ fun LoginScreen(
 
         // ── Footer (with navigation bar padding to avoid overlap) ────────────
         Text(
-            text = "Secure Business Locker for Your Business",
+            text = AppStrings.get(lang, "Secure Business Locker for Your Business"),
             fontSize = 10.sp,
             color = colors.textSecondary.copy(alpha = 0.5f),
             textAlign = TextAlign.Center,
@@ -313,6 +320,7 @@ fun LoginScreen(
 @Composable
 private fun RoleSelectionContent(
     colors: AppColors,
+    lang: String,
     onSelectRegister: () -> Unit,
     onSelectOwnerLogin: () -> Unit,
     onSelectManagerLogin: () -> Unit
@@ -324,7 +332,7 @@ private fun RoleSelectionContent(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "GET STARTED",
+            text = AppStrings.get(lang, "GET STARTED"),
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             color = colors.textSecondary,
@@ -363,9 +371,9 @@ private fun RoleSelectionContent(
                 }
                 Spacer(modifier = Modifier.width(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Register Now", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                    Text(AppStrings.get(lang, "Register Now"), fontSize = 17.sp, fontWeight = FontWeight.Bold, color = colors.primary)
                     Text(
-                        "First time? Create your secure vault",
+                        AppStrings.get(lang, "First time? Create your secure vault"),
                         fontSize = 11.sp,
                         color = colors.accent.copy(alpha = 0.8f),
                         modifier = Modifier.padding(top = 2.dp)
@@ -384,7 +392,7 @@ private fun RoleSelectionContent(
         ) {
             HorizontalDivider(modifier = Modifier.weight(1f), color = colors.border.copy(alpha = 0.5f))
             Text(
-                "  Returning User?  ",
+                "  ${AppStrings.get(lang, "Returning User?")}  ",
                 fontSize = 10.sp,
                 color = colors.textSecondary.copy(alpha = 0.6f),
                 letterSpacing = 1.sp
@@ -397,8 +405,8 @@ private fun RoleSelectionContent(
         // Owner Login Card
         RoleCard(
             icon = Icons.Default.Person,
-            title = "Business Owner",
-            subtitle = "Sign in with email & password",
+            title = AppStrings.get(lang, "Business Owner"),
+            subtitle = AppStrings.get(lang, "Sign in with email & password"),
             onClick = onSelectOwnerLogin
         )
 
@@ -407,8 +415,8 @@ private fun RoleSelectionContent(
         // Manager Login Card
         RoleCard(
             icon = Icons.Default.Lock,
-            title = "Manager",
-            subtitle = "Access assigned businesses with code",
+            title = AppStrings.get(lang, "Manager"),
+            subtitle = AppStrings.get(lang, "Access assigned businesses with code"),
             onClick = onSelectManagerLogin
         )
     }
@@ -420,6 +428,7 @@ private fun RoleSelectionContent(
 @Composable
 private fun OwnerLoginForm(
     colors: AppColors,
+    lang: String,
     email: String, onEmailChange: (String) -> Unit, emailError: Boolean,
     password: String, onPasswordChange: (String) -> Unit,
     passwordVisible: Boolean, onTogglePasswordVisible: () -> Unit,
@@ -450,8 +459,8 @@ private fun OwnerLoginForm(
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
-                    Text("Owner Sign In", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                    Text("Access your business dashboard", fontSize = 12.sp, color = colors.textSecondary)
+                    Text(AppStrings.get(lang, "Owner Sign In"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                    Text(AppStrings.get(lang, "Access your business dashboard"), fontSize = 12.sp, color = colors.textSecondary)
                 }
             }
 
@@ -459,11 +468,11 @@ private fun OwnerLoginForm(
             OutlinedTextField(
                 value = email,
                 onValueChange = onEmailChange,
-                label = { Text("Email Address", color = colors.textSecondary) },
+                label = { Text(AppStrings.get(lang, "Email Address"), color = colors.textSecondary) },
                 placeholder = { Text("you@example.com", color = colors.textSecondary.copy(alpha = 0.4f)) },
                 leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
                 isError = emailError,
-                supportingText = if (emailError) {{ Text("Enter a valid email address", color = Color.Red) }} else null,
+                supportingText = if (emailError) {{ Text(AppStrings.get(lang, "Enter a valid email address"), color = Color.Red) }} else null,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -478,8 +487,8 @@ private fun OwnerLoginForm(
             OutlinedTextField(
                 value = password,
                 onValueChange = onPasswordChange,
-                label = { Text("Password", color = colors.textSecondary) },
-                placeholder = { Text("Enter your password", color = colors.textSecondary.copy(alpha = 0.4f)) },
+                label = { Text(AppStrings.get(lang, "Password"), color = colors.textSecondary) },
+                placeholder = { Text(AppStrings.get(lang, "Enter your password"), color = colors.textSecondary.copy(alpha = 0.4f)) },
                 leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
                 trailingIcon = {
                     IconButton(onClick = onTogglePasswordVisible, modifier = Modifier.size(32.dp)) {
@@ -493,7 +502,7 @@ private fun OwnerLoginForm(
                 },
                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 isError = passwordError,
-                supportingText = if (passwordError) {{ Text("Password is required", color = Color.Red) }} else null,
+                supportingText = if (passwordError) {{ Text(AppStrings.get(lang, "Password is required"), color = Color.Red) }} else null,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -519,7 +528,7 @@ private fun OwnerLoginForm(
                 } else {
                     Icon(Icons.Default.Login, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("SECURE ACCESS", fontWeight = FontWeight.Bold, fontSize = 14.sp, letterSpacing = 1.sp)
+                    Text(AppStrings.get(lang, "SECURE ACCESS"), fontWeight = FontWeight.Bold, fontSize = 14.sp, letterSpacing = 1.sp)
                 }
             }
         }
@@ -532,6 +541,7 @@ private fun OwnerLoginForm(
 @Composable
 private fun RegisterForm(
     colors: AppColors,
+    lang: String,
     name: String, onNameChange: (String) -> Unit, nameError: Boolean,
     email: String, onEmailChange: (String) -> Unit, emailError: Boolean,
     password: String, onPasswordChange: (String) -> Unit,
@@ -564,8 +574,8 @@ private fun RegisterForm(
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
-                    Text("Create Account", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                    Text("Set up your business document vault", fontSize = 12.sp, color = colors.textSecondary)
+                    Text(AppStrings.get(lang, "Create Account"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                    Text(AppStrings.get(lang, "Set up your business document vault"), fontSize = 12.sp, color = colors.textSecondary)
                 }
             }
 
@@ -573,11 +583,11 @@ private fun RegisterForm(
             OutlinedTextField(
                 value = name,
                 onValueChange = onNameChange,
-                label = { Text("Full Name", color = colors.textSecondary) },
+                label = { Text(AppStrings.get(lang, "Full Name"), color = colors.textSecondary) },
                 placeholder = { Text("Ramesh Sharma", color = colors.textSecondary.copy(alpha = 0.4f)) },
                 leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
                 isError = nameError,
-                supportingText = if (nameError) {{ Text("Name is required", color = Color.Red) }} else null,
+                supportingText = if (nameError) {{ Text(AppStrings.get(lang, "Name is required"), color = Color.Red) }} else null,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -592,7 +602,7 @@ private fun RegisterForm(
             OutlinedTextField(
                 value = mobile,
                 onValueChange = onMobileChange,
-                label = { Text("Mobile Number", color = colors.textSecondary) },
+                label = { Text(AppStrings.get(lang, "Mobile Number"), color = colors.textSecondary) },
                 placeholder = { Text("9876543210", color = colors.textSecondary.copy(alpha = 0.4f)) },
                 leadingIcon = {
                     Text(
@@ -604,7 +614,7 @@ private fun RegisterForm(
                     )
                 },
                 isError = mobileError,
-                supportingText = if (mobileError) {{ Text("Enter a valid 10-digit mobile number", color = Color.Red) }} else null,
+                supportingText = if (mobileError) {{ Text(AppStrings.get(lang, "Enter a valid 10-digit mobile number"), color = Color.Red) }} else null,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -619,11 +629,11 @@ private fun RegisterForm(
             OutlinedTextField(
                 value = email,
                 onValueChange = onEmailChange,
-                label = { Text("Email Address", color = colors.textSecondary) },
+                label = { Text(AppStrings.get(lang, "Email Address"), color = colors.textSecondary) },
                 placeholder = { Text("you@example.com", color = colors.textSecondary.copy(alpha = 0.4f)) },
                 leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
                 isError = emailError,
-                supportingText = if (emailError) {{ Text("Enter a valid email address", color = Color.Red) }} else null,
+                supportingText = if (emailError) {{ Text(AppStrings.get(lang, "Enter a valid email address"), color = Color.Red) }} else null,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -638,8 +648,8 @@ private fun RegisterForm(
             OutlinedTextField(
                 value = password,
                 onValueChange = onPasswordChange,
-                label = { Text("Password", color = colors.textSecondary) },
-                placeholder = { Text("8+ chars, upper, lower, digit, special", color = colors.textSecondary.copy(alpha = 0.4f)) },
+                label = { Text(AppStrings.get(lang, "Password"), color = colors.textSecondary) },
+                placeholder = { Text(AppStrings.get(lang, "8+ chars, upper, lower, digit, special"), color = colors.textSecondary.copy(alpha = 0.4f)) },
                 leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
                 trailingIcon = {
                     IconButton(onClick = onTogglePasswordVisible, modifier = Modifier.size(32.dp)) {
@@ -655,7 +665,7 @@ private fun RegisterForm(
                 isError = passwordError,
                 supportingText = {
                     if (passwordError) {
-                        Text("Must be 8+ chars with uppercase, lowercase, digit & special char", color = Color.Red)
+                        Text(AppStrings.get(lang, "Must be 8+ chars with uppercase, lowercase, digit & special char"), color = Color.Red)
                     } else if (password.isNotEmpty()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             // Strength bar
@@ -679,7 +689,7 @@ private fun RegisterForm(
                             }
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                passwordStrength.label,
+                                AppStrings.get(lang, passwordStrength.label),
                                 fontSize = 11.sp,
                                 color = passwordStrength.color,
                                 fontWeight = FontWeight.SemiBold
@@ -714,7 +724,7 @@ private fun RegisterForm(
                 } else {
                     Icon(Icons.Default.PersonAdd, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("CREATE VAULT", fontWeight = FontWeight.Bold, fontSize = 14.sp, letterSpacing = 1.sp)
+                    Text(AppStrings.get(lang, "CREATE VAULT"), fontWeight = FontWeight.Bold, fontSize = 14.sp, letterSpacing = 1.sp)
                 }
             }
         }

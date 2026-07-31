@@ -28,19 +28,18 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.dukaanlocker.LockerStorage
 import com.example.dukaanlocker.ui.components.LauncherLogo
+import com.example.dukaanlocker.ui.strings.AppStrings
+import com.example.dukaanlocker.ui.strings.LocalAppLanguage
+import com.example.dukaanlocker.ui.strings.appLanguages
 import com.example.dukaanlocker.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-data class Language(val code: String, val label: String, val native: String)
 
 // ── Feature banner data ──
 private data class FeatureBanner(
@@ -93,25 +92,8 @@ fun MainScreen(
 ) {
     val colors = LocalAppColors.current
 
-    val languages = remember {
-        listOf(
-            Language("en", "English", "English"),
-            Language("hi", "Hindi", "हिन्दी"),
-            Language("as", "Assamese", "অসমীয়া"),
-            Language("bn", "Bengali", "বাংলা"),
-            Language("gu", "Gujarati", "ગુજરાતી"),
-            Language("kn", "Kannada", "ಕನ್ನಡ"),
-            Language("ml", "Malayalam", "മലയാളം"),
-            Language("mr", "Marathi", "मराठी"),
-            Language("or", "Odia", "ଓଡ଼ିଆ"),
-            Language("pa", "Punjabi", "ਪੰਜਾਬੀ"),
-            Language("ta", "Tamil", "தமிழ்"),
-            Language("te", "Telugu", "తెలుగు")
-        )
-    }
-
-    val context = LocalContext.current
-    var selectedLang by remember { mutableStateOf(languages.firstOrNull { it.code == LockerStorage.getLanguage(context) } ?: languages[0]) }
+    val lang = LocalAppLanguage.current
+    val selectedLang = appLanguages.firstOrNull { it.code == lang } ?: appLanguages[0]
     var langExpanded by remember { mutableStateOf(false) }
 
     val categories = remember {
@@ -184,7 +166,7 @@ fun MainScreen(
                 IconButton(onClick = {}, modifier = Modifier.size(40.dp)) {
                     Icon(
                         Icons.Default.Search,
-                        contentDescription = "Search",
+                        contentDescription = AppStrings.get(lang, "Search"),
                         tint = Color.White,
                         modifier = Modifier.size(24.dp)
                     )
@@ -228,23 +210,23 @@ fun MainScreen(
                             onDismissRequest = { langExpanded = false },
                             modifier = Modifier.width(240.dp)
                         ) {
-                            languages.forEach { lang ->
+                            appLanguages.forEach { appLang ->
                                 DropdownMenuItem(
                                     text = {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text(
-                                                text = lang.native,
+                                                text = appLang.native,
                                                 fontSize = 14.sp,
                                                 fontWeight = FontWeight.Medium,
                                                 color = colors.textPrimary
                                             )
                                             Spacer(modifier = Modifier.width(8.dp))
                                             Text(
-                                                text = "(${lang.label})",
+                                                text = "(${appLang.label})",
                                                 fontSize = 11.sp,
                                                 color = colors.textSecondary
                                             )
-                                            if (lang.code == selectedLang.code) {
+                                            if (appLang.code == selectedLang.code) {
                                                 Spacer(modifier = Modifier.weight(1f))
                                                 Icon(
                                                     Icons.Default.Check,
@@ -256,9 +238,8 @@ fun MainScreen(
                                         }
                                     },
                                     onClick = {
-                                        selectedLang = lang
                                         langExpanded = false
-                                        onLanguageChanged(lang.code)
+                                        onLanguageChanged(appLang.code)
                                     }
                                 )
                             }
@@ -278,19 +259,19 @@ fun MainScreen(
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 
-            // ── Feature slider (arch, auto-slides every 3s) ──
-            FeatureSlider()
+            // ── Feature slider (auto-slides every 3s) ──
+            FeatureSlider(lang = lang)
 
             Spacer(modifier = Modifier.height(22.dp))
 
             // ── Documents carousel (circular) ──
-            DocumentsCarousel(colors = colors)
+            DocumentsCarousel(lang = lang, colors = colors)
 
             Spacer(modifier = Modifier.height(28.dp))
 
             // ── Section header ──
         Text(
-            text = "CATEGORIES",
+            text = AppStrings.get(lang, "CATEGORIES"),
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             color = colors.primary,
@@ -309,7 +290,7 @@ fun MainScreen(
                     row.forEachIndexed { colIdx, cat ->
                         val globalIdx = rowIdx * 3 + colIdx
                         CategorySquareCard(
-                            name = cat,
+                            name = AppStrings.get(lang, cat),
                             icon = catIcons.getOrElse(globalIdx) { Icons.Default.Business },
                             accent = catColors.getOrElse(globalIdx) { colors.primary },
                             colors = colors,
@@ -357,7 +338,7 @@ fun MainScreen(
                     )
                 ) {
                     Text(
-                        "GET STARTED",
+                        AppStrings.get(lang, "GET STARTED"),
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp,
                         letterSpacing = 1.5.sp
@@ -368,7 +349,7 @@ fun MainScreen(
 
                 TextButton(onClick = onGetStarted) {
                     Text(
-                        "Already have an account? Sign In",
+                        AppStrings.get(lang, "Already have an account? Sign In"),
                         fontSize = 12.sp,
                         color = colors.primary,
                         fontWeight = FontWeight.Medium
@@ -381,7 +362,7 @@ fun MainScreen(
 
 // ── Auto-sliding flat feature banner carousel (DigiLocker style) ──
 @Composable
-private fun FeatureSlider() {
+private fun FeatureSlider(lang: String) {
     val pagerState = rememberPagerState(pageCount = { featureBanners.size })
     val scope = rememberCoroutineScope()
 
@@ -416,14 +397,14 @@ private fun FeatureSlider() {
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = banner.title,
+                            text = AppStrings.get(lang, banner.title),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = banner.desc,
+                            text = AppStrings.get(lang, banner.desc),
                             fontSize = 12.sp,
                             color = Color.White.copy(alpha = 0.9f),
                             lineHeight = 16.sp,
@@ -467,10 +448,10 @@ private fun colorsActive(): Color = Color(0xFF2563EB)
 
 // ── Documents carousel (circular) ──
 @Composable
-private fun DocumentsCarousel(colors: AppColors) {
+private fun DocumentsCarousel(lang: String, colors: AppColors) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = "DOCUMENTS YOU CAN STORE",
+            text = AppStrings.get(lang, "DOCUMENTS YOU CAN STORE"),
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             color = colors.primary,
@@ -504,7 +485,7 @@ private fun DocumentsCarousel(colors: AppColors) {
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = doc.name,
+                        text = AppStrings.get(lang, doc.name),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Medium,
                         color = colors.textPrimary,

@@ -12,6 +12,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.dukaanlocker.ui.components.LauncherLogo
+import com.example.dukaanlocker.ui.strings.AppStrings
+import com.example.dukaanlocker.ui.strings.LocalAppLanguage
 import com.example.dukaanlocker.ui.theme.*
 import kotlinx.coroutines.delay
 
@@ -21,6 +23,7 @@ fun SplashScreen(
     onSplashDone: () -> Unit
 ) {
     val colors = LocalAppColors.current
+    val lang = LocalAppLanguage.current
 
     LaunchedEffect(Unit) {
         delay(2000)
@@ -57,7 +60,7 @@ fun SplashScreen(
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = "Secure Business Document Vault",
+                text = AppStrings.get(lang, "Secure Business Document Vault"),
                 fontSize = 12.sp,
                 color = colors.textSecondary
             )
