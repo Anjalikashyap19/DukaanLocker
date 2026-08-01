@@ -271,7 +271,7 @@ fun LoginScreen(
 
         // ── Content area ─────────────────────────────────────────────────────
         // Uses weight(1f) to fill remaining space — no scrolling needed
-        val contentAlign = if (selectedView == null) Alignment.TopCenter else Alignment.Center
+        val contentAlign = if (selectedView == null || selectedView == "register") Alignment.TopCenter else Alignment.Center
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -610,14 +610,16 @@ private fun RegisterForm(
     onRegister: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxHeight(),
         colors = CardDefaults.cardColors(containerColor = colors.cardBg),
         border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.6f)),
         shape = RoundedCornerShape(20.dp)
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
