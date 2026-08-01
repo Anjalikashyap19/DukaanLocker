@@ -3,14 +3,18 @@ package com.example.dukaanlocker.ui.screens
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.LightMode
@@ -19,6 +23,8 @@ import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -26,6 +32,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -71,12 +78,26 @@ private fun isValidEmail(email: String): Boolean {
     return android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
 }
 
+// ── MSME / Udyam validation ─────────────────────────────────────────────────────
+private val msmeRegex = Regex("^UDYAM-[A-Z]{2}-\\d{2}-\\d{7}$", RegexOption.IGNORE_CASE)
+
+private fun isValidMsme(number: String): Boolean = msmeRegex.matches(number.trim())
+
+// ── Client-side CAPTCHA ─────────────────────────────────────────────────────────
+private val captchaChars = ('A'..'Z') + ('0'..'9')
+
+private fun generateCaptcha(length: Int = 5): String {
+    val random = java.util.Random()
+    return (1..length).map { captchaChars[random.nextInt(captchaChars.size)] }.joinToString("")
+}
+
 // ── Main Login Screen ──────────────────────────────────────────────────────────
 @Composable
 fun LoginScreen(
     onOwnerLogin: (email: String, password: String, onDone: () -> Unit) -> Unit,
     onManagerLogin: (code: String) -> Unit,
     onRegister: (name: String, email: String, password: String, mobile: String, onDone: () -> Unit) -> Unit,
+    onRegisterWithMsme: (msmeNumber: String, mobile: String, password: String, onDone: () -> Unit) -> Unit = { _, _, _, onDone -> onDone() },
     onBackToMain: () -> Unit,
     isDarkTheme: Boolean = true,
     onToggleTheme: () -> Unit = {}
@@ -98,6 +119,14 @@ fun LoginScreen(
     var regEmailError by remember { mutableStateOf(false) }
     var regMobileError by remember { mutableStateOf(false) }
     var regPasswordError by remember { mutableStateOf(false) }
+
+    // ── MSME register fields ──
+    var registerWithMsme by remember { mutableStateOf(false) }
+    var regMsmeNumber by remember { mutableStateOf("") }
+    var regMsmeError by remember { mutableStateOf(false) }
+    var regCaptcha by remember { mutableStateOf(generateCaptcha()) }
+    var regCaptchaInput by remember { mutableStateOf("") }
+    var regCaptchaError by remember { mutableStateOf(false) }
 
     // ── Login fields ──
     var loginEmail by remember { mutableStateOf("") }
@@ -132,6 +161,20 @@ fun LoginScreen(
         if (!regNameError && !regEmailError && !regMobileError && !regPasswordError) {
             regIsChecking = true
             onRegister(regName.trim(), regEmail.trim(), regPassword, regMobile) {
+                regIsChecking = false
+            }
+        }
+    }
+
+    // ── Validate & submit MSME register ──
+    fun validateAndRegisterWithMsme() {
+        regMsmeError = !isValidMsme(regMsmeNumber)
+        regMobileError = regMobile.length != 10
+        regPasswordError = !isStrongPassword(regPassword)
+        regCaptchaError = !regCaptchaInput.trim().equals(regCaptcha, ignoreCase = true)
+        if (!regMsmeError && !regMobileError && !regPasswordError && !regCaptchaError) {
+            regIsChecking = true
+            onRegisterWithMsme(regMsmeNumber.trim().uppercase(), regMobile, regPassword) {
                 regIsChecking = false
             }
         }
@@ -276,9 +319,19 @@ fun LoginScreen(
                     passwordStrength = regStrength,
                     mobile = regMobile, onMobileChange = { regMobile = it.filter { c -> c.isDigit() }.take(10); regMobileError = false },
                     mobileError = regMobileError,
+                    registerWithMsme = registerWithMsme,
+                    onToggleRegisterWithMsme = { registerWithMsme = !registerWithMsme },
+                    msmeNumber = regMsmeNumber,
+                    onMsmeNumberChange = { regMsmeNumber = it.filter { ch -> ch.isLetterOrDigit() || ch == '-' }.uppercase(); regMsmeError = false },
+                    msmeNumberError = regMsmeError,
+                    captchaCode = regCaptcha,
+                    onRefreshCaptcha = { regCaptcha = generateCaptcha(); regCaptchaInput = ""; regCaptchaError = false },
+                    captchaInput = regCaptchaInput,
+                    onCaptchaInputChange = { regCaptchaInput = it; regCaptchaError = false },
+                    captchaError = regCaptchaError,
                     isChecking = regIsChecking,
                     onBack = { selectedView = null; regIsChecking = false },
-                    onRegister = { validateAndRegister() }
+                    onRegister = { if (registerWithMsme) validateAndRegisterWithMsme() else validateAndRegister() }
                 )
 
                 // ── MANAGER LOGIN (uses email + password via owner login) ──────────
@@ -548,6 +601,10 @@ private fun RegisterForm(
     passwordVisible: Boolean, onTogglePasswordVisible: () -> Unit,
     passwordError: Boolean, passwordStrength: PasswordStrength,
     mobile: String, onMobileChange: (String) -> Unit, mobileError: Boolean,
+    registerWithMsme: Boolean, onToggleRegisterWithMsme: () -> Unit,
+    msmeNumber: String, onMsmeNumberChange: (String) -> Unit, msmeNumberError: Boolean,
+    captchaCode: String, onRefreshCaptcha: () -> Unit,
+    captchaInput: String, onCaptchaInputChange: (String) -> Unit, captchaError: Boolean,
     isChecking: Boolean,
     onBack: () -> Unit,
     onRegister: () -> Unit
@@ -561,6 +618,7 @@ private fun RegisterForm(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -574,31 +632,95 @@ private fun RegisterForm(
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
-                    Text(AppStrings.get(lang, "Create Account"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                    Text(AppStrings.get(lang, "Set up your business document vault"), fontSize = 12.sp, color = colors.textSecondary)
+                    Text(
+                        AppStrings.get(lang, if (registerWithMsme) "MSME Registration" else "Create Account"),
+                        fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary
+                    )
+                    Text(
+                        AppStrings.get(lang, if (registerWithMsme) "Verify your Udyam registration" else "Set up your business document vault"),
+                        fontSize = 12.sp, color = colors.textSecondary
+                    )
                 }
             }
 
-            // Full Name
-            OutlinedTextField(
-                value = name,
-                onValueChange = onNameChange,
-                label = { Text(AppStrings.get(lang, "Full Name"), color = colors.textSecondary) },
-                placeholder = { Text("Ramesh Sharma", color = colors.textSecondary.copy(alpha = 0.4f)) },
-                leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
-                isError = nameError,
-                supportingText = if (nameError) {{ Text(AppStrings.get(lang, "Name is required"), color = Color.Red) }} else null,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
-                    focusedLabelColor = colors.primary, cursorColor = colors.primary
-                ),
-                shape = RoundedCornerShape(12.dp)
-            )
+            // ── MSME toggle ──
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(colors.primary.copy(alpha = 0.06f))
+                    .padding(horizontal = 14.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Business,
+                    contentDescription = null,
+                    tint = colors.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        AppStrings.get(lang, "Have MSME Number?"),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.textPrimary
+                    )
+                    Text(
+                        AppStrings.get(lang, "Register with your Udyam registration"),
+                        fontSize = 11.sp,
+                        color = colors.textSecondary
+                    )
+                }
+                Switch(
+                    checked = registerWithMsme,
+                    onCheckedChange = { onToggleRegisterWithMsme() },
+                    colors = SwitchDefaults.colors(checkedTrackColor = colors.primary)
+                )
+            }
 
-            // Mobile Number (right below Full Name)
+            // ── MSME Number (MSME mode) / Full Name (normal mode) ──
+            if (registerWithMsme) {
+                OutlinedTextField(
+                    value = msmeNumber,
+                    onValueChange = onMsmeNumberChange,
+                    label = { Text(AppStrings.get(lang, "MSME / Udyam Number"), color = colors.textSecondary) },
+                    placeholder = { Text("UDYAM-XX-XX-XXXXXXX", color = colors.textSecondary.copy(alpha = 0.4f)) },
+                    leadingIcon = { Icon(Icons.Default.Business, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
+                    isError = msmeNumberError,
+                    supportingText = if (msmeNumberError) {{
+                        Text(AppStrings.get(lang, "Enter a valid Udyam number (e.g. UDYAM-UP-09-0001234)"), color = Color.Red)
+                    }} else null,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
+                        focusedLabelColor = colors.primary, cursorColor = colors.primary
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+            } else {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = onNameChange,
+                    label = { Text(AppStrings.get(lang, "Full Name"), color = colors.textSecondary) },
+                    placeholder = { Text("Ramesh Sharma", color = colors.textSecondary.copy(alpha = 0.4f)) },
+                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
+                    isError = nameError,
+                    supportingText = if (nameError) {{ Text(AppStrings.get(lang, "Name is required"), color = Color.Red) }} else null,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
+                        focusedLabelColor = colors.primary, cursorColor = colors.primary
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+
+            // Mobile Number
             OutlinedTextField(
                 value = mobile,
                 onValueChange = onMobileChange,
@@ -625,24 +747,48 @@ private fun RegisterForm(
                 shape = RoundedCornerShape(12.dp)
             )
 
-            // Email
-            OutlinedTextField(
-                value = email,
-                onValueChange = onEmailChange,
-                label = { Text(AppStrings.get(lang, "Email Address"), color = colors.textSecondary) },
-                placeholder = { Text("you@example.com", color = colors.textSecondary.copy(alpha = 0.4f)) },
-                leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
-                isError = emailError,
-                supportingText = if (emailError) {{ Text(AppStrings.get(lang, "Enter a valid email address"), color = Color.Red) }} else null,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
-                    focusedLabelColor = colors.primary, cursorColor = colors.primary
-                ),
-                shape = RoundedCornerShape(12.dp)
-            )
+            // ── CAPTCHA (MSME mode) / Email (normal mode) ──
+            if (registerWithMsme) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = captchaInput,
+                        onValueChange = onCaptchaInputChange,
+                        label = { Text(AppStrings.get(lang, "Enter CAPTCHA"), color = colors.textSecondary) },
+                        leadingIcon = { Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
+                        isError = captchaError,
+                        supportingText = if (captchaError) {{
+                            Text(AppStrings.get(lang, "Captcha doesn't match"), color = Color.Red)
+                        }} else null,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
+                            focusedLabelColor = colors.primary, cursorColor = colors.primary
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    CaptchaBox(code = captchaCode, colors = colors, onRefresh = onRefreshCaptcha)
+                }
+            } else {
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = onEmailChange,
+                    label = { Text(AppStrings.get(lang, "Email Address"), color = colors.textSecondary) },
+                    placeholder = { Text("you@example.com", color = colors.textSecondary.copy(alpha = 0.4f)) },
+                    leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
+                    isError = emailError,
+                    supportingText = if (emailError) {{ Text(AppStrings.get(lang, "Enter a valid email address"), color = Color.Red) }} else null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
+                        focusedLabelColor = colors.primary, cursorColor = colors.primary
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
 
             // Password with eye toggle + strength indicator
             OutlinedTextField(
@@ -712,7 +858,12 @@ private fun RegisterForm(
             // Register Button
             Button(
                 onClick = onRegister,
-                enabled = name.isNotBlank() && email.isNotBlank() && password.length >= 8 && mobile.length == 10 && !isChecking,
+                enabled = if (registerWithMsme) {
+                    msmeNumber.isNotBlank() && mobile.length == 10 && password.length >= 8 &&
+                        captchaInput.isNotBlank() && !isChecking
+                } else {
+                    name.isNotBlank() && email.isNotBlank() && password.length >= 8 && mobile.length == 10 && !isChecking
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),
@@ -722,11 +873,66 @@ private fun RegisterForm(
                 if (isChecking) {
                     CircularProgressIndicator(modifier = Modifier.size(22.dp), color = colors.background, strokeWidth = 2.dp)
                 } else {
-                    Icon(Icons.Default.PersonAdd, contentDescription = null)
+                    Icon(
+                        if (registerWithMsme) Icons.Default.Business else Icons.Default.PersonAdd,
+                        contentDescription = null
+                    )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(AppStrings.get(lang, "CREATE VAULT"), fontWeight = FontWeight.Bold, fontSize = 14.sp, letterSpacing = 1.sp)
+                    Text(
+                        AppStrings.get(lang, if (registerWithMsme) "REGISTER WITH MSME" else "CREATE VAULT"),
+                        fontWeight = FontWeight.Bold, fontSize = 14.sp, letterSpacing = 1.sp
+                    )
                 }
             }
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CAPTCHA BOX
+// ══════════════════════════════════════════════════════════════════════════════
+@Composable
+private fun CaptchaBox(
+    code: String,
+    colors: AppColors,
+    onRefresh: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(50.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(colors.primary.copy(alpha = 0.07f))
+                .border(1.dp, colors.primary.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                code.forEachIndexed { index, ch ->
+                    Text(
+                        text = ch.toString(),
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        color = if (index % 2 == 0) colors.primary else colors.secondary,
+                        modifier = Modifier.rotate(if (index % 2 == 0) -6f else 6f)
+                    )
+                }
+            }
+        }
+        IconButton(
+            onClick = onRefresh,
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(colors.primary.copy(alpha = 0.07f))
+                .border(1.dp, colors.primary.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+        ) {
+            Icon(Icons.Default.Refresh, contentDescription = "Refresh captcha", tint = colors.primary)
         }
     }
 }

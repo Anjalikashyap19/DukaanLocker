@@ -300,6 +300,12 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                         onDone()
                                     }
                                 },
+                                onRegisterWithMsme = { msmeNumber, mobile, password, onDone ->
+                                    // Backend endpoint for MSME registration is not implemented yet.
+                                    // Frontend validates format + captcha; wire to the server once available.
+                                    Toast.makeText(context, "MSME registration backend not available yet (UDYAM: $msmeNumber)", Toast.LENGTH_LONG).show()
+                                    onDone()
+                                },
                                 onManagerLogin = { code ->
                                     // Manager login uses email/password, not code
                                     Toast.makeText(context, "Please use email & password to login as manager", Toast.LENGTH_LONG).show()
