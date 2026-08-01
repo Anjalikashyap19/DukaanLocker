@@ -90,4 +90,17 @@ interface ApiService {
 
     @GET("api/location/search")
     suspend fun searchLocations(@Query("query") query: String): Response<LocationSearchResponse>
+
+    // ── Udyam (MSME) Verification ──────────────────────────────────────────
+
+    @POST("api/udyam/init")
+    suspend fun initUdyamSession(): Response<UdyamInitResponse>
+
+    @POST("api/udyam/verify")
+    suspend fun verifyUdyam(@Body request: UdyamVerifyRequest): Response<UdyamVerifyResponse>
+
+    // ── MSME Registration ──────────────────────────────────────────────────
+
+    @POST("api/auth/register-msme")
+    suspend fun registerWithMsme(@Body request: RegisterWithMsmeRequest): Response<MsmeAuthResponse>
 }

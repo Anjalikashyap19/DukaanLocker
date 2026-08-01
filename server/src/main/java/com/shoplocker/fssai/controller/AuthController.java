@@ -2,8 +2,11 @@ package com.shoplocker.fssai.controller;
 
 import com.shoplocker.fssai.dto.AuthResponse;
 import com.shoplocker.fssai.dto.LoginRequest;
+import com.shoplocker.fssai.dto.MsmeAuthResponse;
 import com.shoplocker.fssai.dto.RegisterRequest;
+import com.shoplocker.fssai.dto.RegisterWithMsmeRequest;
 import com.shoplocker.fssai.service.AuthService;
+import com.shoplocker.fssai.service.UdyamVerificationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,9 +33,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final UdyamVerificationService udyamService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, UdyamVerificationService udyamService) {
         this.authService = authService;
+        this.udyamService = udyamService;
     }
 
     @Operation(
@@ -56,5 +61,19 @@ public class AuthController {
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.login(request);
         return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+            summary = "Register with MSME (Udyam) verification",
+            description = "Verifies the Udyam number against the government portal, " +
+                          "generates a PDF certificate, and creates a new user account. " +
+                          "Call /api/udyam/init first to obtain a sessionId and CAPTCHA."
+    )
+    @SecurityRequirements
+    @PostMapping("/register-msme")
+    public ResponseEntity<MsmeAuthResponse> registerWithMsme(
+            @Valid @RequestBody RegisterWithMsmeRequest request) {
+        MsmeAuthResponse response = authService.registerWithMsme(request, udyamService);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }

@@ -300,11 +300,73 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                         onDone()
                                     }
                                 },
-                                onRegisterWithMsme = { msmeNumber, mobile, password, onDone ->
-                                    // Backend endpoint for MSME registration is not implemented yet.
-                                    // Frontend validates format + captcha; wire to the server once available.
-                                    Toast.makeText(context, "MSME registration backend not available yet (UDYAM: $msmeNumber)", Toast.LENGTH_LONG).show()
-                                    onDone()
+                                onInitMsmeCaptcha = { onResult ->
+                                    scope.launch {
+                                        try {
+                                            val response = api.initUdyamSession()
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                if (response.isSuccessful) {
+                                                    val body = response.body()!!
+                                                    onResult(body.sessionId, body.captchaBase64)
+                                                } else {
+                                                    Toast.makeText(context, "Failed to load captcha: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
+                                                    onResult("", "")
+                                                }
+                                            }
+                                        } catch (e: Exception) {
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                Toast.makeText(context, "Network error loading captcha: ${e.message}", Toast.LENGTH_LONG).show()
+                                                onResult("", "")
+                                            }
+                                        }
+                                    }
+                                },
+                                onRegisterWithMsme = { msmeNumber, mobile, password, sessionId, captchaText, onDone ->
+                                    scope.launch {
+                                        isLoading = true
+                                        try {
+                                            val response = api.registerWithMsme(
+                                                RegisterWithMsmeRequest(
+                                                    msmeNumber = msmeNumber,
+                                                    mobileNumber = mobile,
+                                                    password = password,
+                                                    sessionId = sessionId,
+                                                    captchaText = captchaText
+                                                )
+                                            )
+                                            if (response.isSuccessful) {
+                                                val auth = response.body()!!
+                                                // Save auth using the base AuthResponse fields
+                                                val authResponse = AuthResponse(
+                                                    token = auth.token,
+                                                    tokenType = auth.tokenType,
+                                                    userId = auth.userId,
+                                                    userName = auth.userName,
+                                                    mobileNumber = auth.mobileNumber,
+                                                    emailId = auth.emailId,
+                                                    role = auth.role
+                                                )
+                                                ApiClient.saveAuth(context, authResponse)
+                                                authToken = auth.token
+                                                currentUserId = auth.userId
+                                                currentUserName = auth.userName
+                                                currentUserEmail = auth.emailId
+                                                currentUserRole = auth.role
+                                                isLoggedIn = true
+                                                currentScreen = "wizard"
+                                                val certMsg = if (!auth.certificatePdfUrl.isNullOrBlank()) {
+                                                    "\nCertificate PDF: ${auth.certificatePdfUrl}"
+                                                } else ""
+                                                Toast.makeText(context, "MSME verified! Welcome, ${auth.userName}!$certMsg", Toast.LENGTH_LONG).show()
+                                            } else {
+                                                Toast.makeText(context, "MSME registration failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
+                                            }
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
+                                        }
+                                        isLoading = false
+                                        onDone()
+                                    }
                                 },
                                 onManagerLogin = { code ->
                                     // Manager login uses email/password, not code

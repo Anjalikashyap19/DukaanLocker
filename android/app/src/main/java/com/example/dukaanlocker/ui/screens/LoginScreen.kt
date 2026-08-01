@@ -47,6 +47,7 @@ import com.example.dukaanlocker.ui.components.LauncherLogo
 import com.example.dukaanlocker.ui.strings.AppStrings
 import com.example.dukaanlocker.ui.strings.LocalAppLanguage
 import com.example.dukaanlocker.ui.theme.*
+import coil.compose.AsyncImage
 
 // ── Password Strength ──────────────────────────────────────────────────────────
 private enum class PasswordStrength(val label: String, val color: Color, val level: Int) {
@@ -97,7 +98,8 @@ fun LoginScreen(
     onOwnerLogin: (email: String, password: String, onDone: () -> Unit) -> Unit,
     onManagerLogin: (code: String) -> Unit,
     onRegister: (name: String, email: String, password: String, mobile: String, onDone: () -> Unit) -> Unit,
-    onRegisterWithMsme: (msmeNumber: String, mobile: String, password: String, onDone: () -> Unit) -> Unit = { _, _, _, onDone -> onDone() },
+    onRegisterWithMsme: (msmeNumber: String, mobile: String, password: String, sessionId: String, captchaText: String, onDone: () -> Unit) -> Unit = { _, _, _, _, _, onDone -> onDone() },
+    onInitMsmeCaptcha: (onResult: (sessionId: String, captchaImage: String) -> Unit) -> Unit = { onResult -> onResult("", "") },
     onBackToMain: () -> Unit,
     isDarkTheme: Boolean = true,
     onToggleTheme: () -> Unit = {}
@@ -127,6 +129,10 @@ fun LoginScreen(
     var regCaptcha by remember { mutableStateOf(generateCaptcha()) }
     var regCaptchaInput by remember { mutableStateOf("") }
     var regCaptchaError by remember { mutableStateOf(false) }
+    // Government captcha state
+    var msmeSessionId by remember { mutableStateOf("") }
+    var msmeCaptchaImage by remember { mutableStateOf("") }
+    var msmeCaptchaLoading by remember { mutableStateOf(false) }
 
     // ── Login fields ──
     var loginEmail by remember { mutableStateOf("") }
@@ -171,10 +177,17 @@ fun LoginScreen(
         regMsmeError = !isValidMsme(regMsmeNumber)
         regMobileError = regMobile.length != 10
         regPasswordError = !isStrongPassword(regPassword)
-        regCaptchaError = !regCaptchaInput.trim().equals(regCaptcha, ignoreCase = true)
+        // For government captcha: validate non-empty (server validates correctness)
+        regCaptchaError = regCaptchaInput.isBlank()
         if (!regMsmeError && !regMobileError && !regPasswordError && !regCaptchaError) {
             regIsChecking = true
-            onRegisterWithMsme(regMsmeNumber.trim().uppercase(), regMobile, regPassword) {
+            onRegisterWithMsme(
+                regMsmeNumber.trim().uppercase(),
+                regMobile,
+                regPassword,
+                msmeSessionId,
+                regCaptchaInput.trim()
+            ) {
                 regIsChecking = false
             }
         }
@@ -320,13 +333,40 @@ fun LoginScreen(
                     mobile = regMobile, onMobileChange = { regMobile = it.filter { c -> c.isDigit() }.take(10); regMobileError = false },
                     mobileError = regMobileError,
                     registerWithMsme = registerWithMsme,
-                    onToggleRegisterWithMsme = { registerWithMsme = !registerWithMsme },
+                    onToggleRegisterWithMsme = {
+                        registerWithMsme = !registerWithMsme
+                        if (registerWithMsme && msmeSessionId.isBlank()) {
+                            msmeCaptchaLoading = true
+                            onInitMsmeCaptcha { sessionId, captchaImage ->
+                                msmeSessionId = sessionId
+                                msmeCaptchaImage = captchaImage
+                                msmeCaptchaLoading = false
+                            }
+                        }
+                    },
                     msmeNumber = regMsmeNumber,
                     onMsmeNumberChange = { regMsmeNumber = it.filter { ch -> ch.isLetterOrDigit() || ch == '-' }.uppercase(); regMsmeError = false },
                     msmeNumberError = regMsmeError,
-                    captchaCode = regCaptcha,
-                    onRefreshCaptcha = { regCaptcha = generateCaptcha(); regCaptchaInput = ""; regCaptchaError = false },
+                    captchaCode = if (msmeCaptchaImage.isNotBlank()) msmeCaptchaImage else regCaptcha,
+                    isGovCaptcha = msmeCaptchaImage.isNotBlank(),
+                    onRefreshCaptcha = {
+                        if (registerWithMsme) {
+                            msmeCaptchaLoading = true
+                            onInitMsmeCaptcha { sessionId, captchaImage ->
+                                msmeSessionId = sessionId
+                                msmeCaptchaImage = captchaImage
+                                regCaptchaInput = ""
+                                regCaptchaError = false
+                                msmeCaptchaLoading = false
+                            }
+                        } else {
+                            regCaptcha = generateCaptcha()
+                            regCaptchaInput = ""
+                            regCaptchaError = false
+                        }
+                    },
                     captchaInput = regCaptchaInput,
+                    msmeCaptchaLoading = msmeCaptchaLoading,
                     onCaptchaInputChange = { regCaptchaInput = it; regCaptchaError = false },
                     captchaError = regCaptchaError,
                     isChecking = regIsChecking,
@@ -603,8 +643,8 @@ private fun RegisterForm(
     mobile: String, onMobileChange: (String) -> Unit, mobileError: Boolean,
     registerWithMsme: Boolean, onToggleRegisterWithMsme: () -> Unit,
     msmeNumber: String, onMsmeNumberChange: (String) -> Unit, msmeNumberError: Boolean,
-    captchaCode: String, onRefreshCaptcha: () -> Unit,
-    captchaInput: String, onCaptchaInputChange: (String) -> Unit, captchaError: Boolean,
+    captchaCode: String, isGovCaptcha: Boolean = false, onRefreshCaptcha: () -> Unit,
+    captchaInput: String, msmeCaptchaLoading: Boolean = false, onCaptchaInputChange: (String) -> Unit, captchaError: Boolean,
     isChecking: Boolean,
     onBack: () -> Unit,
     onRegister: () -> Unit
@@ -770,7 +810,32 @@ private fun RegisterForm(
                         ),
                         shape = RoundedCornerShape(12.dp)
                     )
-                    CaptchaBox(code = captchaCode, colors = colors, onRefresh = onRefreshCaptcha)
+                    if (msmeCaptchaLoading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(colors.primary.copy(alpha = 0.07f))
+                                .border(1.dp, colors.primary.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = colors.primary, strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Loading government captcha...", fontSize = 12.sp, color = colors.textSecondary)
+                            }
+                        }
+                    } else if (isGovCaptcha && captchaCode.contains("data:image")) {
+                        // Government captcha image from base64
+                        GovCaptchaBox(
+                            captchaBase64 = captchaCode,
+                            colors = colors,
+                            onRefresh = onRefreshCaptcha
+                        )
+                    } else {
+                        CaptchaBox(code = captchaCode, colors = colors, onRefresh = onRefreshCaptcha)
+                    }
                 }
             } else {
                 OutlinedTextField(
@@ -891,7 +956,53 @@ private fun RegisterForm(
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// CAPTCHA BOX
+// GOVERNMENT CAPTCHA BOX (displays base64 image from Udyam portal)
+// ══════════════════════════════════════════════════════════════════════════════
+@Composable
+private fun GovCaptchaBox(
+    captchaBase64: String,
+    colors: AppColors,
+    onRefresh: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        // Display the government captcha image
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(50.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(colors.primary.copy(alpha = 0.07f))
+                .border(1.dp, colors.primary.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            coil.compose.AsyncImage(
+                model = captchaBase64,
+                contentDescription = "Government CAPTCHA from Udyam portal",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(4.dp),
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit
+            )
+        }
+        IconButton(
+            onClick = onRefresh,
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(colors.primary.copy(alpha = 0.07f))
+                .border(1.dp, colors.primary.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+        ) {
+            Icon(Icons.Default.Refresh, contentDescription = "Refresh captcha", tint = colors.primary)
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CAPTCHA BOX (client-side generated)
 // ══════════════════════════════════════════════════════════════════════════════
 @Composable
 private fun CaptchaBox(

@@ -113,6 +113,32 @@
             <version>3.0.4</version>
         </dependency>
 
+        <!-- OpenHTMLtoPDF — HTML/XHTML to PDF rendering for MSME certificate generation -->
+        <dependency>
+            <groupId>com.github.librepdf</groupId>
+            <artifactId>openhtmltopdf-pdfbox</artifactId>
+            <version>1.0.10</version>
+        </dependency>
+        <dependency>
+            <groupId>com.github.librepdf</groupId>
+            <artifactId>openhtmltopdf-slf4j</artifactId>
+            <version>1.0.10</version>
+        </dependency>
+
+        <!-- jsoup — HTML cleanup & XHTML conversion for government portal responses -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.18.1</version>
+        </dependency>
+
+        <!-- Apache HttpClient 5 — HTTP session management for Udyam government portal -->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+            <version>5.4.1</version>
+        </dependency>
+
         <!-- Spring Security 6 (managed by spring-boot-starter-parent 3.5.3) — required by the JWT auth
              pipeline in src/main/java/com/shoplocker/fssai/security/*. Without this, SecurityFilterChain
              + PasswordEncoder + AuthenticationManager beans can't be wired. -->
@@ -151,10 +177,14 @@
 				<scope>import</scope>
 			</dependency>
 		</dependencies>
-	</dependencyManagement>
+	</dependencyManagement>    <repositories>
+        <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
+        </repository>
+    </repositories>
 
-
-	<build>
+    <build>
 		<plugins>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>

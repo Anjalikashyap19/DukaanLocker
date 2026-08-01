@@ -2,7 +2,12 @@ package com.shoplocker.fssai.service;
 
 import com.shoplocker.fssai.dto.AuthResponse;
 import com.shoplocker.fssai.dto.LoginRequest;
+import com.shoplocker.fssai.dto.MsmeAuthResponse;
 import com.shoplocker.fssai.dto.RegisterRequest;
+import com.shoplocker.fssai.dto.RegisterWithMsmeRequest;
+import com.shoplocker.fssai.dto.UdyamVerifyRequest;
+import com.shoplocker.fssai.dto.UdyamVerifyResponse;
+import com.shoplocker.fssai.service.UdyamVerificationService;
 import com.shoplocker.fssai.entity.Role;
 import com.shoplocker.fssai.entity.User;
 import com.shoplocker.fssai.exception.FailureCode;
@@ -149,6 +154,66 @@ public class AuthService {
 
         String token = jwtService.generateToken(user);
         return AuthResponse.from(user, token);
+    }
+
+    /**
+     * Register a new user by verifying their Udyam (MSME) number against the
+     * government portal.  On success, the user account is created and a PDF
+     * certificate of the MSME registration is stored in S3.
+     */
+    @Transactional
+    @Transactional
+    public MsmeAuthResponse registerWithMsme(RegisterWithMsmeRequest request,
+                                         UdyamVerificationService udyamService) {
+        String mobile = request.getMobileNumber() == null ? null : request.getMobileNumber().trim();
+
+        if (mobile == null || mobile.isBlank() || !mobile.matches("^[0-9]{10}$")) {
+            throw new FssaiException("Invalid registration details", FailureCode.INVALID_REQUEST);
+        }
+
+        if (userRepository.existsByMobileNumber(mobile)) {
+            log.info("MSME registration rejected: duplicate mobile {}", mobile);
+            throw new FssaiException(
+                    "An account already exists with this mobile number",
+                    FailureCode.DUPLICATE_MOBILE);
+        }
+
+        // ── Step 1: Verify Udyam against government portal + generate PDF ──
+        UdyamVerifyRequest verifyReq = new UdyamVerifyRequest();
+        verifyReq.setSessionId(request.getSessionId());
+        verifyReq.setUdyamNumber(request.getMsmeNumber().trim().toUpperCase());
+        verifyReq.setCaptchaText(request.getCaptchaText());
+
+        UdyamVerifyResponse verifyResult = udyamService.verifyAndGeneratePdf(verifyReq);
+
+        if (!verifyResult.isSuccess()) {
+            throw new FssaiException(
+                    verifyResult.getErrorMessage() != null
+                            ? verifyResult.getErrorMessage()
+                            : "Udyam verification failed",
+                    FailureCode.INVALID_REQUEST);
+        }
+
+        // ── Step 2: Register user (role = ADMIN, name extracted from Udyam number) ──
+        String email = "msme_" + mobile + "@dukaanlocker.local";
+        User user = new User();
+        user.setUserName("MSME Owner");  // placeholder — can be updated later
+        user.setMobileNumber(mobile);
+        user.setEmailId(email);
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setRole(Role.ADMIN);
+        user.setEnabled(true);
+
+        User saved = userRepository.save(user);
+        String token = jwtService.generateToken(saved);
+
+        log.info("MSME user registered: id={} mobile={} udyam={}",
+                saved.getId(), mobile, request.getMsmeNumber());
+
+        AuthResponse auth = AuthResponse.from(saved, token);
+        MsmeAuthResponse msmeAuth = new MsmeAuthResponse(
+                auth, verifyResult.getPdfUrl(), request.getMsmeNumber());
+        return msmeAuth;
     }
 
     private static String normalizeEmail(String raw) {

@@ -156,6 +156,48 @@ data class ErrorResponse(
     @SerializedName("timestamp") val timestamp: String? = null
 )
 
+// ── Udyam (MSME) Verification ──────────────────────────────────────────
+
+data class UdyamInitResponse(
+    @SerializedName("sessionId") val sessionId: String,
+    @SerializedName("captchaBase64") val captchaBase64: String,
+    @SerializedName("message") val message: String?
+)
+
+data class UdyamVerifyRequest(
+    @SerializedName("sessionId") val sessionId: String,
+    @SerializedName("udyamNumber") val udyamNumber: String,
+    @SerializedName("captchaText") val captchaText: String
+)
+
+data class UdyamVerifyResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("pdfUrl") val pdfUrl: String?,
+    @SerializedName("certificateHtml") val certificateHtml: String?,
+    @SerializedName("udyamNumber") val udyamNumber: String?,
+    @SerializedName("errorMessage") val errorMessage: String?
+)
+
+data class RegisterWithMsmeRequest(
+    @SerializedName("msmeNumber") val msmeNumber: String,
+    @SerializedName("mobileNumber") val mobileNumber: String,
+    @SerializedName("password") val password: String,
+    @SerializedName("sessionId") val sessionId: String,
+    @SerializedName("captchaText") val captchaText: String
+)
+
+data class MsmeAuthResponse(
+    @SerializedName("token") val token: String,
+    @SerializedName("tokenType") val tokenType: String,
+    @SerializedName("userId") val userId: Long,
+    @SerializedName("userName") val userName: String,
+    @SerializedName("mobileNumber") val mobileNumber: String,
+    @SerializedName("emailId") val emailId: String,
+    @SerializedName("role") val role: String,
+    @SerializedName("certificatePdfUrl") val certificatePdfUrl: String?,
+    @SerializedName("udyamNumber") val udyamNumber: String?
+)
+
 fun <T> retrofit2.Response<T>.parseErrorMessage(): String {
     val body = errorBody()?.string()
     if (body != null) {
