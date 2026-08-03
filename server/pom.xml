@@ -113,14 +113,18 @@
             <version>3.0.4</version>
         </dependency>
 
-        <!-- OpenHTMLtoPDF — HTML/XHTML to PDF rendering for MSME certificate generation -->
+        <!-- OpenHTMLtoPDF — HTML/XHTML to PDF rendering for MSME certificate generation.
+             Using com.openhtmltopdf (Maven Central) instead of com.github.librepdf (JitPack-only).
+             The Maven Central group uses the new Java root package com.openhtmltopdf.* (the
+             previous LibrePDF fork used net.sf.openhtmltopdf.*), so callers must switch their
+             PdfRendererBuilder import to com.openhtmltopdf.pdfboxout.PdfRendererBuilder. -->
         <dependency>
-            <groupId>com.github.librepdf</groupId>
+            <groupId>com.openhtmltopdf</groupId>
             <artifactId>openhtmltopdf-pdfbox</artifactId>
             <version>1.0.10</version>
         </dependency>
         <dependency>
-            <groupId>com.github.librepdf</groupId>
+            <groupId>com.openhtmltopdf</groupId>
             <artifactId>openhtmltopdf-slf4j</artifactId>
             <version>1.0.10</version>
         </dependency>

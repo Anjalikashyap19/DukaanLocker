@@ -7,6 +7,8 @@ import com.shoplocker.fssai.service.UdyamVerificationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -34,6 +36,24 @@ public class UdyamVerificationController {
     public ResponseEntity<UdyamInitResponse> initSession() {
         UdyamInitResponse response = udyamService.initSession();
         return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+            summary = "Get CAPTCHA image for a session",
+            description = "Returns the raw PNG captcha image bytes for the given session. " +
+                          "Use the sessionId from the /init response."
+    )
+    @GetMapping("/captcha/{sessionId}")
+    public ResponseEntity<byte[]> getCaptchaImage(@PathVariable String sessionId) {
+        byte[] imageBytes = udyamService.getCaptchaImage(sessionId);
+        if (imageBytes == null || imageBytes.length == 0) {
+            return ResponseEntity.notFound().build();
+        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.IMAGE_PNG);
+        headers.setContentLength(imageBytes.length);
+        headers.setCacheControl("no-store");  // don't cache — each session has its own captcha
+        return ResponseEntity.ok().headers(headers).body(imageBytes);
     }
 
     @Operation(

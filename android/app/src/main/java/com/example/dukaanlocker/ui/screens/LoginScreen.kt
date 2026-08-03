@@ -827,7 +827,7 @@ private fun RegisterForm(
                             }
                         }
                     } else if (isGovCaptcha && captchaCode.contains("data:image")) {
-                        // Government captcha image from base64
+                        // Government captcha image from base64 data URI
                         GovCaptchaBox(
                             captchaBase64 = captchaCode,
                             colors = colors,
@@ -964,6 +964,19 @@ private fun GovCaptchaBox(
     colors: AppColors,
     onRefresh: () -> Unit
 ) {
+    var imageLoadFailed by remember { mutableStateOf(false) }
+    // Decode the base64 into a Bitmap for reliable rendering
+    val bitmap: android.graphics.Bitmap? = remember(captchaBase64) {
+        try {
+            val base64Data = captchaBase64.substringAfter("base64,")
+            val bytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT)
+            val factory = android.graphics.BitmapFactory
+            factory.decodeByteArray(bytes, 0, bytes.size)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -973,23 +986,50 @@ private fun GovCaptchaBox(
         Box(
             modifier = Modifier
                 .weight(1f)
-                .height(50.dp)
+                .height(80.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(colors.primary.copy(alpha = 0.07f))
                 .border(1.dp, colors.primary.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
-            coil.compose.AsyncImage(
-                model = captchaBase64,
-                contentDescription = "Government CAPTCHA from Udyam portal",
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(4.dp),
-                contentScale = androidx.compose.ui.layout.ContentScale.Fit
-            )
+            if (bitmap != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = "Government CAPTCHA from Udyam portal",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(4.dp),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                )
+            } else {
+                // Fallback: try Coil for data URI, or show error
+                if (imageLoadFailed || captchaBase64.isBlank()) {
+                    Text(
+                        text = if (captchaBase64.isBlank()) "Loading captcha..." else "Failed to load. Tap refresh.",
+                        fontSize = 11.sp,
+                        color = colors.textSecondary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                } else {
+                    coil.compose.AsyncImage(
+                        model = captchaBase64,
+                        contentDescription = "Government CAPTCHA",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(4.dp),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                        onSuccess = { imageLoadFailed = false },
+                        onError = { imageLoadFailed = true }
+                    )
+                }
+            }
         }
         IconButton(
-            onClick = onRefresh,
+            onClick = {
+                imageLoadFailed = false
+                onRefresh()
+            },
             modifier = Modifier
                 .size(48.dp)
                 .clip(RoundedCornerShape(12.dp))

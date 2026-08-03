@@ -7,6 +7,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -15,22 +16,23 @@ import java.util.Scanner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.http.NameValuePair;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.message.BasicNameValuePair;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.cookie.Cookie;
-import org.apache.http.Header;
-import org.apache.http.client.CookieStore;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.impl.client.BasicCookieStore;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.util.EntityUtils;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.classic.methods.HttpPost;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.cookie.BasicCookieStore;
+import org.apache.hc.client5.http.cookie.Cookie;
+import org.apache.hc.client5.http.cookie.CookieStore;
+import org.apache.hc.client5.http.entity.UrlEncodedFormEntity;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.core5.http.Header;
+import org.apache.hc.core5.http.NameValuePair;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.http.message.BasicNameValuePair;
+import org.apache.hc.core5.util.Timeout;
 
-public class UdyamVerifyStepX {
+public class UdhyamVerifyStepX {
 
     private static String VIEWSTATE;
     private static String VIEWSTATEGENERATOR;
@@ -42,9 +44,9 @@ public class UdyamVerifyStepX {
         CookieStore cookieStore = new BasicCookieStore();
 
         RequestConfig config = RequestConfig.custom()
-                .setConnectTimeout(30000)
-                .setSocketTimeout(30000)
-                .setConnectionRequestTimeout(30000)
+                .setConnectTimeout(Timeout.ofMilliseconds(30000))
+                .setResponseTimeout(Timeout.ofMilliseconds(30000))
+                .setConnectionRequestTimeout(Timeout.ofMilliseconds(30000))
                 .build();
 
         CloseableHttpClient client = HttpClients.custom()
@@ -77,48 +79,48 @@ public class UdyamVerifyStepX {
 
             System.out.println("Calling Udyam Verify Page...");
 
-            CloseableHttpResponse response = client.execute(request);
+            try (CloseableHttpResponse response = client.execute(request)) {
 
-            System.out.println("-----------------------------------");
-            System.out.println("HTTP Status : " + response.getStatusLine());
-            System.out.println("-----------------------------------");
-
-            System.out.println("Response Headers:");
-            for (Header header : response.getAllHeaders()) {
-                System.out.println(header.getName() + " : " + header.getValue());
-            }
-
-            String html = EntityUtils.toString(response.getEntity(), "UTF-8");
-
-            VIEWSTATE = extractHiddenValue(html, "__VIEWSTATE");
-            VIEWSTATEGENERATOR = extractHiddenValue(html, "__VIEWSTATEGENERATOR");
-            EVENTVALIDATION = extractHiddenValue(html, "__EVENTVALIDATION");
-
-            System.out.println("VIEWSTATE Length : " + VIEWSTATE.length());
-            System.out.println("VIEWSTATEGENERATOR : " + VIEWSTATEGENERATOR);
-            System.out.println("EVENTVALIDATION : " + EVENTVALIDATION);
-
-            System.out.println("-----------------------------------");
-            System.out.println("HTML Length : " + html.length());
-            System.out.println("-----------------------------------");
-
-            FileWriter writer = new FileWriter("Udyam_Verify.html");
-            writer.write(html);
-            writer.close();
-            System.out.println("HTML saved as Udyam_Verify.html");
-
-            System.out.println("-----------------------------------");
-            System.out.println("Cookies Received");
-            System.out.println("-----------------------------------");
-            for (Cookie cookie : cookieStore.getCookies()) {
-                System.out.println("Name : " + cookie.getName());
-                System.out.println("Value : " + cookie.getValue());
-                System.out.println("Domain : " + cookie.getDomain());
-                System.out.println("Path : " + cookie.getPath());
                 System.out.println("-----------------------------------");
-            }
+                System.out.println("HTTP Status : " + response.getCode());
+                System.out.println("-----------------------------------");
 
-            response.close();
+                System.out.println("Response Headers:");
+                for (Header header : response.getHeaders()) {
+                    System.out.println(header.getName() + " : " + header.getValue());
+                }
+
+                byte[] htmlBytes = EntityUtils.toByteArray(response.getEntity());
+                String html = new String(htmlBytes, StandardCharsets.UTF_8);
+
+                VIEWSTATE = extractHiddenValue(html, "__VIEWSTATE");
+                VIEWSTATEGENERATOR = extractHiddenValue(html, "__VIEWSTATEGENERATOR");
+                EVENTVALIDATION = extractHiddenValue(html, "__EVENTVALIDATION");
+
+                System.out.println("VIEWSTATE Length : " + VIEWSTATE.length());
+                System.out.println("VIEWSTATEGENERATOR : " + VIEWSTATEGENERATOR);
+                System.out.println("EVENTVALIDATION : " + EVENTVALIDATION);
+
+                System.out.println("-----------------------------------");
+                System.out.println("HTML Length : " + html.length());
+                System.out.println("-----------------------------------");
+
+                FileWriter writer = new FileWriter("Udyam_Verify.html");
+                writer.write(html);
+                writer.close();
+                System.out.println("HTML saved as Udyam_Verify.html");
+
+                System.out.println("-----------------------------------");
+                System.out.println("Cookies Received");
+                System.out.println("-----------------------------------");
+                for (Cookie cookie : cookieStore.getCookies()) {
+                    System.out.println("Name : " + cookie.getName());
+                    System.out.println("Value : " + cookie.getValue());
+                    System.out.println("Domain : " + cookie.getDomain());
+                    System.out.println("Path : " + cookie.getPath());
+                    System.out.println("-----------------------------------");
+                }
+            }
 
             try {
                 String captchaPath = downloadCaptcha(client, cookieStore);
@@ -183,45 +185,43 @@ public class UdyamVerifyStepX {
         captchaRequest.setHeader("sec-ch-ua-mobile", "?0");
         captchaRequest.setHeader("sec-ch-ua-platform", "\"macOS\"");
 
-        CloseableHttpResponse captchaResponse = client.execute(captchaRequest);
+        try (CloseableHttpResponse captchaResponse = client.execute(captchaRequest)) {
 
-        System.out.println();
-        System.out.println("HTTP Status : " + captchaResponse.getStatusLine());
+            System.out.println();
+            System.out.println("HTTP Status : " + captchaResponse.getCode());
 
-        if (captchaResponse.getStatusLine().getStatusCode() != 200) {
-            throw new RuntimeException("Unable to download captcha.");
+            if (captchaResponse.getCode() != 200) {
+                throw new RuntimeException("Unable to download captcha.");
+            }
+
+            String downloadPath = System.getProperty("user.home") + File.separator + "Downloads";
+            File downloadFolder = new File(downloadPath);
+            if (!downloadFolder.exists()) {
+                downloadFolder.mkdirs();
+            }
+
+            File captchaFile = new File(downloadFolder, "captcha.png");
+
+            try (InputStream inputStream = captchaResponse.getEntity().getContent();
+                 FileOutputStream outputStream = new FileOutputStream(captchaFile)) {
+
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                }
+                outputStream.flush();
+            }
+
+            System.out.println();
+            System.out.println("======================================");
+            System.out.println("Captcha Downloaded Successfully");
+            System.out.println("Saved At :");
+            System.out.println(captchaFile.getAbsolutePath());
+            System.out.println("======================================");
+
+            return captchaFile.getAbsolutePath();
         }
-
-        String downloadPath = System.getProperty("user.home") + File.separator + "Downloads";
-        File downloadFolder = new File(downloadPath);
-        if (!downloadFolder.exists()) {
-            downloadFolder.mkdirs();
-        }
-
-        File captchaFile = new File(downloadFolder, "captcha.png");
-
-        InputStream inputStream = captchaResponse.getEntity().getContent();
-        FileOutputStream outputStream = new FileOutputStream(captchaFile);
-
-        byte[] buffer = new byte[8192];
-        int bytesRead;
-        while ((bytesRead = inputStream.read(buffer)) != -1) {
-            outputStream.write(buffer, 0, bytesRead);
-        }
-
-        outputStream.flush();
-        outputStream.close();
-        inputStream.close();
-        captchaResponse.close();
-
-        System.out.println();
-        System.out.println("======================================");
-        System.out.println("Captcha Downloaded Successfully");
-        System.out.println("Saved At :");
-        System.out.println(captchaFile.getAbsolutePath());
-        System.out.println("======================================");
-
-        return captchaFile.getAbsolutePath();
     }
 
     public static void verifyUdyam(CloseableHttpClient client, CookieStore cookieStore) throws Exception {
@@ -273,28 +273,27 @@ public class UdyamVerifyStepX {
             params.add(new BasicNameValuePair("__EVENTVALIDATION", EVENTVALIDATION));
         }
 
-        post.setEntity(new UrlEncodedFormEntity(params, "UTF-8"));
+        post.setEntity(new UrlEncodedFormEntity(params, StandardCharsets.UTF_8));
 
         System.out.println();
         System.out.println("Submitting request...");
 
-        CloseableHttpResponse response = client.execute(post);
+        try (CloseableHttpResponse response = client.execute(post)) {
 
-        String result = EntityUtils.toString(response.getEntity(), "UTF-8");
+            String result = EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
 
-        System.out.println();
-        System.out.println("==============================");
-        System.out.println("SERVER RESPONSE (STEP 3)");
-        System.out.println("==============================");
-        System.out.println(result);
+            System.out.println();
+            System.out.println("==============================");
+            System.out.println("SERVER RESPONSE (STEP 3)");
+            System.out.println("==============================");
+            System.out.println(result);
 
-        // Optional: save Step-3 AJAX response
-        try (FileWriter fw = new FileWriter("Udyam_Verify_Response.html")) {
-            fw.write(result);
+            // Optional: save Step-3 AJAX response
+            try (FileWriter fw = new FileWriter("Udyam_Verify_Response.html")) {
+                fw.write(result);
+            }
+            System.out.println("Step-3 response saved as Udyam_Verify_Response.html");
         }
-        System.out.println("Step-3 response saved as Udyam_Verify_Response.html");
-
-        response.close();
     }
 
     /**
@@ -334,31 +333,30 @@ public class UdyamVerifyStepX {
         printRequest.setHeader("sec-ch-ua-mobile", "?0");
         printRequest.setHeader("sec-ch-ua-platform", "\"macOS\"");
 
-        CloseableHttpResponse printResponse = client.execute(printRequest);
+        try (CloseableHttpResponse printResponse = client.execute(printRequest)) {
 
-        System.out.println();
-        System.out.println("HTTP Status : " + printResponse.getStatusLine());
+            System.out.println();
+            System.out.println("HTTP Status : " + printResponse.getCode());
 
-        String printHtml = EntityUtils.toString(printResponse.getEntity(), "UTF-8");
+            String printHtml = EntityUtils.toString(printResponse.getEntity(), StandardCharsets.UTF_8);
 
-        System.out.println("HTML Length : " + printHtml.length());
+            System.out.println("HTML Length : " + printHtml.length());
 
-        // Save the final HTML
-        try (FileWriter fw = new FileWriter("PrintUdyamApplication.html")) {
-            fw.write(printHtml);
+            // Save the final HTML
+            try (FileWriter fw = new FileWriter("PrintUdyamApplication.html")) {
+                fw.write(printHtml);
+            }
+            System.out.println("Print page saved as PrintUdyamApplication.html");
+
+            // Optional: print a short preview
+            System.out.println();
+            System.out.println("----- HTML Preview (first 800 chars) -----");
+            File file = new File("/Users/India Advocacy/Downloads/msme.html");
+            try (FileWriter fw = new FileWriter(file)) {
+                fw.write(printHtml);
+            }
+            System.out.println(printHtml);
         }
-        System.out.println("Print page saved as PrintUdyamApplication.html");
-
-        // Optional: print a short preview
-        System.out.println();
-        System.out.println("----- HTML Preview (first 800 chars) -----");
-        File file= new File("/Users/India Advocacy/Downloads/msme.html");
-        FileWriter fw = new FileWriter(file);
-        fw.write(printHtml);
-        fw.close();
-        System.out.println(printHtml);
-
-        printResponse.close();
     }
 
     private static String extractHiddenValue(String html, String fieldName) {

@@ -33,7 +33,8 @@ import com.shoplocker.fssai.exception.FssaiException;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import net.sf.openhtmltopdf.pdfboxout.PdfRendererBuilder;
+
+import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
@@ -48,6 +49,7 @@ import org.apache.hc.core5.http.Header;
 import org.apache.hc.core5.http.NameValuePair;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.message.BasicNameValuePair;
+import org.apache.hc.core5.util.Timeout;
 
 /**
  * Integrates with the Indian government's Udyam registration portal
@@ -118,7 +120,9 @@ public class UdyamVerificationService {
     public UdyamInitResponse initSession() {
         BasicCookieStore cookieStore = new BasicCookieStore();
         RequestConfig config = RequestConfig.custom()
-                .setConnectionRequestTimeout(30_000)
+                .setConnectTimeout(Timeout.ofMilliseconds(30_000))
+                .setResponseTimeout(Timeout.ofMilliseconds(60_000))
+                .setConnectionRequestTimeout(Timeout.ofMilliseconds(30_000))
                 .build();
 
         try (CloseableHttpClient client = HttpClients.custom()
@@ -130,14 +134,24 @@ public class UdyamVerificationService {
             HttpGet pageRequest = new HttpGet(VERIFY_PAGE);
             addBrowserHeaders(pageRequest);
 
+            log.info("Udyam init — fetching verify page: {}", VERIFY_PAGE);
             String html = client.execute(pageRequest, response -> {
-                return EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+                int status = response.getCode();
+                log.info("Udyam verify page HTTP status: {}", status);
+                if (status != 200) {
+                    throw new IOException("Failed to fetch Udyam verify page, HTTP " + status);
+                }
+                byte[] bytes = EntityUtils.toByteArray(response.getEntity());
+                return new String(bytes, StandardCharsets.UTF_8);
             });
 
             String viewState = extractHiddenValue(html, "__VIEWSTATE");
             String viewStateGenerator = extractHiddenValue(html, "__VIEWSTATEGENERATOR");
             String eventValidation = extractHiddenValue(html, "__EVENTVALIDATION");
 
+            if (viewState.isEmpty()) {
+                log.warn("Udyam init — VIEWSTATE is empty; the portal may have changed its page structure.");
+            }
             log.info("Udyam init — VIEWSTATE length={}, EVENTVALIDATION length={}",
                     viewState.length(), eventValidation.length());
 
@@ -145,6 +159,7 @@ public class UdyamVerificationService {
             SimpleDateFormat sdf = new SimpleDateFormat("M/d/yyyy h:mm:ss a");
             String timestamp = URLEncoder.encode(sdf.format(new Date()), StandardCharsets.UTF_8);
             String captchaUrl = CAPTCHA_URL_PREFIX + timestamp;
+            log.info("Udyam init — downloading captcha: {}", captchaUrl);
 
             HttpGet captchaRequest = new HttpGet(captchaUrl);
             addBrowserHeaders(captchaRequest);
@@ -154,13 +169,36 @@ public class UdyamVerificationService {
             captchaRequest.setHeader("Sec-Fetch-Site", "same-origin");
 
             byte[] captchaBytes = client.execute(captchaRequest, response -> {
-                if (response.getCode() != 200) {
-                    throw new IOException("Failed to download captcha, HTTP " + response.getCode());
+                int status = response.getCode();
+                log.info("Udyam captcha HTTP status: {}", status);
+                if (status != 200) {
+                    throw new IOException("Failed to download captcha, HTTP " + status);
                 }
-                return EntityUtils.toByteArray(response.getEntity());
+                // Validate that the response is actually an image
+                Header contentTypeHeader = response.getFirstHeader("Content-Type");
+                String contentType = contentTypeHeader != null ? contentTypeHeader.getValue() : "unknown";
+                log.info("Udyam captcha Content-Type: {}", contentType);
+                if (!contentType.toLowerCase().contains("image/")) {
+                    // The portal may have returned an HTML error/challenge page
+                    log.error("Udyam captcha returned non-image content (Content-Type: {})."
+                            + " The portal may be temporarily blocking automated requests.",
+                            contentType);
+                    throw new IOException(
+                            "Government portal returned non-image content (Content-Type: " + contentType 
+                            + "). The portal may be temporarily blocking automated requests."
+                            + " Try again in a few minutes.");
+                }
+                byte[] bytes = EntityUtils.toByteArray(response.getEntity());
+                log.info("Udyam captcha downloaded: {} bytes", bytes.length);
+                if (bytes.length < 100) {
+                    log.error("Udyam captcha suspiciously small ({} bytes) — likely not a real captcha image.", bytes.length);
+                    throw new IOException("Government portal returned an invalid captcha image.");
+                }
+                return bytes;
             });
 
             String captchaBase64 = "data:image/png;base64," + Base64.getEncoder().encodeToString(captchaBytes);
+            log.info("Udyam init — captcha prepared (base64 length={})", captchaBase64.length());
 
             // ── Store session state (with size cap) ──
             if (sessions.size() >= MAX_SESSIONS) {
@@ -178,6 +216,7 @@ public class UdyamVerificationService {
             for (Cookie c : cookieStore.getCookies()) {
                 session.cookies.add(c);
             }
+            session.captchaImage = captchaBytes;  // store raw bytes for direct image serving
             sessions.put(sessionId, session);
 
             return new UdyamInitResponse(sessionId, captchaBase64);
@@ -208,7 +247,9 @@ public class UdyamVerificationService {
         }
 
         RequestConfig config = RequestConfig.custom()
-                .setConnectionRequestTimeout(30_000)
+                .setConnectTimeout(Timeout.ofMilliseconds(30_000))
+                .setResponseTimeout(Timeout.ofMilliseconds(60_000))
+                .setConnectionRequestTimeout(Timeout.ofMilliseconds(30_000))
                 .build();
 
         try (CloseableHttpClient client = HttpClients.custom()
@@ -244,7 +285,8 @@ public class UdyamVerificationService {
             post.setEntity(new UrlEncodedFormEntity(params, StandardCharsets.UTF_8));
 
             String verifyResult = client.execute(post, response -> {
-                return EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+                byte[] bytes = EntityUtils.toByteArray(response.getEntity());
+                return new String(bytes, StandardCharsets.UTF_8);
             });
 
             log.info("Udyam verify response length={}", verifyResult.length());
@@ -266,7 +308,8 @@ public class UdyamVerificationService {
             printRequest.setHeader("Upgrade-Insecure-Requests", "1");
 
             String printHtml = client.execute(printRequest, response -> {
-                return EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+                byte[] bytes = EntityUtils.toByteArray(response.getEntity());
+                return new String(bytes, StandardCharsets.UTF_8);
             });
 
             log.info("Udyam print page HTML length={}", printHtml.length());
@@ -440,6 +483,20 @@ public class UdyamVerificationService {
         return "";
     }
 
+    // ─── CAPTCHA IMAGE SERVING ───────────────────────────────────────────
+
+    /**
+     * Returns the raw captcha image bytes for the given session, or {@code null}
+     * if the session doesn't exist or has expired.
+     */
+    public byte[] getCaptchaImage(String sessionId) {
+        UdyamSession session = sessions.get(sessionId);
+        if (session == null || session.captchaImage == null) {
+            return null;
+        }
+        return session.captchaImage;
+    }
+
     // ─── SESSION STATE ─────────────────────────────────────────────────────
 
     private static class UdyamSession {
@@ -448,5 +505,6 @@ public class UdyamVerificationService {
         String viewStateGenerator;
         String eventValidation;
         List<Cookie> cookies;
+        byte[] captchaImage;  // raw image bytes for direct serving
     }
 }

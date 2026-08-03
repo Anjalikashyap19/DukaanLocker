@@ -162,7 +162,6 @@ public class AuthService {
      * certificate of the MSME registration is stored in S3.
      */
     @Transactional
-    @Transactional
     public MsmeAuthResponse registerWithMsme(RegisterWithMsmeRequest request,
                                          UdyamVerificationService udyamService) {
         String mobile = request.getMobileNumber() == null ? null : request.getMobileNumber().trim();
