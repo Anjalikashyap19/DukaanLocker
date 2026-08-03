@@ -964,34 +964,6 @@ private fun GovCaptchaBox(
     colors: AppColors,
     onRefresh: () -> Unit
 ) {
-    val imageBytes = remember(captchaBase64) {
-        runCatching {
-            val b64 = captchaBase64.substringAfter(',')
-            val decoded = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
-            // PNG IEND chunk signature: 49 45 4E 44 AE 42 60 82
-            val iendSignature = byteArrayOf(
-                0x49, 0x45, 0x4E, 0x44,
-                0xAE.toByte(), 0x42, 0x60, 0x82.toByte()
-            )
-            var iend = -1
-            if (decoded.size >= iendSignature.size) {
-                for (i in 0..decoded.size - iendSignature.size) {
-                    var match = true
-                    for (j in iendSignature.indices) {
-                        if (decoded[i + j] != iendSignature[j]) {
-                            match = false
-                            break
-                        }
-                    }
-                    if (match) {
-                        iend = i
-                        break
-                    }
-                }
-            }
-            if (iend > 0) decoded.copyOfRange(0, iend + iendSignature.size) else decoded
-        }.getOrNull()
-    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -1007,16 +979,14 @@ private fun GovCaptchaBox(
                 .border(1.dp, colors.primary.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
-            if (imageBytes != null) {
-                coil.compose.AsyncImage(
-                    model = imageBytes,
-                    contentDescription = "Government CAPTCHA from Udyam portal",
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(4.dp),
-                    contentScale = androidx.compose.ui.layout.ContentScale.Fit
-                )
-            }
+            coil.compose.AsyncImage(
+                model = captchaBase64,
+                contentDescription = "Government CAPTCHA from Udyam portal",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(4.dp),
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit
+            )
         }
         IconButton(
             onClick = onRefresh,
