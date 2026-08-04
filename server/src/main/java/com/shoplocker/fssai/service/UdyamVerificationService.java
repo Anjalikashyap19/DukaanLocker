@@ -353,7 +353,7 @@ public class UdyamVerificationService {
                     .replace(" ", "_") + "/udyam_certificate.pdf";
             String pdfUrl = s3Service.uploadFile(pdfBytes, ContentType.APPLICATION_PDF.getMimeType(), fileKey);
 
-            return UdyamVerifyResponse.ok(pdfUrl, null, request.getUdyamNumber());
+            return UdyamVerifyResponse.ok(pdfUrl, printHtml, request.getUdyamNumber());
 
         } catch (FssaiException e) {
             throw e;

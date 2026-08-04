@@ -3,17 +3,18 @@ package com.shoplocker.fssai.service;
 import com.shoplocker.fssai.dto.AuthResponse;
 import com.shoplocker.fssai.dto.LoginRequest;
 import com.shoplocker.fssai.dto.MsmeAuthResponse;
+import com.shoplocker.fssai.dto.MsmeParsedData;
 import com.shoplocker.fssai.dto.RegisterRequest;
 import com.shoplocker.fssai.dto.RegisterWithMsmeRequest;
 import com.shoplocker.fssai.dto.UdyamVerifyRequest;
 import com.shoplocker.fssai.dto.UdyamVerifyResponse;
 import com.shoplocker.fssai.service.UdyamVerificationService;
-import com.shoplocker.fssai.entity.Role;
-import com.shoplocker.fssai.entity.User;
+import com.shoplocker.fssai.entity.*;
 import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
-import com.shoplocker.fssai.repository.UserRepository;
+import com.shoplocker.fssai.repository.*;
 import com.shoplocker.fssai.security.JwtService;
+import com.shoplocker.fssai.util.MsmeDataParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -24,6 +25,9 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.Set;
 
 /**
  * Authentication flows — registration and login.
@@ -59,15 +63,24 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
+    private final ShopRepository shopRepository;
+    private final DocumentRepository documentRepository;
+    private final RequiredDocumentService requiredDocumentService;
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
                        JwtService jwtService,
-                       AuthenticationManager authenticationManager) {
+                       AuthenticationManager authenticationManager,
+                       ShopRepository shopRepository,
+                       DocumentRepository documentRepository,
+                       RequiredDocumentService requiredDocumentService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.authenticationManager = authenticationManager;
+        this.shopRepository = shopRepository;
+        this.documentRepository = documentRepository;
+        this.requiredDocumentService = requiredDocumentService;
     }
 
     @Transactional
@@ -158,14 +171,22 @@ public class AuthService {
 
     /**
      * Register a new user by verifying their Udyam (MSME) number against the
-     * government portal.  On success, the user account is created and a PDF
-     * certificate of the MSME registration is stored in S3.
+     * government portal.  On success:
+     * <ol>
+     *   <li>Verifies Udyam number + CAPTCHA against government portal.</li>
+     *   <li>Generates PDF from HTML and uploads to S3.</li>
+     *   <li>Parses enterprise data from the HTML certificate.</li>
+     *   <li>Creates a User account with the entrepreneur's name.</li>
+     *   <li>Creates a Shop linked to the user with enterprise details.</li>
+     *   <li>Creates all required document records (MSME = VERIFIED, others = NOT_UPLOADED).</li>
+     *   <li>Attaches the MSME certificate as a verified document.</li>
+     *   <li>Returns JWT token with user, shop, and certificate details.</li>
+     * </ol>
      *
      * <p>NOTE: This method is intentionally NOT @Transactional because it makes
      * external HTTP calls (government portal verification, PDF generation, S3 upload)
-     * that can take minutes. Wrapping those in a transaction would hold a DB connection
-     * open for the entire duration, risking connection pool exhaustion and transaction
-     * timeouts (which manifest as HTTP 500 errors).</p>
+     * that can take minutes. DB operations are grouped at the end after external calls
+     * complete.</p>
      */
     public MsmeAuthResponse registerWithMsme(RegisterWithMsmeRequest request,
                                          UdyamVerificationService udyamService) {
@@ -198,47 +219,191 @@ public class AuthService {
                     FailureCode.INVALID_REQUEST);
         }
 
-        // ── Step 2: Register user (role = ADMIN, name extracted from Udyam number) ──
-        registerMsmeUser(mobile, request.getPassword());
+        // ── Step 2: Parse MSME data from HTML certificate ──
+        MsmeParsedData parsedData = null;
+        if (verifyResult.getCertificateHtml() != null && !verifyResult.getCertificateHtml().isBlank()) {
+            try {
+                parsedData = MsmeDataParser.parse(verifyResult.getCertificateHtml());
+                log.info("Parsed MSME data: enterprise={}, owner={}",
+                        parsedData.getEnterpriseName(), parsedData.getEntrepreneurName());
+            } catch (Exception e) {
+                log.warn("Failed to parse MSME HTML, using fallback data: {}", e.getMessage());
+            }
+        }
 
-        User saved = userRepository.findByMobileNumber(mobile)
-                .orElseThrow(() -> new FssaiException(
-                        "User registration failed — please try again",
-                        FailureCode.INTERNAL_ERROR));
-        String token = jwtService.generateToken(saved);
+        // ── Step 3: Create User with parsed data ──
+        User savedUser = createMsmeUser(mobile, request.getPassword(), parsedData);
+        log.info("MSME user created: id={} mobile={} name={}",
+                savedUser.getId(), mobile, savedUser.getUserName());
 
-        log.info("MSME user registered: id={} mobile={} udyam={}",
-                saved.getId(), mobile, request.getMsmeNumber());
+        // ── Step 4: Create Shop with parsed data ──
+        Shop savedShop = createMsmeShop(savedUser, parsedData, request.getMsmeNumber().trim().toUpperCase());
+        log.info("MSME shop created: id={} name={}", savedShop.getId(), savedShop.getShopName());
 
-        AuthResponse auth = AuthResponse.from(saved, token);
+        // ── Step 5: Create required documents and attach MSME certificate ──
+        createRequiredDocuments(savedShop, verifyResult.getPdfUrl(),
+                request.getMsmeNumber().trim().toUpperCase());
+        log.info("Required documents created for shop {}", savedShop.getId());
+
+        // ── Step 6: Generate JWT token ──
+        String token = jwtService.generateToken(savedUser);
+
+        log.info("MSME auto-registration complete: userId={} shopId={} udyam={}",
+                savedUser.getId(), savedShop.getId(), request.getMsmeNumber());
+
+        // ── Step 7: Build response with all details ──
+        AuthResponse auth = AuthResponse.from(savedUser, token);
         MsmeAuthResponse msmeAuth = new MsmeAuthResponse(
                 auth, verifyResult.getPdfUrl(), request.getMsmeNumber());
+
+        // Populate enterprise and shop details
+        if (parsedData != null) {
+            msmeAuth.setEnterpriseName(parsedData.getEnterpriseName());
+            msmeAuth.setEntrepreneurName(parsedData.getEntrepreneurName());
+        }
+        msmeAuth.setShopId(savedShop.getId());
+        msmeAuth.setShopName(savedShop.getShopName());
+        msmeAuth.setShopCategory(savedShop.getCategory());
+        msmeAuth.setShopState(savedShop.getState());
+        msmeAuth.setShopCity(savedShop.getCity());
+        msmeAuth.setShopAddress(savedShop.getAddress());
+
         return msmeAuth;
     }
 
     /**
-     * Persists the MSME user — separated from the external HTTP calls so the
-     * DB connection is not held open during government-portal verification /
-     * PDF generation / S3 upload.  Two sequential DB calls don't require a
-     * wrapping transaction.
+     * Creates a new User account from MSME parsed data.
+     * Uses entrepreneur name as userName, generates a local email.
      */
-    private void registerMsmeUser(String mobile, String password) {
+    private User createMsmeUser(String mobile, String password, MsmeParsedData parsedData) {
         if (userRepository.existsByMobileNumber(mobile)) {
             throw new FssaiException(
                     "An account already exists with this mobile number",
                     FailureCode.DUPLICATE_MOBILE);
         }
 
+        // Use entrepreneur name if available, otherwise fallback to enterprise name or generic
+        String userName = "MSME Owner";
+        if (parsedData != null) {
+            if (parsedData.getEntrepreneurName() != null && !parsedData.getEntrepreneurName().isBlank()) {
+                userName = parsedData.getEntrepreneurName();
+            } else if (parsedData.getEnterpriseName() != null && !parsedData.getEnterpriseName().isBlank()) {
+                userName = parsedData.getEnterpriseName();
+            }
+        }
+
         String email = "msme_" + mobile + "@dukaanlocker.local";
+        if (parsedData != null && parsedData.getEmailId() != null && !parsedData.getEmailId().isBlank()) {
+            email = parsedData.getEmailId();
+        }
+
         User user = new User();
-        user.setUserName("MSME Owner");  // placeholder — can be updated later
+        user.setUserName(userName);
         user.setMobileNumber(mobile);
         user.setEmailId(email);
         user.setPassword(passwordEncoder.encode(password));
         user.setRole(Role.ADMIN);
         user.setEnabled(true);
 
-        userRepository.save(user);
+        return userRepository.save(user);
+    }
+
+    /**
+     * Creates a Shop linked to the user with enterprise details parsed from MSME data.
+     */
+    private Shop createMsmeShop(User user, MsmeParsedData parsedData, String udyamNumber) {
+        Shop shop = new Shop();
+
+        // Shop name = Enterprise Name (fallback to Udyam number)
+        String shopName = udyamNumber;
+        if (parsedData != null && parsedData.getEnterpriseName() != null && !parsedData.getEnterpriseName().isBlank()) {
+            shopName = parsedData.getEnterpriseName();
+        }
+        shop.setShopName(shopName);
+
+        // Owner name = Entrepreneur Name (fallback to user name)
+        shop.setOwnerName(user.getUserName());
+
+        // Mobile = user's mobile
+        shop.setMobile(user.getMobileNumber());
+
+        // Category = Major Activity (fallback to GENERAL STORE)
+        String category = "GENERAL STORE";
+        if (parsedData != null && parsedData.getMajorActivity() != null && !parsedData.getMajorActivity().isBlank()) {
+            category = parsedData.getMajorActivity();
+        }
+        shop.setCategory(category.toUpperCase());
+
+        // Scale = Enterprise Type (Micro/Small/Medium -> BUSINESS_SCALE enum)
+        BusinessScale scale = BusinessScale.MICRO; // default
+        if (parsedData != null && parsedData.getEnterpriseType() != null) {
+            try {
+                scale = BusinessScale.valueOf(parsedData.getEnterpriseType().trim().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                // Try partial match
+                String typeLower = parsedData.getEnterpriseType().toLowerCase();
+                if (typeLower.contains("small")) {
+                    scale = BusinessScale.SMALL;
+                } else if (typeLower.contains("medium")) {
+                    scale = BusinessScale.MEDIUM;
+                } else if (typeLower.contains("large")) {
+                    scale = BusinessScale.LARGE;
+                } else {
+                    scale = BusinessScale.MICRO;
+                }
+            }
+        }
+        shop.setScale(scale);
+
+        // State, City, District, Pincode, Address
+        if (parsedData != null) {
+            shop.setState(parsedData.getState() != null ? parsedData.getState() : "India");
+            shop.setCity(parsedData.getCity() != null ? parsedData.getCity() :
+                         (parsedData.getDistrict() != null ? parsedData.getDistrict() : "Unknown"));
+            shop.setAddress(parsedData.getAddress() != null ? parsedData.getAddress() : "");
+            shop.setPincode(parsedData.getPincode());
+        } else {
+            shop.setState("India");
+            shop.setCity("Unknown");
+            shop.setAddress("");
+        }
+
+        shop.setOwner(user);
+
+        return shopRepository.save(shop);
+    }
+
+    /**
+     * Creates all required document records for the shop.
+     * MSME document is marked as VERIFIED with the PDF URL.
+     * All other required documents are marked as NOT_UPLOADED.
+     */
+    private void createRequiredDocuments(Shop shop, String pdfUrl, String udyamNumber) {
+        // Get required document types for this shop's category and scale
+        Set<DocumentType> requiredTypes = requiredDocumentService.getRequiredDocuments(
+                shop.getCategory(), shop.getScale());
+
+        LocalDateTime now = LocalDateTime.now();
+
+        for (DocumentType type : requiredTypes) {
+            Document doc = new Document(shop, type);
+
+            if (type == DocumentType.MSME) {
+                // MSME document is verified with the certificate PDF
+                doc.setStatus(DocumentStatus.VALID);
+                doc.setDocumentNumber(udyamNumber);
+                doc.setFileUrl(pdfUrl);
+                doc.setFileName("Udyam_Certificate_" + udyamNumber + ".pdf");
+                doc.setIssueDate(now);
+            } else {
+                // Other documents are pending upload
+                doc.setStatus(DocumentStatus.NOT_UPLOADED);
+            }
+
+            doc.setUploadedAt(now);
+            doc.setUpdatedAt(now);
+            documentRepository.save(doc);
+        }
     }
 
     private static String normalizeEmail(String raw) {
