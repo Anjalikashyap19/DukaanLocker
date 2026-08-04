@@ -261,6 +261,7 @@ public class AuthService {
             msmeAuth.setEnterpriseName(parsedData.getEnterpriseName());
             msmeAuth.setEntrepreneurName(parsedData.getEntrepreneurName());
         }
+        msmeAuth.setEmailId(savedUser.getEmailId());
         msmeAuth.setShopId(savedShop.getId());
         msmeAuth.setShopName(savedShop.getShopName());
         msmeAuth.setShopCategory(savedShop.getCategory());
@@ -274,6 +275,7 @@ public class AuthService {
     /**
      * Creates a new User account from MSME parsed data.
      * Uses entrepreneur name as userName, generates a local email.
+     * Falls back to enterprise name or generic "MSME Owner" if entrepreneur name is missing.
      */
     private User createMsmeUser(String mobile, String password, MsmeParsedData parsedData) {
         if (userRepository.existsByMobileNumber(mobile)) {
@@ -292,9 +294,14 @@ public class AuthService {
             }
         }
 
+        // Use email from MSME HTML if available, otherwise generate a dummy email
         String email = "msme_" + mobile + "@dukaanlocker.local";
         if (parsedData != null && parsedData.getEmailId() != null && !parsedData.getEmailId().isBlank()) {
-            email = parsedData.getEmailId();
+            email = parsedData.getEmailId().toLowerCase();
+            // Check if email already exists, if so append mobile suffix
+            if (userRepository.existsByEmailId(email)) {
+                email = "msme_" + mobile + "@dukaanlocker.local";
+            }
         }
 
         User user = new User();
@@ -310,6 +317,7 @@ public class AuthService {
 
     /**
      * Creates a Shop linked to the user with enterprise details parsed from MSME data.
+     * Falls back to sensible defaults for any missing fields.
      */
     private Shop createMsmeShop(User user, MsmeParsedData parsedData, String udyamNumber) {
         Shop shop = new Shop();
@@ -327,10 +335,10 @@ public class AuthService {
         // Mobile = user's mobile
         shop.setMobile(user.getMobileNumber());
 
-        // Category = Major Activity (fallback to GENERAL STORE)
+        // Category = Major Activity mapped to DukaanLocker category (fallback to GENERAL STORE)
         String category = "GENERAL STORE";
         if (parsedData != null && parsedData.getMajorActivity() != null && !parsedData.getMajorActivity().isBlank()) {
-            category = parsedData.getMajorActivity();
+            category = MsmeDataParser.mapToDukaanLockerCategory(parsedData.getMajorActivity());
         }
         shop.setCategory(category.toUpperCase());
 
@@ -355,16 +363,18 @@ public class AuthService {
         }
         shop.setScale(scale);
 
-        // State, City, District, Pincode, Address
+        // State, City, District, Pincode, Address with sensible defaults
         if (parsedData != null) {
-            shop.setState(parsedData.getState() != null ? parsedData.getState() : "India");
-            shop.setCity(parsedData.getCity() != null ? parsedData.getCity() :
-                         (parsedData.getDistrict() != null ? parsedData.getDistrict() : "Unknown"));
+            shop.setState(parsedData.getState() != null && !parsedData.getState().isBlank()
+                         ? parsedData.getState() : "India");
+            shop.setCity(parsedData.getCity() != null && !parsedData.getCity().isBlank() ? parsedData.getCity() :
+                         (parsedData.getDistrict() != null && !parsedData.getDistrict().isBlank()
+                          ? parsedData.getDistrict() : "Not Specified"));
             shop.setAddress(parsedData.getAddress() != null ? parsedData.getAddress() : "");
             shop.setPincode(parsedData.getPincode());
         } else {
             shop.setState("India");
-            shop.setCity("Unknown");
+            shop.setCity("Not Specified");
             shop.setAddress("");
         }
 
@@ -388,9 +398,9 @@ public class AuthService {
         for (DocumentType type : requiredTypes) {
             Document doc = new Document(shop, type);
 
-            if (type == DocumentType.MSME) {
-                // MSME document is verified with the certificate PDF
-                doc.setStatus(DocumentStatus.VALID);
+            if (type == DocumentType.MSME_CERTIFICATE) {
+                // MSME certificate is uploaded with the PDF from S3
+                doc.setStatus(DocumentStatus.UPLOADED);
                 doc.setDocumentNumber(udyamNumber);
                 doc.setFileUrl(pdfUrl);
                 doc.setFileName("Udyam_Certificate_" + udyamNumber + ".pdf");

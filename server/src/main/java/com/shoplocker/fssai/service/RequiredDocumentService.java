@@ -77,7 +77,7 @@ public class RequiredDocumentService {
                 DocumentType.GST,
                 DocumentType.FSSAI_FOOD_LICENSE,
                 DocumentType.TRADE_LICENSE,
-                DocumentType.MSME,
+                DocumentType.MSME_CERTIFICATE,
                 DocumentType.SHOP_INSURANCE);
         CATEGORY_DOCUMENTS.put("GROCERY", grocery);
 
@@ -88,7 +88,7 @@ public class RequiredDocumentService {
                 DocumentType.GST,
                 DocumentType.FSSAI_FOOD_LICENSE,
                 DocumentType.TRADE_LICENSE,
-                DocumentType.MSME,
+                DocumentType.MSME_CERTIFICATE,
                 DocumentType.FIRE_SAFETY,
                 DocumentType.SHOP_INSURANCE);
         CATEGORY_DOCUMENTS.put("RESTAURANT", restaurant);
@@ -99,7 +99,7 @@ public class RequiredDocumentService {
                 DocumentType.PAN,
                 DocumentType.GST,
                 DocumentType.IEC,
-                DocumentType.MSME,
+                DocumentType.MSME_CERTIFICATE,
                 DocumentType.TRADE_LICENSE);
         CATEGORY_DOCUMENTS.put("IMPORT_EXPORT", importExport);
 
@@ -109,7 +109,7 @@ public class RequiredDocumentService {
                 DocumentType.PAN,
                 DocumentType.GST,
                 DocumentType.TRADE_LICENSE,
-                DocumentType.MSME,
+                DocumentType.MSME_CERTIFICATE,
                 DocumentType.IEC,
                 DocumentType.POLLUTION_CONTROL,
                 DocumentType.FIRE_SAFETY,
@@ -123,7 +123,7 @@ public class RequiredDocumentService {
                 DocumentType.GST,
                 DocumentType.DRUG_LICENSE,
                 DocumentType.TRADE_LICENSE,
-                DocumentType.MSME,
+                DocumentType.MSME_CERTIFICATE,
                 DocumentType.SHOP_INSURANCE);
         CATEGORY_DOCUMENTS.put("MEDICAL", medical);
         CATEGORY_DOCUMENTS.put("PHARMACY", medical);
@@ -134,7 +134,7 @@ public class RequiredDocumentService {
                 DocumentType.PAN,
                 DocumentType.GST,
                 DocumentType.TRADE_LICENSE,
-                DocumentType.MSME);
+                DocumentType.MSME_CERTIFICATE);
         CATEGORY_DOCUMENTS.put("CLOTHING", clothing);
 
         // FASHION — Jewellery & cosmetics need trademark for brand protection
@@ -143,7 +143,7 @@ public class RequiredDocumentService {
                 DocumentType.PAN,
                 DocumentType.GST,
                 DocumentType.TRADE_LICENSE,
-                DocumentType.MSME,
+                DocumentType.MSME_CERTIFICATE,
                 DocumentType.TRADEMARK,
                 DocumentType.SHOP_INSURANCE);
         CATEGORY_DOCUMENTS.put("FASHION", fashion);
@@ -154,7 +154,7 @@ public class RequiredDocumentService {
                 DocumentType.PAN,
                 DocumentType.GST,
                 DocumentType.TRADE_LICENSE,
-                DocumentType.MSME,
+                DocumentType.MSME_CERTIFICATE,
                 DocumentType.TRADEMARK,
                 DocumentType.SHOP_INSURANCE);
         CATEGORY_DOCUMENTS.put("ELECTRONICS", electronics);
@@ -165,7 +165,7 @@ public class RequiredDocumentService {
                 DocumentType.PAN,
                 DocumentType.GST,
                 DocumentType.TRADE_LICENSE,
-                DocumentType.MSME,
+                DocumentType.MSME_CERTIFICATE,
                 DocumentType.POLLUTION_CONTROL,
                 DocumentType.SHOP_INSURANCE);
         CATEGORY_DOCUMENTS.put("HARDWARE", hardware);
@@ -176,7 +176,7 @@ public class RequiredDocumentService {
                 DocumentType.PAN,
                 DocumentType.GST,
                 DocumentType.TRADE_LICENSE,
-                DocumentType.MSME,
+                DocumentType.MSME_CERTIFICATE,
                 DocumentType.PROFESSIONAL_TAX,
                 DocumentType.SHOP_INSURANCE);
         CATEGORY_DOCUMENTS.put("BEAUTY", beauty);
@@ -187,7 +187,7 @@ public class RequiredDocumentService {
                 DocumentType.PAN,
                 DocumentType.GST,
                 DocumentType.TRADE_LICENSE,
-                DocumentType.MSME,
+                DocumentType.MSME_CERTIFICATE,
                 DocumentType.SHOP_INSURANCE);
         CATEGORY_DOCUMENTS.put("GENERAL_STORE", general);
     }

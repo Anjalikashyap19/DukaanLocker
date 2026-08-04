@@ -229,7 +229,7 @@ public class DocumentValidationService {
             case PAN:                validatePAN(extractedText, originalFileName); break;
             case SHOP_ESTABLISHMENT: validateShopEstablishment(extractedText, originalFileName); break;
             case TRADE_LICENSE:      validateTradeLicense(extractedText, originalFileName); break;
-            case MSME:               validateMSME(extractedText, originalFileName); break;
+            case MSME_CERTIFICATE:    validateMSME(extractedText, originalFileName); break;
             case PROFESSIONAL_TAX:   validateProfessionalTax(extractedText, originalFileName); break;
             case TRADEMARK:          validateTrademark(extractedText, originalFileName); break;
             case PROPERTY_TAX:       validatePropertyTax(extractedText, originalFileName); break;
@@ -348,7 +348,7 @@ public class DocumentValidationService {
             case PAN:                return "PAN Card";
             case SHOP_ESTABLISHMENT: return "Shop & Establishment License";
             case TRADE_LICENSE:      return "Trade License";
-            case MSME:               return "Udyam MSME Registration";
+            case MSME_CERTIFICATE:    return "Udyam MSME Registration";
             case PROFESSIONAL_TAX:   return "Professional Tax Registration";
             case TRADEMARK:          return "Trademark Certificate";
             case PROPERTY_TAX:       return "Property Tax Certificate";

@@ -5,7 +5,7 @@ public enum DocumentType {
     PAN,
     SHOP_ESTABLISHMENT,
     TRADE_LICENSE,
-    MSME,
+    MSME_CERTIFICATE,
     PROFESSIONAL_TAX,
     TRADEMARK,
     PROPERTY_TAX,

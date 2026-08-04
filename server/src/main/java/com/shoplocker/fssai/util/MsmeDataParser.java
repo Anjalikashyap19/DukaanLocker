@@ -8,6 +8,8 @@ import org.jsoup.select.Elements;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -39,8 +41,158 @@ public final class MsmeDataParser {
     private static final Pattern PINCODE_PATTERN = Pattern.compile(
             "\\b\\d{6}\\b");
 
+    // NIC 2-digit code pattern (e.g., "47 - Retail trade")
+    private static final Pattern NIC_2DIGIT_PATTERN = Pattern.compile(
+            "\\b\\d{2}\\s*[-–:]\\s*[A-Za-z]", Pattern.CASE_INSENSITIVE);
+
+    // NIC 4-digit code pattern (e.g., "4751 - Retail sale of textiles")
+    private static final Pattern NIC_4DIGIT_PATTERN = Pattern.compile(
+            "\\b\\d{4}\\s*[-–:]\\s*[A-Za-z]", Pattern.CASE_INSENSITIVE);
+
+    // NIC 5-digit code pattern (e.g., "47510 - Retail sale of textiles")
+    private static final Pattern NIC_5DIGIT_PATTERN = Pattern.compile(
+            "\\b\\d{5}\\s*[-–:]\\s*[A-Za-z]", Pattern.CASE_INSENSITIVE);
+
+    // ─── NIC Activity to DukaanLocker Category Mapping ──────────────────
+    private static final Map<String, String> NIC_CATEGORY_MAP = new HashMap<>();
+
+    static {
+        // Retail & Trading
+        NIC_CATEGORY_MAP.put("RETAIL", "GENERAL STORE");
+        NIC_CATEGORY_MAP.put("WHOLESALE", "GENERAL STORE");
+        NIC_CATEGORY_MAP.put("TRADING", "GENERAL STORE");
+        NIC_CATEGORY_MAP.put("COMMERCE", "GENERAL STORE");
+        NIC_CATEGORY_MAP.put("SHOP", "GENERAL STORE");
+        NIC_CATEGORY_MAP.put("STORE", "GENERAL STORE");
+        NIC_CATEGORY_MAP.put("MARKET", "GENERAL STORE");
+
+        // Food & Grocery
+        NIC_CATEGORY_MAP.put("FOOD", "GROCERY");
+        NIC_CATEGORY_MAP.put("GROCERY", "GROCERY");
+        NIC_CATEGORY_MAP.put("PROVISION", "GROCERY");
+        NIC_CATEGORY_MAP.put("KIRANA", "GROCERY");
+        NIC_CATEGORY_MAP.put("FRUIT", "GROCERY");
+        NIC_CATEGORY_MAP.put("VEGETABLE", "GROCERY");
+        NIC_CATEGORY_MAP.put("DAIRY", "GROCERY");
+        NIC_CATEGORY_MAP.put("MILK", "GROCERY");
+        NIC_CATEGORY_MAP.put("BAKERY", "RESTAURANT");
+
+        // Restaurant & Hospitality
+        NIC_CATEGORY_MAP.put("RESTAURANT", "RESTAURANT");
+        NIC_CATEGORY_MAP.put("HOTEL", "RESTAURANT");
+        NIC_CATEGORY_MAP.put("CAFE", "RESTAURANT");
+        NIC_CATEGORY_MAP.put("FOOD SERVICE", "RESTAURANT");
+        NIC_CATEGORY_MAP.put("CATERING", "RESTAURANT");
+        NIC_CATEGORY_MAP.put("LODGING", "RESTAURANT");
+        NIC_CATEGORY_MAP.put("HOSPITALITY", "RESTAURANT");
+
+        // Manufacturing
+        NIC_CATEGORY_MAP.put("MANUFACTURING", "MANUFACTURING");
+        NIC_CATEGORY_MAP.put("PRODUCTION", "MANUFACTURING");
+        NIC_CATEGORY_MAP.put("FACTORY", "MANUFACTURING");
+        NIC_CATEGORY_MAP.put("INDUSTRY", "MANUFACTURING");
+        NIC_CATEGORY_MAP.put("PROCESSING", "MANUFACTURING");
+        NIC_CATEGORY_MAP.put("ASSEMBLY", "MANUFACTURING");
+        NIC_CATEGORY_MAP.put("FABRICATION", "MANUFACTURING");
+        NIC_CATEGORY_MAP.put("WORKSHOP", "MANUFACTURING");
+
+        // Healthcare & Medical
+        NIC_CATEGORY_MAP.put("HEALTH", "MEDICAL");
+        NIC_CATEGORY_MAP.put("MEDICAL", "MEDICAL");
+        NIC_CATEGORY_MAP.put("CLINIC", "MEDICAL");
+        NIC_CATEGORY_MAP.put("HOSPITAL", "MEDICAL");
+        NIC_CATEGORY_MAP.put("DIAGNOSTIC", "MEDICAL");
+        NIC_CATEGORY_MAP.put("PATHOLOGY", "MEDICAL");
+        NIC_CATEGORY_MAP.put("PHARMA", "PHARMACY");
+        NIC_CATEGORY_MAP.put("PHARMACY", "PHARMACY");
+        NIC_CATEGORY_MAP.put("DRUG", "PHARMACY");
+        NIC_CATEGORY_MAP.put("MEDICINE", "PHARMACY");
+
+        // IT & Software
+        NIC_CATEGORY_MAP.put("IT", "GENERAL STORE");
+        NIC_CATEGORY_MAP.put("SOFTWARE", "GENERAL STORE");
+        NIC_CATEGORY_MAP.put("TECHNOLOGY", "GENERAL STORE");
+        NIC_CATEGORY_MAP.put("DIGITAL", "GENERAL STORE");
+        NIC_CATEGORY_MAP.put("COMPUTER", "GENERAL STORE");
+        NIC_CATEGORY_MAP.put("CONSULTANCY", "GENERAL STORE");
+        NIC_CATEGORY_MAP.put("SERVICES", "GENERAL STORE");
+
+        // Electronics
+        NIC_CATEGORY_MAP.put("ELECTRONICS", "ELECTRONICS");
+        NIC_CATEGORY_MAP.put("ELECTRICAL", "ELECTRONICS");
+        NIC_CATEGORY_MAP.put("TELECOM", "ELECTRONICS");
+        NIC_CATEGORY_MAP.put("MOBILE", "ELECTRONICS");
+        NIC_CATEGORY_MAP.put("APPLIANCE", "ELECTRONICS");
+
+        // Clothing & Fashion
+        NIC_CATEGORY_MAP.put("TEXTILE", "CLOTHING");
+        NIC_CATEGORY_MAP.put("GARMENT", "CLOTHING");
+        NIC_CATEGORY_MAP.put("CLOTHING", "CLOTHING");
+        NIC_CATEGORY_MAP.put("APPAREL", "CLOTHING");
+        NIC_CATEGORY_MAP.put("WEAVING", "CLOTHING");
+        NIC_CATEGORY_MAP.put("FASHION", "FASHION");
+        NIC_CATEGORY_MAP.put("JEWELLERY", "FASHION");
+        NIC_CATEGORY_MAP.put("COSMETIC", "FASHION");
+        NIC_CATEGORY_MAP.put("ACCESSORIES", "FASHION");
+
+        // Hardware & Construction
+        NIC_CATEGORY_MAP.put("CONSTRUCTION", "HARDWARE");
+        NIC_CATEGORY_MAP.put("HARDWARE", "HARDWARE");
+        NIC_CATEGORY_MAP.put("BUILDING", "HARDWARE");
+        NIC_CATEGORY_MAP.put("CEMENT", "HARDWARE");
+        NIC_CATEGORY_MAP.put("STEEL", "HARDWARE");
+        NIC_CATEGORY_MAP.put("IRON", "HARDWARE");
+
+        // Beauty
+        NIC_CATEGORY_MAP.put("BEAUTY", "BEAUTY");
+        NIC_CATEGORY_MAP.put("SALON", "BEAUTY");
+        NIC_CATEGORY_MAP.put("PARLOUR", "BEAUTY");
+        NIC_CATEGORY_MAP.put("SPA", "BEAUTY");
+        NIC_CATEGORY_MAP.put("PERSONAL CARE", "BEAUTY");
+
+        // Import Export
+        NIC_CATEGORY_MAP.put("IMPORT", "IMPORT_EXPORT");
+        NIC_CATEGORY_MAP.put("EXPORT", "IMPORT_EXPORT");
+        NIC_CATEGORY_MAP.put("LOGISTICS", "IMPORT_EXPORT");
+        NIC_CATEGORY_MAP.put("TRANSPORT", "IMPORT_EXPORT");
+        NIC_CATEGORY_MAP.put("COURIER", "IMPORT_EXPORT");
+        NIC_CATEGORY_MAP.put("WAREHOUSE", "IMPORT_EXPORT");
+        NIC_CATEGORY_MAP.put("AGRICULTURE", "IMPORT_EXPORT");
+        NIC_CATEGORY_MAP.put("FARMING", "IMPORT_EXPORT");
+    }
+
     private MsmeDataParser() {
         // utility class
+    }
+
+    /**
+     * Maps a Major Activity or NIC code description to the closest DukaanLocker category.
+     * Returns "GENERAL STORE" if no match is found.
+     *
+     * @param activity the Major Activity or NIC description from MSME certificate
+     * @return mapped DukaanLocker category (e.g., "GROCERY", "RESTAURANT", etc.)
+     */
+    public static String mapToDukaanLockerCategory(String activity) {
+        if (activity == null || activity.isBlank()) {
+            return "GENERAL STORE";
+        }
+        String activityUpper = activity.trim().toUpperCase();
+
+        // Direct match first
+        String directMatch = NIC_CATEGORY_MAP.get(activityUpper);
+        if (directMatch != null) {
+            return directMatch;
+        }
+
+        // Partial match - check if any keyword from the map appears in the activity
+        for (Map.Entry<String, String> entry : NIC_CATEGORY_MAP.entrySet()) {
+            if (activityUpper.contains(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+
+        // Default fallback
+        return "GENERAL STORE";
     }
 
     /**
@@ -187,10 +339,29 @@ public final class MsmeDataParser {
                 data.setPincode(m.group());
             }
         }
-        // Major Activity
+        // Major Activity / NIC Code
         else if (label.contains("major activity") || label.contains("business activity")
-                || label.contains("nic code") || label.contains("activity type")) {
-            data.setMajorActivity(value);
+                || label.contains("nic code") || label.contains("activity type")
+                || label.contains("nic 2 digit") || label.contains("nic 4 digit")
+                || label.contains("nic 5 digit") || label.contains("activity")) {
+            // If the value contains a NIC code pattern, extract the description
+            Matcher nicMatcher = NIC_5DIGIT_PATTERN.matcher(value);
+            if (nicMatcher.find()) {
+                // Use the full NIC description
+                data.setMajorActivity(value);
+            } else {
+                nicMatcher = NIC_4DIGIT_PATTERN.matcher(value);
+                if (nicMatcher.find()) {
+                    data.setMajorActivity(value);
+                } else {
+                    nicMatcher = NIC_2DIGIT_PATTERN.matcher(value);
+                    if (nicMatcher.find()) {
+                        data.setMajorActivity(value);
+                    } else {
+                        data.setMajorActivity(value);
+                    }
+                }
+            }
         }
         // Enterprise Type (Micro/Small/Medium)
         else if (label.contains("type of enterprise") || label.contains("enterprise type")

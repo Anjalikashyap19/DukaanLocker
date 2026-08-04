@@ -13,6 +13,7 @@ public class MsmeAuthResponse extends AuthResponse {
     private String udyamNumber;
     private String enterpriseName;
     private String entrepreneurName;
+    private String emailId;
     private Long shopId;
     private String shopName;
     private String shopCategory;
@@ -42,6 +43,9 @@ public class MsmeAuthResponse extends AuthResponse {
 
     public String getEntrepreneurName() { return entrepreneurName; }
     public void setEntrepreneurName(String entrepreneurName) { this.entrepreneurName = entrepreneurName; }
+
+    public String getEmailId() { return emailId; }
+    public void setEmailId(String emailId) { this.emailId = emailId; }
 
     public Long getShopId() { return shopId; }
     public void setShopId(Long shopId) { this.shopId = shopId; }

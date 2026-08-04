@@ -37,7 +37,7 @@ public class MSMEDocumentService {
         documentValidationService.assertPdfMagicBytes(fileBytes, "Udyam MSME Registration");
 
         String extractedText = textractService.extractText(fileBytes, file.getOriginalFilename());
-        documentValidationService.validate(DocumentType.MSME, extractedText, file.getOriginalFilename());
+        documentValidationService.validate(DocumentType.MSME_CERTIFICATE, extractedText, file.getOriginalFilename());
 
         Shop shop = shopService.getShopById(shopId);
         Optional<MSMEDocument> existing = msmeDocumentRepository.findByShop(shop);
