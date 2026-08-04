@@ -384,6 +384,11 @@ public class UdyamVerificationService {
             doc.select("link[rel=stylesheet]").remove();
             doc.select("meta[http-equiv]").remove();
 
+            // Must serialize as XML: jsoup's default HTML5 syntax emits unclosed void
+            // tags (<input>, <img>, <br>) which OpenHTMLtoPDF's strict XML/TRaX parser
+            // rejects with a SAXParseException -> 500. XML syntax self-closes them.
+            doc.outputSettings().syntax(Document.OutputSettings.Syntax.xml);
+
             // Find the certificate content — typically inside a div with id containing
             // "ContentPlaceHolder1" or a table with the certificate
             String bodyContent = doc.body().html();
