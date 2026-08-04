@@ -2,7 +2,6 @@ package com.shoplocker.fssai.service;
 
 import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
-import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
 import org.apache.pdfbox.rendering.ImageType;
@@ -42,7 +41,7 @@ public class PdfPreprocessor {
                     "The uploaded PDF is empty. Please upload a non-empty file.",
                     FailureCode.INVALID_FILE_FORMAT);
         }
-        try (PDDocument document = Loader.loadPDF(pdfBytes)) {
+        try (PDDocument document = PDDocument.load(pdfBytes)) {
             int pageCount = document.getNumberOfPages();
             if (pageCount > MAX_PAGES) {
                 throw new FssaiException(
@@ -53,10 +52,7 @@ public class PdfPreprocessor {
             PDFRenderer pdfRenderer = new PDFRenderer(document);
             List<byte[]> images = new ArrayList<>(pageCount);
             for (int page = 0; page < pageCount; page++) {
-                // renderImage(page, scale) is the forward-compat form in PDFBox 3.x
-                // (200 DPI / 72 base = ~2.78x scale; renderImageWithDPI is deprecated in 3.0.4).
-                // Use the explicit 3-arg form (scale + color space) instead of the
-                // deprecated renderImageWithDPI, but keep the same RGB output and 200 DPI.
+                // renderImage(page, scale, ImageType) keeps 200 DPI RGB output (200 / 72 = ~2.78x).
                 BufferedImage bim = pdfRenderer.renderImage(page, RASTER_DPI / 72.0f, ImageType.RGB);
                 try {
                     ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -78,7 +74,7 @@ public class PdfPreprocessor {
                     FailureCode.UNSUPPORTED_DOCUMENT_FORMAT, e);
         } catch (IOException | RuntimeException e) {
             // PDFBox parse failure: IOException (corrupted bytes) or RuntimeException
-            // subclass (PDFBox 3.x throws IllegalArgumentException / NPE for missing required
+            // subclass (PDFBox throws IllegalArgumentException / NPE for missing required
             // PDF structure). All indicate a client-bad PDF - map to 400, not 500.
             throw new FssaiException(
                     "The uploaded PDF appears to be corrupted and could not be processed. "

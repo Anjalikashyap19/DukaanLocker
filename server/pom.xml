@@ -107,10 +107,16 @@
 			<version>4.0.0</version>
 		</dependency>
 
-	        <dependency>
+	        <!-- PDFBox must stay on the 2.x line: openhtmltopdf-pdfbox 1.0.10 is compiled
+	             against Apache PDF-BOX 2 (pdfbox.version=2.0.24 in its POM) and is not
+	             binary-compatible with PDFBox 3.x. Forcing 3.x here overrides the transitive
+	             2.x and breaks PdfRendererBuilder at runtime (NoSuchMethodError -> HTTP 500).
+	             PdfPreprocessor uses the 2.x API (PDDocument.load) accordingly. 2.0.27 is the
+	             latest 2.x with security fixes. -->
+        <dependency>
             <groupId>org.apache.pdfbox</groupId>
             <artifactId>pdfbox</artifactId>
-            <version>3.0.4</version>
+            <version>2.0.27</version>
         </dependency>
 
         <!-- OpenHTMLtoPDF — HTML/XHTML to PDF rendering for MSME certificate generation.
