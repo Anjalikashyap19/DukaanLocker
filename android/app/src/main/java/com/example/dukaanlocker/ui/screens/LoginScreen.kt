@@ -826,8 +826,8 @@ private fun RegisterForm(
                                 Text("Loading government captcha...", fontSize = 12.sp, color = colors.textSecondary)
                             }
                         }
-                    } else if (isGovCaptcha && captchaCode.contains("data:image")) {
-                        // Government captcha image from base64
+                    } else if (isGovCaptcha && (captchaCode.contains("data:image") || captchaCode.startsWith("http"))) {
+                        // Government captcha image from base64 or URL
                         GovCaptchaBox(
                             captchaBase64 = captchaCode,
                             colors = colors,
@@ -964,6 +964,38 @@ private fun GovCaptchaBox(
     colors: AppColors,
     onRefresh: () -> Unit
 ) {
+    val imageBytes = remember(captchaBase64) {
+        if (captchaBase64.startsWith("data:")) {
+            runCatching {
+                val b64 = captchaBase64.substringAfter(',')
+                val decoded = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+                // PNG IEND chunk signature: 49 45 4E 44 AE 42 60 82
+                val iendSignature = byteArrayOf(
+                    0x49, 0x45, 0x4E, 0x44,
+                    0xAE.toByte(), 0x42, 0x60, 0x82.toByte()
+                )
+                var iend = -1
+                if (decoded.size >= iendSignature.size) {
+                    for (i in 0..decoded.size - iendSignature.size) {
+                        var match = true
+                        for (j in iendSignature.indices) {
+                            if (decoded[i + j] != iendSignature[j]) {
+                                match = false
+                                break
+                            }
+                        }
+                        if (match) {
+                            iend = i
+                            break
+                        }
+                    }
+                }
+                if (iend > 0) decoded.copyOfRange(0, iend + iendSignature.size) else decoded
+            }.getOrNull()
+        } else {
+            null
+        }
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -979,14 +1011,31 @@ private fun GovCaptchaBox(
                 .border(1.dp, colors.primary.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
-            coil.compose.AsyncImage(
-                model = captchaBase64,
-                contentDescription = "Government CAPTCHA from Udyam portal",
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(4.dp),
-                contentScale = androidx.compose.ui.layout.ContentScale.Fit
-            )
+            when {
+                imageBytes != null -> coil.compose.AsyncImage(
+                    model = imageBytes,
+                    contentDescription = "Government CAPTCHA from Udyam portal",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(4.dp),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                )
+                captchaBase64.startsWith("http") -> coil.compose.AsyncImage(
+                    model = captchaBase64,
+                    contentDescription = "Government CAPTCHA from Udyam portal",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(4.dp),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                )
+                else -> Text(
+                    "Couldn't load captcha. Tap refresh to retry.",
+                    fontSize = 11.sp,
+                    color = colors.textSecondary,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+            }
         }
         IconButton(
             onClick = onRefresh,
