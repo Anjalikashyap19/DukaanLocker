@@ -58,7 +58,8 @@ data class DocumentItem(
     val status: String = "MISSING",  // "MISSING", "FETCHED", "UPLOADED"
     val regNumber: String = "",
     val expiryDate: String = "",
-    val issueDate: String = ""
+    val issueDate: String = "",
+    val fileUrl: String? = null
 )
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
@@ -500,15 +501,23 @@ fun docDescription(type: String): String = when (type) {
     "ShopEstablishment" -> "Local municipal trade license for shops & commercial establishments"
     "GST" -> "Tax registration for businesses above threshold"
     "FSSAI" -> "Food Safety and Standards compliance — Food business registration"
+    "FSSAI_FOOD_LICENSE" -> "Food Safety and Standards compliance — Food business registration"
     "DrugLicense" -> "Mandatory for selling, stocking or manufacturing medicines & pharma"
+    "DRUG_LICENSE" -> "Mandatory for selling, stocking or manufacturing medicines & pharma"
     "HealthTrade" -> "Municipal health & hygiene permit for beauty & wellness"
     "TradeLicense" -> "Municipal trade license for specific business operations"
+    "TRADE_LICENSE" -> "Municipal trade license for specific business operations"
     "FireNOC" -> "Safety clearance from fire department"
+    "FIRE_SAFETY" -> "Safety clearance from fire department"
     "Udyam" -> "Government MSME registration portal (optional but recommended)"
+    "MSME" -> "Government MSME registration portal (optional but recommended)"
+    "MSME_CERTIFICATE" -> "MSME Udyam Registration Certificate — verified from government portal"
     "LabourLicense" -> "Registration under Contract Labour Act for hired workers"
+    "LABOUR_LICENSE" -> "Registration under Contract Labour Act for hired workers"
     "FactoryLicense" -> "License for manufacturing unit under Factories Act"
     "EatingHouse" -> "License for restaurants, hotels and eating establishments"
     "PollutionControl" -> "Consent from State Pollution Control Board"
+    "POLLUTION_CONTROL" -> "Consent from State Pollution Control Board"
     "ContractorLicense" -> "License for building and construction contractors"
     "BuildingPermit" -> "Approved building plan or construction permit"
     "BuildingSafety" -> "Building safety and structural stability certificate"
@@ -531,6 +540,11 @@ fun docDescription(type: String): String = when (type) {
     "TAN" -> "Tax Deduction and Collection Account Number for TDS compliance"
     "NGO_DAR" -> "NGO Darpan Registration for charitable organisations"
     "FCRA" -> "FCRA (Foreign Contribution Regulation Act) registration"
+    "IEC" -> "Import Export Code for international trade"
+    "TRADEMARK" -> "Trademark registration for brand protection"
+    "PROFESSIONAL_TAX" -> "Professional Tax registration for business operations"
+    "PROPERTY_TAX" -> "Property Tax certificate for owned premises"
+    "SHOP_INSURANCE" -> "Shop insurance policy for business protection"
     else -> "Government compliance certificate"
 }
 

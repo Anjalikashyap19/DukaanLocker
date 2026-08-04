@@ -195,7 +195,15 @@ data class MsmeAuthResponse(
     @SerializedName("emailId") val emailId: String,
     @SerializedName("role") val role: String,
     @SerializedName("certificatePdfUrl") val certificatePdfUrl: String?,
-    @SerializedName("udyamNumber") val udyamNumber: String?
+    @SerializedName("udyamNumber") val udyamNumber: String?,
+    @SerializedName("enterpriseName") val enterpriseName: String?,
+    @SerializedName("entrepreneurName") val entrepreneurName: String?,
+    @SerializedName("shopId") val shopId: Long?,
+    @SerializedName("shopName") val shopName: String?,
+    @SerializedName("shopCategory") val shopCategory: String?,
+    @SerializedName("shopState") val shopState: String?,
+    @SerializedName("shopCity") val shopCity: String?,
+    @SerializedName("shopAddress") val shopAddress: String?
 )
 
 fun <T> retrofit2.Response<T>.parseErrorMessage(): String {

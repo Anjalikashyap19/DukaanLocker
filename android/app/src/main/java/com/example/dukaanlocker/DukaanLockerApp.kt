@@ -353,11 +353,19 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                                 currentUserEmail = auth.emailId
                                                 currentUserRole = auth.role
                                                 isLoggedIn = true
-                                                currentScreen = "wizard"
-                                                val certMsg = if (!auth.certificatePdfUrl.isNullOrBlank()) {
-                                                    "\nCertificate PDF: ${auth.certificatePdfUrl}"
+                                                // After MSME registration, shop is already created on backend
+                                                // Skip wizard and go directly to owner_home
+                                                currentScreen = "owner_home"
+                                                // Load shops and documents
+                                                loadShops()
+                                                if (auth.role == "ADMIN") loadManagers()
+                                                val shopInfo = if (!auth.shopName.isNullOrBlank()) {
+                                                    "\nShop: ${auth.shopName}"
                                                 } else ""
-                                                Toast.makeText(context, "MSME verified! Welcome, ${auth.userName}!$certMsg", Toast.LENGTH_LONG).show()
+                                                val certMsg = if (!auth.certificatePdfUrl.isNullOrBlank()) {
+                                                    "\nCertificate: ${auth.certificatePdfUrl}"
+                                                } else ""
+                                                Toast.makeText(context, "MSME verified! Welcome, ${auth.userName}!$shopInfo$certMsg", Toast.LENGTH_LONG).show()
                                             } else {
                                                 Toast.makeText(context, "MSME registration failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
                                             }
@@ -501,7 +509,24 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                         id = doc.id.toString(),
                                         businessId = doc.shopId.toString(),
                                         type = doc.documentType,
-                                        name = doc.documentType.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() },
+                                        name = when (doc.documentType) {
+                                            "MSME_CERTIFICATE" -> "MSME Certificate"
+                                            "GST" -> "GST Registration"
+                                            "PAN" -> "PAN Card"
+                                            "FSSAI_FOOD_LICENSE" -> "FSSAI Food License"
+                                            "TRADE_LICENSE" -> "Trade License"
+                                            "SHOP_ESTABLISHMENT" -> "Shop & Establishment"
+                                            "PROFESSIONAL_TAX" -> "Professional Tax"
+                                            "TRADEMARK" -> "Trademark"
+                                            "PROPERTY_TAX" -> "Property Tax"
+                                            "IEC" -> "Import Export Code"
+                                            "POLLUTION_CONTROL" -> "Pollution Control"
+                                            "FIRE_SAFETY" -> "Fire Safety"
+                                            "LABOUR_LICENSE" -> "Labour License"
+                                            "SHOP_INSURANCE" -> "Shop Insurance"
+                                            "DRUG_LICENSE" -> "Drug License"
+                                            else -> doc.documentType.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }
+                                        },
                                         status = when (doc.status) {
                                             "UPLOADED", "VALID" -> "UPLOADED"
                                             "NOT_UPLOADED" -> "MISSING"
@@ -509,7 +534,8 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                         },
                                         regNumber = doc.documentNumber ?: "",
                                         expiryDate = doc.expiryDate ?: "",
-                                        issueDate = doc.issueDate ?: ""
+                                        issueDate = doc.issueDate ?: "",
+                                        fileUrl = doc.fileUrl
                                     )
                                 },
                                 managers = managers.map { mgr ->
@@ -546,7 +572,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                         shopId = doc.businessId.toLongOrNull() ?: 0,
                                         documentType = doc.type,
                                         fileName = null,
-                                        fileUrl = null,
+                                        fileUrl = doc.fileUrl,
                                         documentNumber = doc.regNumber,
                                         issueDate = doc.issueDate,
                                         expiryDate = doc.expiryDate,
@@ -672,7 +698,24 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                         id = doc.id.toString(),
                                         businessId = doc.shopId.toString(),
                                         type = doc.documentType,
-                                        name = doc.documentType.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() },
+                                        name = when (doc.documentType) {
+                                            "MSME_CERTIFICATE" -> "MSME Certificate"
+                                            "GST" -> "GST Registration"
+                                            "PAN" -> "PAN Card"
+                                            "FSSAI_FOOD_LICENSE" -> "FSSAI Food License"
+                                            "TRADE_LICENSE" -> "Trade License"
+                                            "SHOP_ESTABLISHMENT" -> "Shop & Establishment"
+                                            "PROFESSIONAL_TAX" -> "Professional Tax"
+                                            "TRADEMARK" -> "Trademark"
+                                            "PROPERTY_TAX" -> "Property Tax"
+                                            "IEC" -> "Import Export Code"
+                                            "POLLUTION_CONTROL" -> "Pollution Control"
+                                            "FIRE_SAFETY" -> "Fire Safety"
+                                            "LABOUR_LICENSE" -> "Labour License"
+                                            "SHOP_INSURANCE" -> "Shop Insurance"
+                                            "DRUG_LICENSE" -> "Drug License"
+                                            else -> doc.documentType.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }
+                                        },
                                         status = when (doc.status) {
                                             "UPLOADED", "VALID" -> "UPLOADED"
                                             "NOT_UPLOADED" -> "MISSING"
@@ -680,7 +723,8 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                         },
                                         regNumber = doc.documentNumber ?: "",
                                         expiryDate = doc.expiryDate ?: "",
-                                        issueDate = doc.issueDate ?: ""
+                                        issueDate = doc.issueDate ?: "",
+                                        fileUrl = doc.fileUrl
                                     )
                                 },
                                 onFetchDoc = { doc ->

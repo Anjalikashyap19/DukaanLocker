@@ -670,12 +670,26 @@ private fun DocumentCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
-                        Text("REG: ${doc.regNumber}", fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = colors.textPrimary)
-                        Text("Exp: ${doc.expiryDate}", fontSize = 10.sp, color = colors.textSecondary)
+                        if (doc.regNumber.isNotBlank()) {
+                            Text("REG: ${doc.regNumber}", fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = colors.textPrimary)
+                        }
+                        if (doc.expiryDate.isNotBlank()) {
+                            Text("Exp: ${doc.expiryDate}", fontSize = 10.sp, color = colors.textSecondary)
+                        }
+                        if (doc.status == "UPLOADED" && !doc.fileUrl.isNullOrBlank()) {
+                            Text("✓ Certificate uploaded", fontSize = 10.sp, color = colors.success, fontWeight = FontWeight.Medium)
+                        }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        IconButton(onClick = onView, modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.border)) {
-                            Icon(Icons.Default.Visibility, contentDescription = "View", tint = colors.accent, modifier = Modifier.size(14.dp))
+                        // Show preview button if fileUrl is available
+                        if (!doc.fileUrl.isNullOrBlank()) {
+                            IconButton(onClick = onView, modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.success.copy(alpha = 0.15f))) {
+                                Icon(Icons.Default.Visibility, contentDescription = "Preview Certificate", tint = colors.success, modifier = Modifier.size(14.dp))
+                            }
+                        } else {
+                            IconButton(onClick = onView, modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.border)) {
+                                Icon(Icons.Default.Visibility, contentDescription = "View", tint = colors.accent, modifier = Modifier.size(14.dp))
+                            }
                         }
                         IconButton(onClick = onDelete, modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.border)) {
                             Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
