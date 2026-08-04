@@ -285,13 +285,15 @@ public class UdyamVerificationService {
             post.setEntity(new UrlEncodedFormEntity(params, StandardCharsets.UTF_8));
 
             String verifyResult = client.execute(post, response -> {
+                int status = response.getCode();
+                log.info("Udyam verify HTTP status: {}", status);
                 byte[] bytes = EntityUtils.toByteArray(response.getEntity());
                 return new String(bytes, StandardCharsets.UTF_8);
             });
 
             log.info("Udyam verify response length={}", verifyResult.length());
 
-            // Check for common error patterns
+            // Check for common error patterns (case-insensitive)
             String verifyLower = verifyResult.toLowerCase();
             if (verifyLower.contains("invalid captcha") || verifyLower.contains("wrong captcha")
                     || verifyLower.contains("captcha mismatch") || verifyLower.contains("please enter captcha")) {
@@ -301,6 +303,19 @@ public class UdyamVerificationService {
                     || verifyLower.contains("no record")) {
                 return UdyamVerifyResponse.error("The Udyam number was not found on the government portal. Please check and try again.");
             }
+            // Check if the portal returned an error page or challenge
+            if (verifyLower.contains("access denied") || verifyLower.contains("forbidden")
+                    || verifyLower.contains("blocked") || verifyLower.contains("too many requests")) {
+                return UdyamVerifyResponse.error(
+                        "The government portal is temporarily blocking automated requests. " +
+                        "Please try again in a few minutes.");
+            }
+            // Check for session-expired or viewstate errors
+            if (verifyLower.contains("session has expired") || verifyLower.contains("invalid viewstate")
+                    || verifyLower.contains("validation of viewstate mac failed")) {
+                return UdyamVerifyResponse.error(
+                        "Your verification session has expired. Please go back and load a new CAPTCHA.");
+            }
 
             // ── STEP 4: Fetch print page ──
             HttpGet printRequest = new HttpGet(PRINT_PAGE);
@@ -308,6 +323,8 @@ public class UdyamVerificationService {
             printRequest.setHeader("Upgrade-Insecure-Requests", "1");
 
             String printHtml = client.execute(printRequest, response -> {
+                int status = response.getCode();
+                log.info("Udyam print page HTTP status: {}", status);
                 byte[] bytes = EntityUtils.toByteArray(response.getEntity());
                 return new String(bytes, StandardCharsets.UTF_8);
             });
@@ -318,6 +335,14 @@ public class UdyamVerificationService {
                 return UdyamVerifyResponse.error(
                         "Could not retrieve the MSME certificate from the government portal. " +
                         "Please try again or contact support.");
+            }
+
+            // Check if the print page is actually an error page or login page
+            String printLower = printHtml.toLowerCase();
+            if (printLower.contains("login") && printLower.contains("password")) {
+                return UdyamVerifyResponse.error(
+                        "The government portal session expired before we could retrieve the certificate. " +
+                        "Please try again with a fresh CAPTCHA.");
             }
 
             // ── Convert HTML to PDF ──
