@@ -160,8 +160,13 @@ public class AuthService {
      * Register a new user by verifying their Udyam (MSME) number against the
      * government portal.  On success, the user account is created and a PDF
      * certificate of the MSME registration is stored in S3.
+     *
+     * <p>NOTE: This method is intentionally NOT @Transactional because it makes
+     * external HTTP calls (government portal verification, PDF generation, S3 upload)
+     * that can take minutes. Wrapping those in a transaction would hold a DB connection
+     * open for the entire duration, risking connection pool exhaustion and transaction
+     * timeouts (which manifest as HTTP 500 errors).</p>
      */
-    @Transactional
     public MsmeAuthResponse registerWithMsme(RegisterWithMsmeRequest request,
                                          UdyamVerificationService udyamService) {
         String mobile = request.getMobileNumber() == null ? null : request.getMobileNumber().trim();
@@ -194,16 +199,12 @@ public class AuthService {
         }
 
         // ── Step 2: Register user (role = ADMIN, name extracted from Udyam number) ──
-        String email = "msme_" + mobile + "@dukaanlocker.local";
-        User user = new User();
-        user.setUserName("MSME Owner");  // placeholder — can be updated later
-        user.setMobileNumber(mobile);
-        user.setEmailId(email);
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setRole(Role.ADMIN);
-        user.setEnabled(true);
+        registerMsmeUser(mobile, request.getPassword());
 
-        User saved = userRepository.save(user);
+        User saved = userRepository.findByMobileNumber(mobile)
+                .orElseThrow(() -> new FssaiException(
+                        "User registration failed — please try again",
+                        FailureCode.INTERNAL_ERROR));
         String token = jwtService.generateToken(saved);
 
         log.info("MSME user registered: id={} mobile={} udyam={}",
@@ -213,6 +214,31 @@ public class AuthService {
         MsmeAuthResponse msmeAuth = new MsmeAuthResponse(
                 auth, verifyResult.getPdfUrl(), request.getMsmeNumber());
         return msmeAuth;
+    }
+
+    /**
+     * Persists the MSME user — separated from the external HTTP calls so the
+     * DB connection is not held open during government-portal verification /
+     * PDF generation / S3 upload.  Two sequential DB calls don't require a
+     * wrapping transaction.
+     */
+    private void registerMsmeUser(String mobile, String password) {
+        if (userRepository.existsByMobileNumber(mobile)) {
+            throw new FssaiException(
+                    "An account already exists with this mobile number",
+                    FailureCode.DUPLICATE_MOBILE);
+        }
+
+        String email = "msme_" + mobile + "@dukaanlocker.local";
+        User user = new User();
+        user.setUserName("MSME Owner");  // placeholder — can be updated later
+        user.setMobileNumber(mobile);
+        user.setEmailId(email);
+        user.setPassword(passwordEncoder.encode(password));
+        user.setRole(Role.ADMIN);
+        user.setEnabled(true);
+
+        userRepository.save(user);
     }
 
     private static String normalizeEmail(String raw) {
