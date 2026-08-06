@@ -1,6 +1,7 @@
 package com.example.dukaanlocker
 
 import android.app.Activity
+import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -64,7 +65,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
     var language by remember { mutableStateOf(LockerStorage.getLanguage(context)) }
 
     // ── Dialog states ──
-    var docForView by remember { mutableStateOf<DocumentResponse?>(null) }
+    var docForView by remember { mutableStateOf<DocumentItem?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
     // ── Upload / Fetch state ──
@@ -155,6 +156,37 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
             // Handle offline or error gracefully
         }
     }
+
+    // ── Helper: Map a shop to a BusinessProfile ──
+    fun shopToBusiness(shop: ShopResponse): BusinessProfile = BusinessProfile(
+        id = shop.id.toString(),
+        name = shop.shopName,
+        ownerName = shop.ownerName,
+        category = shop.category,
+        scale = shop.scale,
+        state = shop.state,
+        city = shop.city,
+        branchName = shop.branchName ?: ""
+    )
+
+    // ── Helper: Open a document so the user can actually see it ──
+    // If the certificate file URL is available, open it in the system
+    // PDF/browser viewer. Otherwise fall back to the in-app certificate dialog.
+    fun openDocument(doc: DocumentItem) {
+        val url = doc.fileUrl
+        if (!url.isNullOrBlank()) {
+            try {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                return
+            } catch (e: Exception) {
+                Toast.makeText(context, "No app found to open this document", Toast.LENGTH_LONG).show()
+            }
+        }
+        docForView = doc
+    }
+
+    fun findBusinessFor(doc: DocumentItem): BusinessProfile? =
+        shops.find { it.id.toString() == doc.businessId }?.let { shopToBusiness(it) }
 
     // ── Determine initial screen ──
     LaunchedEffect(isLoggedIn) {
@@ -362,10 +394,13 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                                 val shopInfo = if (!auth.shopName.isNullOrBlank()) {
                                                     "\nShop: ${auth.shopName}"
                                                 } else ""
+                                                val emailInfo = if (!auth.emailId.isNullOrBlank()) {
+                                                    "\nLogin: ${auth.emailId}"
+                                                } else ""
                                                 val certMsg = if (!auth.certificatePdfUrl.isNullOrBlank()) {
                                                     "\nCertificate: ${auth.certificatePdfUrl}"
                                                 } else ""
-                                                Toast.makeText(context, "MSME verified! Welcome, ${auth.userName}!$shopInfo$certMsg", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, "MSME verified! Welcome, ${auth.userName}!$shopInfo$emailInfo$certMsg", Toast.LENGTH_LONG).show()
                                             } else {
                                                 Toast.makeText(context, "MSME registration failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
                                             }
@@ -566,21 +601,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                     uploadLauncher.launch("*/*")
                                 },
                                 onViewDoc = { doc ->
-                                    // Map DocumentItem to DocumentResponse for viewing
-                                    docForView = DocumentResponse(
-                                        id = doc.id.toLongOrNull() ?: 0,
-                                        shopId = doc.businessId.toLongOrNull() ?: 0,
-                                        documentType = doc.type,
-                                        fileName = null,
-                                        fileUrl = doc.fileUrl,
-                                        documentNumber = doc.regNumber,
-                                        issueDate = doc.issueDate,
-                                        expiryDate = doc.expiryDate,
-                                        status = doc.status,
-                                        version = 1,
-                                        uploadedAt = null,
-                                        updatedAt = null
-                                    )
+                                    openDocument(doc)
                                 },
                                 onDeleteDoc = { doc ->
                                     Toast.makeText(context, "${doc.name} - delete via API", Toast.LENGTH_SHORT).show()
@@ -735,7 +756,9 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                     pendingUploadDoc = doc
                                     uploadLauncher.launch("*/*")
                                 },
-                                onViewDoc = { doc -> },
+                                onViewDoc = { doc ->
+                                    openDocument(doc)
+                                },
                                 onDeleteDoc = { doc -> },
                                 onLogout = {
                                     ApiClient.clearAuth(context)
@@ -771,6 +794,17 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                 showFetchDialog = false
                                 fetchTargetDoc = null
                             }
+                        )
+                    }
+
+                    // ── Certificate Viewer Dialog (fallback when no file URL) ──
+                    if (docForView != null) {
+                        val viewDoc = docForView!!
+                        CertificateViewerDialog(
+                            doc = viewDoc,
+                            business = findBusinessFor(viewDoc)
+                                ?: BusinessProfile(name = currentUserName),
+                            onDismiss = { docForView = null }
                         )
                     }
                 }

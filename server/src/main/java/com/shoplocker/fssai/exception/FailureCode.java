@@ -42,6 +42,8 @@ public enum FailureCode {
     DUPLICATE_EMAIL            ("duplicate_email",            HttpStatus.CONFLICT),
     /** /api/auth/register tried to reuse an existing mobile number. */
     DUPLICATE_MOBILE           ("duplicate_mobile",           HttpStatus.CONFLICT),
+    /** /api/auth/register-msme tried to reuse an MSME (Udyam) number that is already registered. */
+    DUPLICATE_MSME             ("duplicate_msme",             HttpStatus.CONFLICT),
     /** /api/auth/login email+password did not match (or email unknown — same code by design). */
     INVALID_CREDENTIALS        ("invalid_credentials",        HttpStatus.UNAUTHORIZED),
     /** /api/auth/login hit a User that has been disabled in the DB. */

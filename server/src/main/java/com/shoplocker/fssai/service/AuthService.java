@@ -203,10 +203,24 @@ public class AuthService {
                     FailureCode.DUPLICATE_MOBILE);
         }
 
+        // ── Step 0: Reject MSME numbers already registered once ──
+        // An Udyam number can be used to create an account exactly once. After
+        // that, the business owner must log in with the email from the MSME
+        // certificate and the password set at registration.
+        String udyamNumber = request.getMsmeNumber().trim().toUpperCase();
+        if (documentRepository.existsByDocumentNumberAndDocumentType(
+                udyamNumber, DocumentType.MSME_CERTIFICATE)) {
+            log.info("MSME registration rejected: Udyam number already registered {}", udyamNumber);
+            throw new FssaiException(
+                    "This MSME number is already registered. Please log in with the email " +
+                    "on your MSME certificate and the password you set during registration.",
+                    FailureCode.DUPLICATE_MSME);
+        }
+
         // ── Step 1: Verify Udyam against government portal + generate PDF ──
         UdyamVerifyRequest verifyReq = new UdyamVerifyRequest();
         verifyReq.setSessionId(request.getSessionId());
-        verifyReq.setUdyamNumber(request.getMsmeNumber().trim().toUpperCase());
+        verifyReq.setUdyamNumber(udyamNumber);
         verifyReq.setCaptchaText(request.getCaptchaText());
 
         UdyamVerifyResponse verifyResult = udyamService.verifyAndGeneratePdf(verifyReq);
@@ -237,24 +251,23 @@ public class AuthService {
                 savedUser.getId(), mobile, savedUser.getUserName());
 
         // ── Step 4: Create Shop with parsed data ──
-        Shop savedShop = createMsmeShop(savedUser, parsedData, request.getMsmeNumber().trim().toUpperCase());
+        Shop savedShop = createMsmeShop(savedUser, parsedData, udyamNumber);
         log.info("MSME shop created: id={} name={}", savedShop.getId(), savedShop.getShopName());
 
         // ── Step 5: Create required documents and attach MSME certificate ──
-        createRequiredDocuments(savedShop, verifyResult.getPdfUrl(),
-                request.getMsmeNumber().trim().toUpperCase());
+        createRequiredDocuments(savedShop, verifyResult.getPdfUrl(), udyamNumber);
         log.info("Required documents created for shop {}", savedShop.getId());
 
         // ── Step 6: Generate JWT token ──
         String token = jwtService.generateToken(savedUser);
 
         log.info("MSME auto-registration complete: userId={} shopId={} udyam={}",
-                savedUser.getId(), savedShop.getId(), request.getMsmeNumber());
+                savedUser.getId(), savedShop.getId(), udyamNumber);
 
         // ── Step 7: Build response with all details ──
         AuthResponse auth = AuthResponse.from(savedUser, token);
         MsmeAuthResponse msmeAuth = new MsmeAuthResponse(
-                auth, verifyResult.getPdfUrl(), request.getMsmeNumber());
+                auth, verifyResult.getPdfUrl(), udyamNumber);
 
         // Populate enterprise and shop details
         if (parsedData != null) {
