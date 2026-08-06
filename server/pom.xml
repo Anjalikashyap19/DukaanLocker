@@ -177,6 +177,12 @@
             <version>0.12.6</version>
             <scope>runtime</scope>
         </dependency>
+
+        <!-- Redis for secure document view token caching -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
     </dependencies><dependencyManagement>
 		<dependencies>
 			<dependency>
@@ -199,6 +205,3 @@
 	</build>
 
 </project>
-
-
-

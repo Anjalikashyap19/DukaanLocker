@@ -41,6 +41,8 @@ import java.util.List;
  *   <li>Authenticated (non-role-specific): document listing and upload/re-upload
  *       — access validation happens in the service layer via
  *       {@code ShopAccessService}.</li>
+ *   <li>Document streaming endpoints: /api/documents/view and /api/documents/stream
+ *       — JWT required, access validation in DocumentStreamService.</li>
  *   <li>{@link JwtAuthenticationEntryPoint} + {@link JwtAccessDeniedHandler}
  *       shape the 401/403 responses into the standard {@code FssaiErrorResponse}
  *       JSON envelope.</li>
@@ -102,6 +104,8 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.GET, "/api/shops/*").authenticated()
                     .requestMatchers(HttpMethod.GET, "/api/shops/*/documents").authenticated()
                     .requestMatchers(HttpMethod.PUT, "/api/shops/*/documents/**").authenticated()
+                    // ── Document streaming endpoints (JWT required, access checked in service) ──
+                    .requestMatchers("/api/documents/**").authenticated()
                     // Default: any other application endpoint requires authentication
                     .anyRequest().authenticated())
             .authenticationProvider(authenticationProvider)

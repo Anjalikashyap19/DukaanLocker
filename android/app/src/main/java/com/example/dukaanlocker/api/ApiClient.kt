@@ -21,6 +21,8 @@ object ApiClient {
     private const val KEY_ROLE = "user_role"
 
     @Volatile private var apiService: ApiService? = null
+    @Volatile private var retrofit: Retrofit? = null
+    @Volatile private var documentStreamApi: DocumentStreamApi? = null
 
     // ── Token Management ──────────────────────────────────────────────────────
 
@@ -88,16 +90,35 @@ object ApiClient {
             .build()
     }
 
-    fun getApiService(context: Context): ApiService {
+    private fun provideRetrofit(context: Context): Retrofit {
         return synchronized(this) {
-            apiService ?: run {
+            retrofit ?: run {
                 val okHttpClient = provideOkHttpClient(context.applicationContext)
-                val retrofit = Retrofit.Builder()
+                val instance = Retrofit.Builder()
                     .baseUrl(BASE_URL)
                     .client(okHttpClient)
                     .addConverterFactory(GsonConverterFactory.create())
                     .build()
-                retrofit.create(ApiService::class.java).also { apiService = it }
+                retrofit = instance
+                instance
+            }
+        }
+    }
+
+    fun getApiService(context: Context): ApiService {
+        return synchronized(this) {
+            apiService ?: run {
+                val retrofitInstance = provideRetrofit(context)
+                retrofitInstance.create(ApiService::class.java).also { apiService = it }
+            }
+        }
+    }
+
+    fun getDocumentStreamApi(context: Context): DocumentStreamApi {
+        return synchronized(this) {
+            documentStreamApi ?: run {
+                val retrofitInstance = provideRetrofit(context)
+                retrofitInstance.create(DocumentStreamApi::class.java).also { documentStreamApi = it }
             }
         }
     }

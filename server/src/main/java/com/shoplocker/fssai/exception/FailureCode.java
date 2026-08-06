@@ -20,6 +20,9 @@ public enum FailureCode {
     /** AWS SDK call to S3 PutObject failed at the AWS side. */
     S3_UPLOAD_FAILED           ("s3_upload_failed",           HttpStatus.BAD_GATEWAY),
 
+    /** AWS SDK call to S3 GetObject failed at the AWS side (object not found, access denied, etc.). */
+    S3_OBJECT_NOT_FOUND        ("s3_object_not_found",        HttpStatus.NOT_FOUND),
+
     /** OCR succeeded but the document content does not match the expected document type (missing fields, bad ID regex, etc.). */
     DOCUMENT_VALIDATION_FAILED ("document_validation_failed", HttpStatus.UNPROCESSABLE_ENTITY),
 
@@ -77,6 +80,11 @@ public enum FailureCode {
     UNAUTHORIZED               ("unauthorized",               HttpStatus.UNAUTHORIZED),
     /** Forbidden role or resource access. */
     FORBIDDEN                  ("forbidden",                  HttpStatus.FORBIDDEN),
+
+    /** View token expired or invalid. */
+    VIEW_TOKEN_EXPIRED         ("view_token_expired",         HttpStatus.GONE),
+    /** View token already used (one-time use). */
+    VIEW_TOKEN_USED            ("view_token_used",            HttpStatus.GONE),
 
     /** Unhandled / unexpected exception. */
     INTERNAL_ERROR             ("internal_error",             HttpStatus.INTERNAL_SERVER_ERROR);
