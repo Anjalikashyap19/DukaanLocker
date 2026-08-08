@@ -36,6 +36,7 @@ import com.example.dukaanlocker.ui.theme.LightGold
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import android.util.Log
 import java.io.File
 import java.io.FileOutputStream
 
@@ -67,6 +68,9 @@ fun DocumentViewerScreen(
     var pdfBitmaps by remember { mutableStateOf<List<Bitmap>>(emptyList()) }
     var currentPage by remember { mutableStateOf(0) }
     
+    // Debug tag for logging
+    val TAG = "DocumentViewer"
+    
     // Use DisposableEffect to clean up bitmaps when leaving the screen
     DisposableEffect(Unit) {
         onDispose {
@@ -85,6 +89,7 @@ fun DocumentViewerScreen(
         errorMessage = null
         
         try {
+            Log.d(TAG, "Step 1: Requesting view token for documentId=$documentId")
             // Step 1: Request view token
             val tokenResponse = withContext(Dispatchers.IO) {
                 ApiClient.getDocumentStreamApi(context).requestViewToken(
@@ -93,19 +98,26 @@ fun DocumentViewerScreen(
             }
             
             if (!tokenResponse.isSuccessful) {
-                errorMessage = "Failed to get view token: ${tokenResponse.code()}"
+                val error = "Failed to get view token: ${tokenResponse.code()}"
+                Log.e(TAG, error)
+                errorMessage = error
                 isLoading = false
                 return
             }
             
             val tokenData = tokenResponse.body()
             if (tokenData == null) {
-                errorMessage = "Invalid response from server"
+                val error = "Invalid response from server"
+                Log.e(TAG, error)
+                errorMessage = error
                 isLoading = false
                 return
             }
             
+            Log.d(TAG, "Got view token: ${tokenData.viewToken}")
+            
             // Step 2: Stream document using the token
+            Log.d(TAG, "Step 2: Streaming document with token")
             val streamResponse = withContext(Dispatchers.IO) {
                 ApiClient.getDocumentStreamApi(context).streamDocument(
                     StreamDocumentRequest(viewToken = tokenData.viewToken)
@@ -113,34 +125,69 @@ fun DocumentViewerScreen(
             }
             
             if (!streamResponse.isSuccessful) {
-                errorMessage = "Failed to stream document: ${streamResponse.code()}"
+                val error = "Failed to stream document: ${streamResponse.code()}"
+                Log.e(TAG, error)
+                errorMessage = error
                 isLoading = false
                 return
             }
             
             val responseBody = streamResponse.body()
             if (responseBody == null) {
-                errorMessage = "Empty response body"
+                val error = "Empty response body"
+                Log.e(TAG, error)
+                errorMessage = error
                 isLoading = false
                 return
             }
             
+            Log.d(TAG, "Got document stream response, contentLength=${responseBody.contentLength()}")
+            
             // Step 3: Save to temporary file and render PDF
+            Log.d(TAG, "Step 3: Saving document to temp file")
             val tempFile = withContext(Dispatchers.IO) {
                 saveResponseBodyToFile(context, responseBody, "temp_document.pdf")
             }
             
             if (tempFile == null) {
-                errorMessage = "Failed to save document"
+                val error = "Failed to save document to file"
+                Log.e(TAG, error)
+                errorMessage = error
                 isLoading = false
                 return
             }
             
+            Log.d(TAG, "Document saved to: ${tempFile.absolutePath}, size=${tempFile.length()}")
+            
             // Step 4: Render PDF pages to bitmaps
+            Log.d(TAG, "Step 4: Rendering PDF to bitmaps")
             val bitmaps = withContext(Dispatchers.IO) {
                 renderPdfToBitmaps(tempFile)
             }
             
+            if (bitmaps.isEmpty()) {
+                Log.e(TAG, "PDF rendering returned empty list")
+                // Check if file is actually a PDF
+                if (tempFile.length() == 0L) {
+                    errorMessage = "Document file is empty"
+                } else {
+                    // Try to check if it's an HTML error page
+                    val firstBytes = tempFile.inputStream().use { input ->
+                        val buffer = ByteArray(100)
+                        val read = input.read(buffer)
+                        String(buffer, 0, read)
+                    }
+                    if (firstBytes.contains("<!DOCTYPE") || firstBytes.contains("<html")) {
+                        errorMessage = "Server returned an error page instead of a document"
+                    } else {
+                        errorMessage = "Failed to render PDF. The document may be corrupted or in an unsupported format."
+                    }
+                }
+                isLoading = false
+                return
+            }
+            
+            Log.d(TAG, "Successfully rendered ${bitmaps.size} pages")
             pdfBitmaps = bitmaps
             isLoading = false
             
@@ -148,6 +195,7 @@ fun DocumentViewerScreen(
             tempFile.delete()
             
         } catch (e: Exception) {
+            Log.e(TAG, "Error loading document", e)
             errorMessage = "Error loading document: ${e.message}"
             isLoading = false
         }
@@ -456,18 +504,22 @@ private suspend fun saveResponseBodyToFile(
     responseBody: okhttp3.ResponseBody?,
     fileName: String
 ): File? {
+    val TAG = "DocumentViewer"
     return withContext(Dispatchers.IO) {
         try {
             val tempFile = File(context.cacheDir, fileName)
+            Log.d(TAG, "Saving to file: ${tempFile.absolutePath}")
             if (responseBody != null) {
                 responseBody.byteStream().use { inputStream ->
                     FileOutputStream(tempFile).use { outputStream ->
-                        inputStream.copyTo(outputStream)
+                        val bytesWritten = inputStream.copyTo(outputStream)
+                        Log.d(TAG, "Wrote $bytesWritten bytes to file")
                     }
                 }
             }
             tempFile
         } catch (e: Exception) {
+            Log.e(TAG, "Error saving response body to file", e)
             null
         }
     }
@@ -477,10 +529,12 @@ private suspend fun saveResponseBodyToFile(
  * Render PDF pages to bitmaps with memory-efficient settings.
  */
 private suspend fun renderPdfToBitmaps(pdfFile: File): List<Bitmap> {
+    val TAG = "DocumentViewer"
     return withContext(Dispatchers.IO) {
         val bitmaps = mutableListOf<Bitmap>()
         
         try {
+            Log.d(TAG, "Opening PDF file: ${pdfFile.absolutePath}, size=${pdfFile.length()}")
             val fileDescriptor = ParcelFileDescriptor.open(
                 pdfFile,
                 ParcelFileDescriptor.MODE_READ_ONLY
@@ -488,12 +542,14 @@ private suspend fun renderPdfToBitmaps(pdfFile: File): List<Bitmap> {
             
             val pdfRenderer = PdfRenderer(fileDescriptor)
             val pageCount = pdfRenderer.pageCount
+            Log.d(TAG, "PDF has $pageCount pages")
             
             // Limit to first 20 pages to prevent memory issues
             val maxPages = minOf(pageCount, 20)
             
             for (i in 0 until maxPages) {
                 val page = pdfRenderer.openPage(i)
+                Log.d(TAG, "Rendering page ${i + 1}/${maxPages}, width=${page.width}, height=${page.height}")
                 
                 // Calculate scale factor based on page size
                 val scaleFactor = when {
@@ -520,14 +576,17 @@ private suspend fun renderPdfToBitmaps(pdfFile: File): List<Bitmap> {
                     PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY
                 )
                 
+                Log.d(TAG, "Page ${i + 1} rendered successfully")
                 bitmaps.add(bitmap)
                 page.close()
             }
             
             pdfRenderer.close()
             fileDescriptor.close()
+            Log.d(TAG, "PDF rendering complete, ${bitmaps.size} pages rendered")
             
         } catch (e: Exception) {
+            Log.e(TAG, "Error rendering PDF", e)
             // Clean up any bitmaps created before error
             bitmaps.forEach { bitmap ->
                 if (!bitmap.isRecycled) {

@@ -23,6 +23,7 @@ object ApiClient {
     @Volatile private var apiService: ApiService? = null
     @Volatile private var retrofit: Retrofit? = null
     @Volatile private var documentStreamApi: DocumentStreamApi? = null
+    @Volatile private var documentStreamRetrofit: Retrofit? = null
 
     // ── Token Management ──────────────────────────────────────────────────────
 
@@ -90,6 +91,41 @@ object ApiClient {
             .build()
     }
 
+    /**
+     * Separate OkHttpClient for document streaming that does NOT log the response body.
+     * Using Level.BODY on binary PDF responses can consume the stream or cause OOM.
+     */
+    private fun provideDocumentStreamOkHttpClient(context: Context): OkHttpClient {
+        val authInterceptor = Interceptor { chain ->
+            val token = getToken(context)
+            val request = if (token != null) {
+                chain.request().newBuilder()
+                    .addHeader("Authorization", "Bearer $token")
+                    .addHeader("Content-Type", "application/json")
+                    .build()
+            } else {
+                chain.request().newBuilder()
+                    .addHeader("Content-Type", "application/json")
+                    .build()
+            }
+            chain.proceed(request)
+        }
+
+        // Use Level.BASIC for streaming - logs method, URL, status, and response time only
+        // NOT Level.BODY which would try to log the entire PDF binary content
+        val loggingInterceptor = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BASIC
+        }
+
+        return OkHttpClient.Builder()
+            .addInterceptor(authInterceptor)
+            .addInterceptor(loggingInterceptor)
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)  // Longer read timeout for large files
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
+
     private fun provideRetrofit(context: Context): Retrofit {
         return synchronized(this) {
             retrofit ?: run {
@@ -100,6 +136,25 @@ object ApiClient {
                     .addConverterFactory(GsonConverterFactory.create())
                     .build()
                 retrofit = instance
+                instance
+            }
+        }
+    }
+
+    /**
+     * Separate Retrofit instance for document streaming without GsonConverterFactory.
+     * Binary responses (PDF) should not go through Gson deserialization.
+     */
+    private fun provideDocumentStreamRetrofit(context: Context): Retrofit {
+        return synchronized(this) {
+            documentStreamRetrofit ?: run {
+                val okHttpClient = provideDocumentStreamOkHttpClient(context.applicationContext)
+                val instance = Retrofit.Builder()
+                    .baseUrl(BASE_URL)
+                    .client(okHttpClient)
+                    // No GsonConverterFactory - stream raw bytes
+                    .build()
+                documentStreamRetrofit = instance
                 instance
             }
         }
@@ -117,7 +172,7 @@ object ApiClient {
     fun getDocumentStreamApi(context: Context): DocumentStreamApi {
         return synchronized(this) {
             documentStreamApi ?: run {
-                val retrofitInstance = provideRetrofit(context)
+                val retrofitInstance = provideDocumentStreamRetrofit(context)
                 retrofitInstance.create(DocumentStreamApi::class.java).also { documentStreamApi = it }
             }
         }
