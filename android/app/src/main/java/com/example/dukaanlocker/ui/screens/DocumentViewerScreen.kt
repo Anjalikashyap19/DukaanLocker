@@ -39,6 +39,9 @@ import kotlinx.coroutines.withContext
 import android.util.Log
 import java.io.File
 import java.io.FileOutputStream
+import java.io.EOFException
+import okio.sink
+import okio.buffer
 
 /**
  * Screen for securely viewing documents using one-time view tokens.
@@ -83,122 +86,155 @@ fun DocumentViewerScreen(
         }
     }
 
-    // Function to load document
+    // Function to load document with retry logic
     suspend fun loadDocument() {
         isLoading = true
         errorMessage = null
         
-        try {
-            Log.d(TAG, "Step 1: Requesting view token for documentId=$documentId")
-            // Step 1: Request view token
-            val tokenResponse = withContext(Dispatchers.IO) {
-                ApiClient.getDocumentStreamApi(context).requestViewToken(
-                    ViewDocumentRequest(documentId = documentId)
-                )
-            }
-            
-            if (!tokenResponse.isSuccessful) {
-                val error = "Failed to get view token: ${tokenResponse.code()}"
-                Log.e(TAG, error)
-                errorMessage = error
-                isLoading = false
-                return
-            }
-            
-            val tokenData = tokenResponse.body()
-            if (tokenData == null) {
-                val error = "Invalid response from server"
-                Log.e(TAG, error)
-                errorMessage = error
-                isLoading = false
-                return
-            }
-            
-            Log.d(TAG, "Got view token: ${tokenData.viewToken}")
-            
-            // Step 2: Stream document using the token
-            Log.d(TAG, "Step 2: Streaming document with token")
-            val streamResponse = withContext(Dispatchers.IO) {
-                ApiClient.getDocumentStreamApi(context).streamDocument(
-                    StreamDocumentRequest(viewToken = tokenData.viewToken)
-                )
-            }
-            
-            if (!streamResponse.isSuccessful) {
-                val error = "Failed to stream document: ${streamResponse.code()}"
-                Log.e(TAG, error)
-                errorMessage = error
-                isLoading = false
-                return
-            }
-            
-            val responseBody = streamResponse.body()
-            if (responseBody == null) {
-                val error = "Empty response body"
-                Log.e(TAG, error)
-                errorMessage = error
-                isLoading = false
-                return
-            }
-            
-            Log.d(TAG, "Got document stream response, contentLength=${responseBody.contentLength()}")
-            
-            // Step 3: Save to temporary file and render PDF
-            Log.d(TAG, "Step 3: Saving document to temp file")
-            val tempFile = withContext(Dispatchers.IO) {
-                saveResponseBodyToFile(context, responseBody, "temp_document.pdf")
-            }
-            
-            if (tempFile == null) {
-                val error = "Failed to save document to file"
-                Log.e(TAG, error)
-                errorMessage = error
-                isLoading = false
-                return
-            }
-            
-            Log.d(TAG, "Document saved to: ${tempFile.absolutePath}, size=${tempFile.length()}")
-            
-            // Step 4: Render PDF pages to bitmaps
-            Log.d(TAG, "Step 4: Rendering PDF to bitmaps")
-            val bitmaps = withContext(Dispatchers.IO) {
-                renderPdfToBitmaps(tempFile)
-            }
-            
-            if (bitmaps.isEmpty()) {
-                Log.e(TAG, "PDF rendering returned empty list")
-                // Check if file is actually a PDF
-                if (tempFile.length() == 0L) {
-                    errorMessage = "Document file is empty"
-                } else {
-                    // Try to check if it's an HTML error page
-                    val firstBytes = tempFile.inputStream().use { input ->
-                        val buffer = ByteArray(100)
-                        val read = input.read(buffer)
-                        String(buffer, 0, read)
+        val maxRetries = 2
+        var lastException: Exception? = null
+        
+        for (attempt in 1..maxRetries) {
+            try {
+                Log.d(TAG, "Attempt $attempt/$maxRetries - Requesting view token for documentId=$documentId")
+                // Step 1: Request view token
+                val tokenResponse = withContext(Dispatchers.IO) {
+                    ApiClient.getDocumentStreamApi(context).requestViewToken(
+                        ViewDocumentRequest(documentId = documentId)
+                    )
+                }
+                
+                if (!tokenResponse.isSuccessful) {
+                    val error = "Failed to get view token: ${tokenResponse.code()}"
+                    Log.e(TAG, error)
+                    // Don't retry on 4xx errors (client errors)
+                    if (tokenResponse.code() in 400..499) {
+                        errorMessage = error
+                        isLoading = false
+                        return
                     }
-                    if (firstBytes.contains("<!DOCTYPE") || firstBytes.contains("<html")) {
-                        errorMessage = "Server returned an error page instead of a document"
+                    throw Exception(error)
+                }
+                
+                val tokenData = tokenResponse.body()
+                if (tokenData == null) {
+                    throw Exception("Invalid response from server")
+                }
+                
+                Log.d(TAG, "Got view token: ${tokenData.viewToken}")
+                
+                // Step 2: Stream document using the token
+                Log.d(TAG, "Step 2: Streaming document with token")
+                val streamResponse = withContext(Dispatchers.IO) {
+                    ApiClient.getDocumentStreamApi(context).streamDocument(
+                        StreamDocumentRequest(viewToken = tokenData.viewToken)
+                    )
+                }
+                
+                if (!streamResponse.isSuccessful) {
+                    val error = "Failed to stream document: ${streamResponse.code()}"
+                    Log.e(TAG, error)
+                    // Don't retry on 4xx errors (client errors)
+                    if (streamResponse.code() in 400..499) {
+                        errorMessage = error
+                        isLoading = false
+                        return
+                    }
+                    throw Exception(error)
+                }
+                
+                val responseBody = streamResponse.body()
+                if (responseBody == null) {
+                    throw Exception("Empty response body")
+                }
+                
+                Log.d(TAG, "Got document stream response, contentLength=${responseBody.contentLength()}")
+                
+                // Step 3: Save to temporary file and render PDF
+                Log.d(TAG, "Step 3: Saving document to temp file")
+                val tempFile = withContext(Dispatchers.IO) {
+                    saveResponseBodyToFile(context, responseBody, "temp_document.pdf")
+                }
+                
+                if (tempFile == null) {
+                    throw Exception("Failed to save document to file")
+                }
+                
+                Log.d(TAG, "Document saved to: ${tempFile.absolutePath}, size=${tempFile.length()}")
+                
+                // Check if file is too small to be a valid PDF
+                if (tempFile.length() < 100) {
+                    // Try to read the error message from the file
+                    val fileContent = tempFile.readText()
+                    tempFile.delete()
+                    throw Exception("Invalid document response: $fileContent")
+                }
+                
+                // Step 4: Render PDF pages to bitmaps
+                Log.d(TAG, "Step 4: Rendering PDF to bitmaps")
+                val bitmaps = withContext(Dispatchers.IO) {
+                    renderPdfToBitmaps(tempFile)
+                }
+                
+                if (bitmaps.isEmpty()) {
+                    Log.e(TAG, "PDF rendering returned empty list")
+                    // Check if file is actually a PDF
+                    if (tempFile.length() == 0L) {
+                        throw Exception("Document file is empty")
                     } else {
-                        errorMessage = "Failed to render PDF. The document may be corrupted or in an unsupported format."
+                        // Try to check if it's an HTML error page
+                        val firstBytes = tempFile.inputStream().use { input ->
+                            val buffer = ByteArray(100)
+                            val read = input.read(buffer)
+                            String(buffer, 0, read)
+                        }
+                        if (firstBytes.contains("<!DOCTYPE") || firstBytes.contains("<html")) {
+                            throw Exception("Server returned an error page instead of a document")
+                        } else {
+                            throw Exception("Failed to render PDF. The document may be corrupted or in an unsupported format.")
+                        }
                     }
                 }
+                
+                Log.d(TAG, "Successfully rendered ${bitmaps.size} pages")
+                pdfBitmaps = bitmaps
                 isLoading = false
-                return
+                
+                // Step 5: Clean up temporary file
+                tempFile.delete()
+                return  // Success - exit retry loop
+                
+            } catch (e: Exception) {
+                lastException = e
+                Log.e(TAG, "Error loading document (attempt $attempt/$maxRetries)", e)
+                
+                // Check if this is a retryable error
+                val isRetryable = e is java.io.EOFException ||
+                    e is java.io.IOException ||
+                    (e.message?.contains("ChunkedSource") == true) ||
+                    (e.message?.contains("connection") == true &&
+                     !e.message!!.contains("refused"))
+                
+                if (isRetryable && attempt < maxRetries) {
+                    Log.d(TAG, "Retryable error, waiting before retry...")
+                    kotlinx.coroutines.delay(1000L * attempt) // Exponential backoff
+                } else {
+                    // Non-retryable error or max retries reached
+                    errorMessage = when {
+                        e is java.io.EOFException -> "Connection lost. Please check your network and try again."
+                        e.message?.contains("ChunkedSource") == true -> "Connection interrupted. Please try again."
+                        e.message?.contains("view token") == true -> "Session expired. Please try again."
+                        else -> "Error loading document: ${e.message}"
+                    }
+                    isLoading = false
+                    return
+                }
             }
-            
-            Log.d(TAG, "Successfully rendered ${bitmaps.size} pages")
-            pdfBitmaps = bitmaps
-            isLoading = false
-            
-            // Step 5: Clean up temporary file
-            tempFile.delete()
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Error loading document", e)
-            errorMessage = "Error loading document: ${e.message}"
-            isLoading = false
         }
+        
+        // If we get here, all retries failed
+        errorMessage = "Failed to load document after multiple attempts. Please try again later."
+        isLoading = false
     }
 
     // Load document on first composition
@@ -497,7 +533,7 @@ fun DocumentViewerScreen(
 }
 
 /**
- * Save response body to a temporary file.
+ * Save response body to a temporary file with chunked reading support.
  */
 private suspend fun saveResponseBodyToFile(
     context: Context,
@@ -510,16 +546,29 @@ private suspend fun saveResponseBodyToFile(
             val tempFile = File(context.cacheDir, fileName)
             Log.d(TAG, "Saving to file: ${tempFile.absolutePath}")
             if (responseBody != null) {
-                responseBody.byteStream().use { inputStream ->
-                    FileOutputStream(tempFile).use { outputStream ->
-                        val bytesWritten = inputStream.copyTo(outputStream)
-                        Log.d(TAG, "Wrote $bytesWritten bytes to file")
+                // Use source-based reading for better chunked response handling
+                val source = responseBody.source()
+                FileOutputStream(tempFile).use { outputStream ->
+                    val sink = outputStream.sink().buffer()
+                    // Read in chunks to handle chunked transfer encoding properly
+                    val bufferSize = 8192L  // 8KB chunks
+                    var totalBytesRead = 0L
+                    while (!source.exhausted()) {
+                        val bytesRead = source.read(sink.buffer, bufferSize)
+                        if (bytesRead == -1L) break
+                        totalBytesRead += bytesRead
                     }
+                    sink.flush()
+                    Log.d(TAG, "Wrote $totalBytesRead bytes to file")
                 }
             }
             tempFile
         } catch (e: Exception) {
             Log.e(TAG, "Error saving response body to file", e)
+            // Delete partial file on error
+            try {
+                File(context.cacheDir, fileName).delete()
+            } catch (_: Exception) {}
             null
         }
     }

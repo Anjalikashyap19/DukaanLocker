@@ -131,8 +131,8 @@ public class DocumentStreamController {
             }
         };
 
-        // Return the document as binary response with correct content type
-        return ResponseEntity.ok()
+        // Create response builder with correct content type
+        ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(result.getContentType()))
                 .header(HttpHeaders.CONTENT_DISPOSITION, 
                         "inline; filename=\"" + result.getFileName() + "\"")
@@ -140,6 +140,14 @@ public class DocumentStreamController {
                 .header(HttpHeaders.PRAGMA, "no-cache")
                 .header(HttpHeaders.EXPIRES, "0")
                 .header("X-Content-Type-Options", "nosniff")
-                .body(streamingResponseBody);
+                .header("X-Accel-Buffering", "no");  // Disable nginx buffering
+        
+        // Set Content-Length if file size is known (helps with nginx chunked encoding issues)
+        if (result.getFileSize() > 0) {
+            responseBuilder.contentLength(result.getFileSize());
+        }
+        
+        // Return the document as binary response
+        return responseBuilder.body(streamingResponseBody);
     }
 }

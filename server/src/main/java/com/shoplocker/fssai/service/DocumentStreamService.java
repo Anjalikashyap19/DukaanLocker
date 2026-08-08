@@ -175,10 +175,13 @@ public class DocumentStreamService {
         log.info("Streaming document {} for user {} (shop: {})", 
                 tokenData.getDocumentId(), authenticatedUser.getId(), shopId);
 
-        // 6. Stream the document from S3
+        // 6. Get file size for Content-Length header (helps with nginx buffering)
+        long fileSize = s3Service.getObjectSize(tokenData.getS3ObjectKey());
+        
+        // 7. Stream the document from S3
         InputStream inputStream = s3Service.getObject(tokenData.getS3ObjectKey());
         
-        return new DocumentStreamResult(inputStream, tokenData.getContentType(), tokenData.getFileName());
+        return new DocumentStreamResult(inputStream, tokenData.getContentType(), tokenData.getFileName(), fileSize);
     }
 
     /**
@@ -208,16 +211,19 @@ public class DocumentStreamService {
         private final InputStream inputStream;
         private final String contentType;
         private final String fileName;
+        private final long fileSize;
 
-        public DocumentStreamResult(InputStream inputStream, String contentType, String fileName) {
+        public DocumentStreamResult(InputStream inputStream, String contentType, String fileName, long fileSize) {
             this.inputStream = inputStream;
             this.contentType = contentType;
             this.fileName = fileName;
+            this.fileSize = fileSize;
         }
 
         public InputStream getInputStream() { return inputStream; }
         public String getContentType() { return contentType; }
         public String getFileName() { return fileName; }
+        public long getFileSize() { return fileSize; }
     }
 
     /**

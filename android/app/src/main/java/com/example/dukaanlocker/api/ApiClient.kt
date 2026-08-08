@@ -7,6 +7,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.io.InterruptedIOException
 import java.util.concurrent.TimeUnit
 
 object ApiClient {
@@ -94,6 +95,7 @@ object ApiClient {
     /**
      * Separate OkHttpClient for document streaming that does NOT log the response body.
      * Using Level.BODY on binary PDF responses can consume the stream or cause OOM.
+     * Includes retry logic for chunked encoding errors (EOFException).
      */
     private fun provideDocumentStreamOkHttpClient(context: Context): OkHttpClient {
         val authInterceptor = Interceptor { chain ->
@@ -117,12 +119,38 @@ object ApiClient {
             level = HttpLoggingInterceptor.Level.BASIC
         }
 
+        // Retry interceptor for transient network errors (EOFException, etc.)
+        val retryInterceptor = Interceptor { chain ->
+            var lastException: Exception? = null
+            val maxRetries = 2
+            
+            for (attempt in 1..maxRetries) {
+                try {
+                    return@Interceptor chain.proceed(chain.request())
+                } catch (e: Exception) {
+                    lastException = e
+                    val isRetryable = e is java.io.EOFException ||
+                        e is java.io.InterruptedIOException ||
+                        (e.message?.contains("ChunkedSource") == true)
+                    
+                    if (isRetryable && attempt < maxRetries) {
+                        Thread.sleep(500L * attempt) // Exponential backoff
+                        continue
+                    }
+                    throw e
+                }
+            }
+            throw lastException ?: Exception("Unknown error")
+        }
+
         return OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
+            .addInterceptor(retryInterceptor)
             .addInterceptor(loggingInterceptor)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)  // Longer read timeout for large files
             .writeTimeout(30, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)  // Enable automatic retry on connection failure
             .build()
     }
 

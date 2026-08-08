@@ -6,6 +6,8 @@ import org.springframework.stereotype.Service;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import com.shoplocker.fssai.exception.FailureCode;
@@ -104,6 +106,31 @@ public class S3Service {
             throw new FssaiException(
                     "The requested document could not be retrieved. It may have been deleted or is temporarily unavailable.",
                     FailureCode.S3_OBJECT_NOT_FOUND, e);
+        }
+    }
+
+    /**
+     * Gets the file size of an object in S3.
+     * Used to set Content-Length header for streaming responses.
+     *
+     * @param fileKey  S3 object key (path in the bucket)
+     * @return File size in bytes, or -1 if unable to determine
+     */
+    public long getObjectSize(String fileKey) {
+        if (fileKey == null || fileKey.isEmpty()) {
+            return -1;
+        }
+
+        try {
+            HeadObjectRequest headObjectRequest = HeadObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(fileKey)
+                    .build();
+            HeadObjectResponse response = s3Client.headObject(headObjectRequest);
+            return response.contentLength();
+        } catch (Exception e) {
+            // Log but don't fail - Content-Length is optional
+            return -1;
         }
     }
 
