@@ -67,6 +67,10 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
     // ── Dialog states ──
     var docForView by remember { mutableStateOf<DocumentItem?>(null) }
     var isLoading by remember { mutableStateOf(false) }
+    
+    // ── Document Viewer state ──
+    var viewDocumentId by remember { mutableStateOf<Long?>(null) }
+    var viewDocumentName by remember { mutableStateOf<String>("") }
 
     // ── Upload / Fetch state ──
     var pendingUploadDoc by remember { mutableStateOf<DocumentItem?>(null) }
@@ -169,20 +173,24 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
         branchName = shop.branchName ?: ""
     )
 
-    // ── Helper: Open a document so the user can actually see it ──
-    // If the certificate file URL is available, open it in the system
-    // PDF/browser viewer. Otherwise fall back to the in-app certificate dialog.
+    // ── Helper: Open a document using secure streaming flow ──
+    // Navigates to DocumentViewerScreen which uses one-time view tokens
+    // to securely stream documents from S3 without exposing URLs.
     fun openDocument(doc: DocumentItem) {
-        val url = doc.fileUrl
-        if (!url.isNullOrBlank()) {
-            try {
-                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                return
-            } catch (e: Exception) {
-                Toast.makeText(context, "No app found to open this document", Toast.LENGTH_LONG).show()
-            }
+        val docId = doc.id.toLongOrNull()
+        if (docId != null) {
+            // Navigate to secure document viewer
+            viewDocumentId = docId
+            viewDocumentName = doc.name
+        } else {
+            // Fallback to certificate dialog if document ID is invalid
+            docForView = doc
         }
-        docForView = doc
+    }
+    
+    fun closeDocumentViewer() {
+        viewDocumentId = null
+        viewDocumentName = ""
     }
 
     fun findBusinessFor(doc: DocumentItem): BusinessProfile? =
@@ -769,6 +777,15 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                         }
                     }
 
+                    // ── Document Viewer overlay (secure streaming) ──
+                    if (viewDocumentId != null) {
+                        DocumentViewerScreen(
+                            documentId = viewDocumentId!!,
+                            documentName = viewDocumentName,
+                            onBack = { closeDocumentViewer() }
+                        )
+                    }
+                    
                     // ── Loading overlay ──
                     if (isLoading) {
                         Box(
