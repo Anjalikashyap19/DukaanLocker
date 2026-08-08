@@ -16,8 +16,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.io.InputStream;
+import java.io.OutputStream;
 
 /**
  * REST controller for secure document viewing with one-time view tokens.
@@ -94,10 +96,10 @@ public class DocumentStreamController {
      * 
      * @param request  StreamDocumentRequest containing viewToken
      * @param authentication  JWT authentication object
-     * @return ResponseEntity with the document as binary stream
+     * @return ResponseEntity with StreamingResponseBody for proper streaming
      */
     @PostMapping("/stream")
-    public ResponseEntity<InputStream> streamDocument(
+    public ResponseEntity<StreamingResponseBody> streamDocument(
             @RequestBody StreamDocumentRequest request,
             Authentication authentication) {
         
@@ -112,6 +114,23 @@ public class DocumentStreamController {
 
         log.info("Document stream started successfully for: {}", result.getFileName());
 
+        // Create StreamingResponseBody to properly stream the document
+        StreamingResponseBody streamingResponseBody = (OutputStream outputStream) -> {
+            try (InputStream inputStream = result.getInputStream()) {
+                if (inputStream == null) {
+                    throw new RuntimeException("Document input stream is null");
+                }
+                byte[] buffer = new byte[16384]; // 16KB buffer for efficient streaming
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                }
+            } catch (Exception e) {
+                log.error("Error streaming document: {}", e.getMessage(), e);
+                throw new RuntimeException("Failed to stream document", e);
+            }
+        };
+
         // Return the document as binary response with correct content type
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(result.getContentType()))
@@ -121,6 +140,6 @@ public class DocumentStreamController {
                 .header(HttpHeaders.PRAGMA, "no-cache")
                 .header(HttpHeaders.EXPIRES, "0")
                 .header("X-Content-Type-Options", "nosniff")
-                .body(result.getInputStream());
+                .body(streamingResponseBody);
     }
 }
