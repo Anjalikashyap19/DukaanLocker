@@ -142,8 +142,9 @@ object ApiClient {
     }
 
     /**
-     * Separate Retrofit instance for document streaming without GsonConverterFactory.
-     * Binary responses (PDF) should not go through Gson deserialization.
+     * Separate Retrofit instance for document streaming.
+     * Uses Level.BASIC logging (not BODY) to avoid consuming binary streams.
+     * Still includes GsonConverterFactory for JSON responses like requestViewToken().
      */
     private fun provideDocumentStreamRetrofit(context: Context): Retrofit {
         return synchronized(this) {
@@ -152,7 +153,7 @@ object ApiClient {
                 val instance = Retrofit.Builder()
                     .baseUrl(BASE_URL)
                     .client(okHttpClient)
-                    // No GsonConverterFactory - stream raw bytes
+                    .addConverterFactory(GsonConverterFactory.create())
                     .build()
                 documentStreamRetrofit = instance
                 instance
