@@ -209,10 +209,6 @@ private fun AddManagerDialog(
     val colors = LocalAppColors.current
     var managerName by remember { mutableStateOf("") }
     val selectedBusinessIds = remember { mutableStateListOf<String>() }
-    val generatedCode = remember {
-        val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-        (1..6).map { chars.random() }.joinToString("")
-    }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -227,7 +223,7 @@ private fun AddManagerDialog(
             ) {
                 Icon(Icons.Default.PersonAdd, contentDescription = null, tint = colors.primary, modifier = Modifier.size(40.dp))
                 Text("Add New Manager", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                Text("Enter manager details and assign businesses", fontSize = 13.sp, color = colors.textSecondary)
+                Text("A unique access code will be generated automatically", fontSize = 13.sp, color = colors.textSecondary)
 
                 OutlinedTextField(
                     value = managerName,
@@ -242,11 +238,11 @@ private fun AddManagerDialog(
                     shape = RoundedCornerShape(10.dp)
                 )
 
-                // Generated code display
+                // Info card about code generation
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = colors.background),
-                    border = BorderStroke(1.dp, colors.border),
+                    colors = CardDefaults.cardColors(containerColor = colors.primary.copy(alpha = 0.08f)),
+                    border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.3f)),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Row(
@@ -259,7 +255,7 @@ private fun AddManagerDialog(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text("Access Code", fontSize = 10.sp, color = colors.textSecondary)
-                            Text(generatedCode, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.primary, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                            Text("Will be generated after creation", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = colors.primary)
                         }
                     }
                 }

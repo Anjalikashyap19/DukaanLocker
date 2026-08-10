@@ -2,6 +2,7 @@ package com.shoplocker.fssai.service;
 
 import com.shoplocker.fssai.dto.AuthResponse;
 import com.shoplocker.fssai.dto.LoginRequest;
+import com.shoplocker.fssai.dto.ManagerCodeLoginRequest;
 import com.shoplocker.fssai.dto.MsmeAuthResponse;
 import com.shoplocker.fssai.dto.MsmeParsedData;
 import com.shoplocker.fssai.dto.RegisterRequest;
@@ -166,6 +167,43 @@ public class AuthService {
                 });
 
         String token = jwtService.generateToken(user);
+        return AuthResponse.from(user, token);
+    }
+
+    /**
+     * Login a manager using their unique 6-character access code.
+     * No password required - the code is the only credential.
+     *
+     * @param request contains the 6-character manager code
+     * @return AuthResponse with JWT token
+     */
+    public AuthResponse loginByCode(ManagerCodeLoginRequest request) {
+        String code = request.getManagerCode().trim().toUpperCase();
+
+        User user = userRepository.findByManagerCode(code)
+                .orElseThrow(() -> {
+                    log.info("Manager login failed: invalid code {}", code);
+                    return new FssaiException(
+                            "Invalid access code",
+                            FailureCode.INVALID_CREDENTIALS);
+                });
+
+        if (user.getRole() != Role.MANAGER) {
+            log.info("Manager login failed: user {} is not a manager", code);
+            throw new FssaiException(
+                    "Invalid access code",
+                    FailureCode.INVALID_CREDENTIALS);
+        }
+
+        if (!user.isEnabled()) {
+            log.info("Manager login failed: disabled account for code {}", code);
+            throw new FssaiException(
+                    "This account has been disabled. Please contact support.",
+                    FailureCode.DISABLED_USER);
+        }
+
+        String token = jwtService.generateToken(user);
+        log.info("Manager logged in via code: userId={} code={}", user.getId(), code);
         return AuthResponse.from(user, token);
     }
 

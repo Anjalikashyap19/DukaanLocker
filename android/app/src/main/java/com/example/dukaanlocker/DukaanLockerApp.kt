@@ -199,7 +199,8 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
     // ── Determine initial screen ──
     LaunchedEffect(isLoggedIn) {
         if (isLoggedIn) {
-            currentScreen = "owner_home"
+            // Navigate to appropriate home screen based on role
+            currentScreen = if (currentUserRole == "MANAGER") "manager_home" else "owner_home"
             loadShops()
             if (currentUserRole == "ADMIN") {
                 loadManagers()
@@ -420,8 +421,30 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                     }
                                 },
                                 onManagerLogin = { code ->
-                                    // Manager login uses email/password, not code
-                                    Toast.makeText(context, "Please use email & password to login as manager", Toast.LENGTH_LONG).show()
+                                    scope.launch {
+                                        isLoading = true
+                                        try {
+                                            val response = api.loginByCode(ManagerCodeLoginRequest(managerCode = code))
+                                            if (response.isSuccessful) {
+                                                val auth = response.body()!!
+                                                ApiClient.saveAuth(context, auth)
+                                                authToken = auth.token
+                                                currentUserId = auth.userId
+                                                currentUserName = auth.userName
+                                                currentUserEmail = auth.emailId
+                                                currentUserRole = auth.role
+                                                isLoggedIn = true
+                                                currentScreen = "manager_home"
+                                                loadShops()
+                                                Toast.makeText(context, "Welcome, ${auth.userName}!", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                Toast.makeText(context, "Login failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
+                                            }
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
+                                        }
+                                        isLoading = false
+                                    }
                                 }
                             )
                         }
@@ -583,7 +606,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                 },
                                 managers = managers.map { mgr ->
                                     ManagerAccess(
-                                        code = mgr.id.toString(),
+                                        code = mgr.managerCode ?: mgr.id.toString(),
                                         managerName = mgr.userName,
                                         assignedBusinessIds = emptyList()
                                     )
@@ -628,7 +651,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                             ManageManagersScreen(
                                 managers = managers.map { mgr ->
                                     ManagerAccess(
-                                        code = mgr.id.toString(),
+                                        code = mgr.managerCode ?: mgr.id.toString(),
                                         managerName = mgr.userName,
                                         assignedBusinessIds = emptyList()
                                     )
@@ -649,12 +672,11 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                     scope.launch {
                                         isLoading = true
                                         try {
-                                            // Create manager with temporary password
+                                            // Create manager - backend auto-generates unique code
                                             val response = api.createManager(CreateManagerRequest(
                                                 userName = name,
                                                 mobileNumber = "0000000000",
-                                                emailId = "${name.lowercase().replace(" ", ".")}@dukaanlocker.com",
-                                                password = "Manager@123"
+                                                emailId = "${name.lowercase().replace(" ", ".")}@dukaanlocker.com"
                                             ))
                                             if (response.isSuccessful) {
                                                 val newMgr = response.body()!!
@@ -666,7 +688,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                                     }
                                                 }
                                                 loadManagers()
-                                                Toast.makeText(context, "Manager '$name' created! ID: ${newMgr.id}", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, "Manager '$name' created!\nCode: ${newMgr.managerCode}", Toast.LENGTH_LONG).show()
                                             } else {
                                                 Toast.makeText(context, "Failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
                                             }

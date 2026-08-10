@@ -13,6 +13,7 @@ public class ManagerResponse {
     private String userName;
     private String mobileNumber;
     private String emailId;
+    private String managerCode;
     private Role role;
     private boolean enabled;
     private Long createdByAdminId;
@@ -22,12 +23,13 @@ public class ManagerResponse {
     public ManagerResponse() {}
 
     public ManagerResponse(Long id, String userName, String mobileNumber, String emailId,
-                           Role role, boolean enabled, Long createdByAdminId,
+                           String managerCode, Role role, boolean enabled, Long createdByAdminId,
                            LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.userName = userName;
         this.mobileNumber = mobileNumber;
         this.emailId = emailId;
+        this.managerCode = managerCode;
         this.role = role;
         this.enabled = enabled;
         this.createdByAdminId = createdByAdminId;
@@ -48,6 +50,9 @@ public class ManagerResponse {
 
     public String getEmailId() { return emailId; }
     public void setEmailId(String emailId) { this.emailId = emailId; }
+
+    public String getManagerCode() { return managerCode; }
+    public void setManagerCode(String managerCode) { this.managerCode = managerCode; }
 
     public Role getRole() { return role; }
     public void setRole(Role role) { this.role = role; }

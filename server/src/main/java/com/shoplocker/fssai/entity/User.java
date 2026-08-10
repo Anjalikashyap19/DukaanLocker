@@ -50,6 +50,12 @@ public class User {
     private Role role = Role.MANAGER;
 
 
+    // Unique 6-character code for manager login (e.g., X7K9M2)
+    // Only used when role = MANAGER
+    @Column(name = "manager_code", unique = true, length = 6)
+    private String managerCode;
+
+
     // API response me kabhi nahi jayega
     @JsonIgnore
     @Column(length = 100)
@@ -186,5 +192,14 @@ public class User {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+
+    public String getManagerCode() {
+        return managerCode;
+    }
+
+    public void setManagerCode(String managerCode) {
+        this.managerCode = managerCode;
     }
 }

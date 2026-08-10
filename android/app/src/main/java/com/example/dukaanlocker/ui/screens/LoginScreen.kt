@@ -374,21 +374,21 @@ fun LoginScreen(
                     onRegister = { if (registerWithMsme) validateAndRegisterWithMsme() else validateAndRegister() }
                 )
 
-                // ── MANAGER LOGIN (uses email + password via owner login) ──────────
-                false -> OwnerLoginForm(
+                // ── MANAGER LOGIN (uses access code) ──────────
+                false -> ManagerLoginForm(
                     colors = colors,
-                    lang = lang,
-                    email = loginEmail,
-                    onEmailChange = { loginEmail = it; loginEmailError = false },
-                    emailError = loginEmailError,
-                    password = loginPassword,
-                    onPasswordChange = { loginPassword = it; loginPasswordError = false },
-                    passwordVisible = loginPasswordVisible,
-                    onTogglePasswordVisible = { loginPasswordVisible = !loginPasswordVisible },
-                    passwordError = loginPasswordError,
-                    isChecking = loginIsChecking,
-                    onBack = { selectedView = null; loginIsChecking = false },
-                    onLogin = { validateAndLogin() }
+                    accessCode = accessCode,
+                    onAccessCodeChange = { accessCode = it.uppercase().take(6); codeError = false },
+                    codeError = codeError,
+                    onBack = { selectedView = null; codeError = false },
+                    onLogin = {
+                        if (accessCode.length == 6) {
+                            loginIsChecking = true
+                            onManagerLogin(accessCode)
+                        } else {
+                            codeError = true
+                        }
+                    }
                 )
             }
         }

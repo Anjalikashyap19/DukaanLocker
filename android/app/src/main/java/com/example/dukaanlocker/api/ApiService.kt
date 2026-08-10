@@ -14,6 +14,9 @@ interface ApiService {
     @POST("api/auth/login")
     suspend fun login(@Body request: LoginRequest): Response<AuthResponse>
 
+    @POST("api/auth/login-by-code")
+    suspend fun loginByCode(@Body request: ManagerCodeLoginRequest): Response<AuthResponse>
+
     // ── Shops ────────────────────────────────────────────────────────────────
 
     @POST("api/shops")

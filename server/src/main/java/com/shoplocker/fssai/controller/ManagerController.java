@@ -22,6 +22,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.security.SecureRandom;
 
 /**
  * Manager management and shop assignment endpoints.
@@ -32,6 +33,9 @@ import java.util.List;
 @Tag(name = "Managers", description = "Admin creates managers and assigns them to shops")
 @SecurityRequirement(name = "bearer-jwt")
 public class ManagerController {
+
+    private static final String CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // No I, O, 0, 1 to avoid confusion
+    private static final SecureRandom random = new SecureRandom();
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -75,10 +79,15 @@ public class ManagerController {
         manager.setUserName(request.getUserName().trim());
         manager.setMobileNumber(mobile);
         manager.setEmailId(email);
-        manager.setPassword(passwordEncoder.encode(request.getPassword()));
+        // Password is optional for manager - they login via code only
+        if (request.getPassword() != null && !request.getPassword().isBlank()) {
+            manager.setPassword(passwordEncoder.encode(request.getPassword()));
+        }
         manager.setRole(Role.MANAGER);
         manager.setEnabled(true);
         manager.setCreatedByAdmin(admin);
+        // Generate unique 6-character manager code
+        manager.setManagerCode(generateUniqueManagerCode());
 
         User saved = userRepository.save(manager);
 
@@ -87,6 +96,7 @@ public class ManagerController {
                 saved.getUserName(),
                 saved.getMobileNumber(),
                 saved.getEmailId(),
+                saved.getManagerCode(),
                 saved.getRole(),
                 saved.isEnabled(),
                 admin.getId(),
@@ -107,7 +117,7 @@ public class ManagerController {
 
         List<ManagerResponse> responses = managers.stream().map(m -> new ManagerResponse(
                 m.getId(), m.getUserName(), m.getMobileNumber(), m.getEmailId(),
-                m.getRole(), m.isEnabled(),
+                m.getManagerCode(), m.getRole(), m.isEnabled(),
                 m.getCreatedByAdmin() != null ? m.getCreatedByAdmin().getId() : null,
                 m.getCreatedAt(), m.getUpdatedAt()
         )).toList();
@@ -153,11 +163,27 @@ public class ManagerController {
 
         ManagerResponse response = new ManagerResponse(
                 manager.getId(), manager.getUserName(), manager.getMobileNumber(), manager.getEmailId(),
-                manager.getRole(), manager.isEnabled(),
+                manager.getManagerCode(), manager.getRole(), manager.isEnabled(),
                 admin.getId(), manager.getCreatedAt(), manager.getUpdatedAt()
         );
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * Generates a unique 6-character alphanumeric code for manager login.
+     * Uses characters that are visually distinct (no I, O, 0, 1).
+     */
+    private String generateUniqueManagerCode() {
+        String code;
+        do {
+            StringBuilder sb = new StringBuilder(6);
+            for (int i = 0; i < 6; i++) {
+                sb.append(CODE_CHARS.charAt(random.nextInt(CODE_CHARS.length())));
+            }
+            code = sb.toString();
+        } while (userRepository.existsByManagerCode(code)); // Ensure uniqueness
+        return code;
     }
 
     @Operation(summary = "Get shops assigned to a manager", description = "ADMIN only. Returns shops assigned " +

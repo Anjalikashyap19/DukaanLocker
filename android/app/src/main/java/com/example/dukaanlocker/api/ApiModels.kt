@@ -95,7 +95,7 @@ data class CreateManagerRequest(
     @SerializedName("userName") val userName: String,
     @SerializedName("mobileNumber") val mobileNumber: String,
     @SerializedName("emailId") val emailId: String,
-    @SerializedName("password") val password: String
+    @SerializedName("password") val password: String? = null
 )
 
 data class ManagerResponse(
@@ -103,11 +103,16 @@ data class ManagerResponse(
     @SerializedName("userName") val userName: String,
     @SerializedName("mobileNumber") val mobileNumber: String,
     @SerializedName("emailId") val emailId: String,
+    @SerializedName("managerCode") val managerCode: String?,
     @SerializedName("role") val role: String,
     @SerializedName("enabled") val enabled: Boolean,
     @SerializedName("createdByAdminId") val createdByAdminId: Long?,
     @SerializedName("createdAt") val createdAt: String?,
     @SerializedName("updatedAt") val updatedAt: String?
+)
+
+data class ManagerCodeLoginRequest(
+    @SerializedName("managerCode") val managerCode: String
 )
 
 // ── Business Profile ─────────────────────────────────────────────────────────

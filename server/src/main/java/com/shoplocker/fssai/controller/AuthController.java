@@ -2,6 +2,7 @@ package com.shoplocker.fssai.controller;
 
 import com.shoplocker.fssai.dto.AuthResponse;
 import com.shoplocker.fssai.dto.LoginRequest;
+import com.shoplocker.fssai.dto.ManagerCodeLoginRequest;
 import com.shoplocker.fssai.dto.MsmeAuthResponse;
 import com.shoplocker.fssai.dto.RegisterRequest;
 import com.shoplocker.fssai.dto.RegisterWithMsmeRequest;
@@ -75,5 +76,19 @@ public class AuthController {
             @Valid @RequestBody RegisterWithMsmeRequest request) {
         MsmeAuthResponse response = authService.registerWithMsme(request, udyamService);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @Operation(
+            summary = "Manager login by access code",
+            description = "Authenticates a manager using their unique 6-character access code. " +
+                          "No password required. The code is assigned by the business owner when " +
+                          "creating the manager."
+    )
+    @SecurityRequirements
+    @PostMapping("/login-by-code")
+    public ResponseEntity<AuthResponse> loginByCode(
+            @Valid @RequestBody ManagerCodeLoginRequest request) {
+        AuthResponse response = authService.loginByCode(request);
+        return ResponseEntity.ok(response);
     }
 }
