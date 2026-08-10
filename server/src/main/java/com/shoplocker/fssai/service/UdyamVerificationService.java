@@ -463,360 +463,94 @@ public class UdyamVerificationService {
                         "    </div>\n";
             }
 
-            // Build the professional XHTML document mimicking the official MSME certificate
-
-            String xhtml =
-                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
-                            "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n" +
-
-                            "<head>\n" +
-                            "  <meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"/>\n" +
-
-                            "  <style type=\"text/css\">\n" +
-
-                            "    @page {\n" +
-                            "        size: A4 portrait;\n" +
-                            "        margin: 8mm 10mm 10mm 10mm;\n" +
-                            "    }\n" +
-
-                            "    * {\n" +
-                            "        box-sizing: border-box;\n" +
-                            "    }\n" +
-
-                            "    body {\n" +
-                            "        font-family: Arial, Helvetica, sans-serif;\n" +
-                            "        font-size: 8px;\n" +
-                            "        color: #000000;\n" +
-                            "        line-height: 1.25;\n" +
-                            "        margin: 0;\n" +
-                            "        padding: 0;\n" +
-                            "        background: #ffffff;\n" +
-                            "    }\n" +
-
-        /* =========================================================
-           MAIN CERTIFICATE
-           ========================================================= */
-
-                            "    .certificate {\n" +
-                            "        width: 100%;\n" +
-                            "        margin: 0 auto;\n" +
-                            "        padding: 0;\n" +
-                            "        background: #ffffff;\n" +
-                            "        border: none;\n" +
-                            "    }\n" +
-
-                            "    .inner-border {\n" +
-                            "        width: 100%;\n" +
-                            "        margin: 0;\n" +
-                            "        padding: 0;\n" +
-                            "        border: none;\n" +
-                            "    }\n" +
-
-
-        /* =========================================================
-           HEADER
-           ========================================================= */
-
-                            "    .header {\n" +
-                            "        width: 100%;\n" +
-                            "        text-align: center;\n" +
-                            "        margin: 0 0 8px 0;\n" +
-                            "        padding: 0 0 6px 0;\n" +
-                            "        border-bottom: 2px solid #6f82b5;\n" +
-                            "    }\n" +
-
-                            "    .emblem-row {\n" +
-                            "        text-align: center;\n" +
-                            "        margin: 0 0 2px 0;\n" +
-                            "        padding: 0;\n" +
-                            "    }\n" +
-
-                            "    .ashoka-chakra {\n" +
-                            "        font-size: 22pt;\n" +
-                            "        color: #555555;\n" +
-                            "        line-height: 1;\n" +
-                            "    }\n" +
-
-                            "    .govt-name {\n" +
-                            "        font-size: 9px;\n" +
-                            "        color: #333333;\n" +
-                            "        font-weight: bold;\n" +
-                            "        margin: 1px 0;\n" +
-                            "    }\n" +
-
-                            "    .ministry-name {\n" +
-                            "        font-size: 7.5px;\n" +
-                            "        color: #444444;\n" +
-                            "        margin: 1px 0;\n" +
-                            "    }\n" +
-
-                            "    .cert-title {\n" +
-                            "        font-size: 11px;\n" +
-                            "        font-weight: bold;\n" +
-                            "        color: #333333;\n" +
-                            "        margin: 5px 0 3px 0;\n" +
-                            "        padding: 3px 0;\n" +
-                            "        text-transform: uppercase;\n" +
-                            "        letter-spacing: 0.5px;\n" +
-                            "        border-top: 1px solid #8da4cf;\n" +
-                            "        border-bottom: 1px solid #8da4cf;\n" +
-                            "    }\n" +
-
-                            "    .cert-number {\n" +
-                            "        font-size: 8px;\n" +
-                            "        color: #333333;\n" +
-                            "        margin: 3px 0 0 0;\n" +
-                            "    }\n" +
-
-                            "    .cert-number strong {\n" +
-                            "        color: #000000;\n" +
-                            "        font-size: 8.5px;\n" +
-                            "    }\n" +
-
-
-        /* =========================================================
-           CERTIFICATE FIELDS
-           ========================================================= */
-
-                            "    .fields-table {\n" +
-                            "        width: 100%;\n" +
-                            "        border-collapse: collapse;\n" +
-                            "        border-spacing: 0;\n" +
-                            "        margin: 6px 0 8px 0;\n" +
-                            "        table-layout: fixed;\n" +
-                            "    }\n" +
-
-                            "    .fields-table tr {\n" +
-                            "        page-break-inside: avoid;\n" +
-                            "    }\n" +
-
-                            "    .fields-table td {\n" +
-                            "        border: 1px solid #7da4d8;\n" +
-                            "        padding: 4px 5px;\n" +
-                            "        vertical-align: middle;\n" +
-                            "        font-size: 7.8px;\n" +
-                            "        line-height: 1.2;\n" +
-                            "        word-wrap: break-word;\n" +
-                            "    }\n" +
-
-                            "    .field-label {\n" +
-                            "        font-weight: bold;\n" +
-                            "        color: #000000;\n" +
-                            "        background: #ffffff;\n" +
-                            "    }\n" +
-
-                            "    .field-value {\n" +
-                            "        color: #000000;\n" +
-                            "        background: #ffffff;\n" +
-                            "    }\n" +
-
-
-        /* =========================================================
-           SECTION HEADERS
-           ========================================================= */
-
-                            "    .section {\n" +
-                            "        width: 100%;\n" +
-                            "        margin: 7px 0 0 0;\n" +
-                            "        padding: 0;\n" +
-                            "    }\n" +
-
-                            "    .section-header {\n" +
-                            "        width: 100%;\n" +
-                            "        font-size: 8px;\n" +
-                            "        font-weight: bold;\n" +
-                            "        color: #000000;\n" +
-                            "        background: #ffffff;\n" +
-                            "        padding: 5px 0;\n" +
-                            "        margin: 0;\n" +
-                            "        border-bottom: 1px solid #d0d0d0;\n" +
-                            "        page-break-after: avoid;\n" +
-                            "    }\n" +
-
-
-        /* =========================================================
-           NIC TABLE
-           ========================================================= */
-
-                            "    .nic-table {\n" +
-                            "        width: 100%;\n" +
-                            "        border-collapse: collapse;\n" +
-                            "        border-spacing: 0;\n" +
-                            "        margin: 5px 0 8px 0;\n" +
-                            "        font-size: 7.5px;\n" +
-                            "        table-layout: fixed;\n" +
-                            "    }\n" +
-
-                            "    .nic-table tr {\n" +
-                            "        page-break-inside: avoid;\n" +
-                            "    }\n" +
-
-                            "    .nic-table th {\n" +
-                            "        background: #ffffff;\n" +
-                            "        color: #000000;\n" +
-                            "        border: 1px solid #7da4d8;\n" +
-                            "        padding: 4px 5px;\n" +
-                            "        text-align: left;\n" +
-                            "        font-size: 7.5px;\n" +
-                            "        font-weight: bold;\n" +
-                            "    }\n" +
-
-                            "    .nic-table td {\n" +
-                            "        background: #ffffff;\n" +
-                            "        color: #000000;\n" +
-                            "        border: 1px solid #7da4d8;\n" +
-                            "        padding: 4px 5px;\n" +
-                            "        font-size: 7.5px;\n" +
-                            "        vertical-align: middle;\n" +
-                            "    }\n" +
-
-
-        /* =========================================================
-           FOOTER
-           ========================================================= */
-
-                            "    .footer {\n" +
-                            "        width: 100%;\n" +
-                            "        margin-top: 8px;\n" +
-                            "        padding-top: 5px;\n" +
-                            "        border-top: 1px solid #cccccc;\n" +
-                            "        page-break-inside: avoid;\n" +
-                            "    }\n" +
-
-                            "    .verified-badge {\n" +
-                            "        text-align: center;\n" +
-                            "        margin: 4px 0;\n" +
-                            "    }\n" +
-
-                            "    .verified-badge span {\n" +
-                            "        color: #333333;\n" +
-                            "        font-size: 7px;\n" +
-                            "        font-weight: bold;\n" +
-                            "        letter-spacing: 0.3px;\n" +
-                            "    }\n" +
-
-                            "    .disclaimer {\n" +
-                            "        font-size: 6.5px;\n" +
-                            "        color: #666666;\n" +
-                            "        text-align: center;\n" +
-                            "        font-style: italic;\n" +
-                            "        margin: 3px 0;\n" +
-                            "    }\n" +
-
-                            "    .gen-date {\n" +
-                            "        font-size: 6px;\n" +
-                            "        color: #777777;\n" +
-                            "        text-align: right;\n" +
-                            "    }\n" +
-
-
-        /* =========================================================
-           WATERMARK
-           ========================================================= */
-
-                            "    .watermark {\n" +
-                            "        position: absolute;\n" +
-                            "        top: 40%;\n" +
-                            "        left: 28%;\n" +
-                            "        font-size: 42pt;\n" +
-                            "        color: rgba(13, 71, 161, 0.035);\n" +
-                            "        transform: rotate(-35deg);\n" +
-                            "        z-index: 0;\n" +
-                            "        white-space: nowrap;\n" +
-                            "        font-weight: bold;\n" +
-                            "        letter-spacing: 4px;\n" +
-                            "    }\n" +
-
-
-        /* =========================================================
-           GENERAL
-           ========================================================= */
-
-                            "    img {\n" +
-                            "        max-width: 100%;\n" +
-                            "        height: auto;\n" +
-                            "    }\n" +
-
-                            "    p {\n" +
-                            "        margin: 2px 0;\n" +
-                            "    }\n" +
-
-                            "    a {\n" +
-                            "        color: #000000;\n" +
-                            "        text-decoration: none;\n" +
-                            "    }\n" +
-
-                            "  </style>\n" +
-                            "</head>\n" +
-
-                            "<body>\n" +
-
-                            "  <div class=\"certificate\">\n" +
-
-                            "    <div class=\"inner-border\">\n" +
-
-                            "      <div class=\"watermark\">UDYAM</div>\n" +
-
-                            "      <div class=\"header\">\n" +
-
-                            "        <div class=\"emblem-row\">\n" +
-                            "          <span class=\"ashoka-chakra\">☸</span>\n" +
-                            "        </div>\n" +
-
-                            "        <div class=\"govt-name\">\n" +
-                            "          Government of India\n" +
-                            "        </div>\n" +
-
-                            "        <div class=\"ministry-name\">\n" +
-                            "          Ministry of Micro, Small &amp; Medium Enterprises\n" +
-                            "        </div>\n" +
-
-                            "        <div class=\"cert-title\">\n" +
-                            "          Udyam Registration Certificate\n" +
-                            "        </div>\n" +
-
-                            "        <div class=\"cert-number\">\n" +
-                            "          Udyam Registration Number:\n" +
-                            "          <strong>" +
-                            escapeXml(udyamNumber) +
-                            "</strong>\n" +
-                            "        </div>\n" +
-
-                            "      </div>\n" +
-
-                            "      <table class=\"fields-table\">\n" +
-                            certFields.toString() +
-                            "      </table>\n" +
-
-                            nicSection +
-
-                            "      <div class=\"footer\">\n" +
-
-                            "        <div class=\"verified-badge\">\n" +
-                            "          <span>\u2713 DIGITALLY VERIFIED BY DUKAANLOCKER</span>\n" +
-                            "        </div>\n" +
-
-                            "        <div class=\"disclaimer\">\n" +
-                            "          This is a computer generated statement, no signature required.\n" +
-                            "        </div>\n" +
-
-                            "        <div class=\"gen-date\">\n" +
-                            "          Date of Print: " +
-                            new java.text.SimpleDateFormat(
-                                    "dd MMM yyyy, hh:mm a"
-                            ).format(new java.util.Date()) +
-                            "\n" +
-
-                            "        </div>\n" +
-
-                            "      </div>\n" +
-
-                            "    </div>\n" +
-
-                            "  </div>\n" +
-
-                            "</body>\n" +
-                            "</html>";
+            // Build the professional XHTML document mimicking official MSME certificate
+            String xhtml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+                    "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\"\n" +
+                    "  \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n" +
+                    "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n" +
+                    "<head>\n" +
+                    "  <meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"/>\n" +
+                    "  <style>\n" +
+                    "    @page { size: A4 portrait; margin: 12mm 15mm; }\n" +
+                    "    * { box-sizing: border-box; }\n" +
+                    "    body { font-family: 'Times New Roman', Times, serif; font-size: 9.5pt; color: #1a1a1a; line-height: 1.35; margin: 0; padding: 0; }\n" +
+                    "    \n" +
+                    "    /* Main Certificate Border - Double border like official document */\n" +
+                    "    .certificate { border: 3px double #0d47a1; padding: 0; position: relative; background: #fff; }\n" +
+                    "    .inner-border { border: 1px solid #1565c0; margin: 4px; padding: 12px 15px; }\n" +
+                    "    \n" +
+                    "    /* Header Section */\n" +
+                    "    .header { text-align: center; padding-bottom: 8px; border-bottom: 2px solid #0d47a1; margin-bottom: 10px; }\n" +
+                    "    .emblem-row { text-align: center; margin-bottom: 4px; }\n" +
+                    "    .ashoka-chakra { font-size: 32pt; color: #0d47a1; }\n" +
+                    "    .govt-name { font-size: 10pt; color: #333; text-transform: uppercase; letter-spacing: 2px; font-weight: bold; margin: 3px 0 2px; }\n" +
+                    "    .ministry-name { font-size: 8.5pt; color: #555; margin: 1px 0; font-style: italic; }\n" +
+                    "    .cert-title { font-size: 13pt; font-weight: bold; color: #0d47a1; margin: 10px 0 5px; text-transform: uppercase; letter-spacing: 1.5px; border-top: 1px solid #1565c0; border-bottom: 1px solid #1565c0; padding: 5px 0; }\n" +
+                    "    .cert-number { font-size: 9pt; color: #333; margin: 6px 0 2px; }\n" +
+                    "    .cert-number strong { color: #0d47a1; font-size: 10pt; }\n" +
+                    "    \n" +
+                    "    /* Certificate Fields Table */\n" +
+                    "    .fields-table { width: 100%; border-collapse: collapse; margin: 8px 0; }\n" +
+                    "    .fields-table tr { border-bottom: 1px solid #e0e0e0; }\n" +
+                    "    .fields-table td { padding: 4px 8px; vertical-align: top; font-size: 9pt; }\n" +
+                    "    .field-label { width: 38%; font-weight: bold; color: #0d47a1; background: #e3f2fd; padding: 4px 8px; border-right: 1px solid #bbdefb; }\n" +
+                    "    .field-value { color: #1a1a1a; background: #fff; }\n" +
+                    "    \n" +
+                    "    /* Section Styles */\n" +
+                    "    .section { margin: 8px 0; }\n" +
+                    "    .section-header { font-size: 9.5pt; font-weight: bold; color: #0d47a1; background: #e3f2fd; padding: 4px 8px; border-left: 3px solid #0d47a1; margin-bottom: 5px; }\n" +
+                    "    \n" +
+                    "    /* NIC Code Table */\n" +
+                    "    .nic-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }\n" +
+                    "    .nic-table th { background: #1565c0; color: #fff; padding: 3px 6px; text-align: left; font-size: 8pt; }\n" +
+                    "    .nic-table td { padding: 3px 6px; border-bottom: 1px solid #e0e0e0; }\n" +
+                    "    .nic-table tr:nth-child(even) { background: #f5f5f5; }\n" +
+                    "    \n" +
+                    "    /* Footer */\n" +
+                    "    .footer { margin-top: 10px; padding-top: 6px; border-top: 2px solid #0d47a1; }\n" +
+                    "    .disclaimer { font-size: 7.5pt; color: #666; text-align: center; font-style: italic; margin-bottom: 4px; }\n" +
+                    "    .gen-date { font-size: 7pt; color: #999; text-align: right; }\n" +
+                    "    .verified-badge { text-align: center; margin: 6px 0; }\n" +
+                    "    .verified-badge span { background: #1565c0; color: #fff; padding: 2px 12px; font-size: 7.5pt; font-weight: bold; letter-spacing: 0.5px; }\n" +
+                    "    \n" +
+                    "    /* Watermark */\n" +
+                    "    .watermark { position: absolute; top: 35%; left: 25%; font-size: 48pt; color: rgba(13,71,161,0.04); transform: rotate(-35deg); z-index: 0; white-space: nowrap; font-weight: bold; letter-spacing: 5px; }\n" +
+                    "  </style>\n" +
+                    "</head>\n" +
+                    "<body>\n" +
+                    "  <div class=\"certificate\">\n" +
+                    "    <div class=\"inner-border\">\n" +
+                    "      <div class=\"watermark\">UDYAM</div>\n" +
+                    "      \n" +
+                    "      <!-- Header -->\n" +
+                    "      <div class=\"header\">\n" +
+                    "        <div class=\"emblem-row\">\n" +
+                    "          <span class=\"ashoka-chakra\">\u2638</span>\n" +
+                    "        </div>\n" +
+                    "        <div class=\"govt-name\">Government of India</div>\n" +
+                    "        <div class=\"ministry-name\">Ministry of Micro, Small &amp; Medium Enterprises</div>\n" +
+                    "        <div class=\"cert-title\">Udyam Registration Certificate</div>\n" +
+                    "        <div class=\"cert-number\">Udyam Registration Number: <strong>" + escapeXml(udyamNumber) + "</strong></div>\n" +
+                    "      </div>\n" +
+                    "      \n" +
+                    "      <!-- Certificate Fields -->\n" +
+                    "      <table class=\"fields-table\">\n" +
+                    certFields.toString() +
+                    "      </table>\n" +
+                    "      \n" +
+                    "      <!-- NIC Codes Section -->\n" +
+                    nicSection +
+                    "      \n" +
+                    "      <!-- Footer -->\n" +
+                    "      <div class=\"footer\">\n" +
+                    "        <div class=\"verified-badge\"><span>\u2713 DIGITALLY VERIFIED BY DUKAANLOCKER</span></div>\n" +
+                    "        <div class=\"disclaimer\">This is a computer generated statement, no signature required.</div>\n" +
+                    "        <div class=\"gen-date\">Date of Print: " + new java.text.SimpleDateFormat("dd MMM yyyy, hh:mm a").format(new java.util.Date()) + "</div>\n" +
+                    "      </div>\n" +
+                    "    </div>\n" +
+                    "  </div>\n" +
+                    "</body>\n" +
+                    "</html>";
 
             // Render to PDF
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
