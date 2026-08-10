@@ -369,13 +369,13 @@ public class UdyamVerificationService {
 
     /**
      * Converts the government portal's PrintUdyamApplication HTML into a
-     * single-page PDF using OpenHTMLtoPDF.  The raw HTML is first cleaned
-     * up with jsoup (strip scripts, fix structure) and wrapped in a
-     * minimal XHTML envelope so OpenHTMLtoPDF can render it.
+     * professional single-page PDF using OpenHTMLtoPDF. Extracts only the
+     * certificate data (enterprise details) and creates a clean, professional
+     * document without website navigation elements.
      */
     private byte[] convertHtmlToPdf(String rawHtml, String udyamNumber) {
         try {
-            // Parse and clean up the HTML
+            // Parse the HTML
             Document doc = Jsoup.parse(rawHtml);
 
             // Remove elements that break PDF rendering or are unnecessary
@@ -383,17 +383,56 @@ public class UdyamVerificationService {
             doc.select("noscript").remove();
             doc.select("link[rel=stylesheet]").remove();
             doc.select("meta[http-equiv]").remove();
+            doc.select("form").remove(); // Remove ASP.NET form elements
 
             // Must serialize as XML: jsoup's default HTML5 syntax emits unclosed void
             // tags (<input>, <img>, <br>) which OpenHTMLtoPDF's strict XML/TRaX parser
             // rejects with a SAXParseException -> 500. XML syntax self-closes them.
             doc.outputSettings().syntax(Document.OutputSettings.Syntax.xml);
 
-            // Find the certificate content — typically inside a div with id containing
-            // "ContentPlaceHolder1" or a table with the certificate
-            String bodyContent = doc.body().html();
+            // Extract only the certificate content from the table
+            StringBuilder certificateContent = new StringBuilder();
+            
+            // Find all tables and extract the certificate data
+            org.jsoup.select.Elements tables = doc.select("table");
+            for (org.jsoup.nodes.Element table : tables) {
+                // Check if this table contains certificate data (has labels like "Udyam Registration Number")
+                String tableText = table.text().toLowerCase();
+                if (tableText.contains("udyam registration number") || 
+                    tableText.contains("name of enterprise") || 
+                    tableText.contains("type of enterprise")) {
+                    
+                    // This is the certificate table - extract its rows
+                    certificateContent.append("<table class=\"cert-table\">\n");
+                    org.jsoup.select.Elements rows = table.select("tr");
+                    for (org.jsoup.nodes.Element row : rows) {
+                        org.jsoup.select.Elements cells = row.select("td, th");
+                        if (cells.size() >= 2) {
+                            String label = cells.get(0).text().trim();
+                            String value = cells.get(1).text().trim();
+                            // Only include fields that have actual content
+                            if (!value.isEmpty()) {
+                                certificateContent.append("<tr><td class=\"label\">")
+                                    .append(escapeXml(label))
+                                    .append("</td><td class=\"value\">")
+                                    .append(escapeXml(value))
+                                    .append("</td></tr>\n");
+                            }
+                        }
+                    }
+                    certificateContent.append("</table>\n");
+                    break; // Found the certificate table, stop
+                }
+            }
 
-            // Build a clean XHTML document for OpenHTMLtoPDF
+            // If no certificate table found, use a fallback approach
+            if (certificateContent.length() == 0) {
+                // Try to extract data using regex patterns from MsmeDataParser
+                String fullText = doc.text();
+                certificateContent.append(extractCertificateFields(fullText));
+            }
+
+            // Build a clean, professional XHTML document for OpenHTMLtoPDF
             String xhtml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
                     "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\"\n" +
                     "  \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n" +
@@ -401,30 +440,43 @@ public class UdyamVerificationService {
                     "<head>\n" +
                     "  <meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"/>\n" +
                     "  <style>\n" +
-                    "    @page { size: A4; margin: 20mm; }\n" +
-                    "    body { font-family: sans-serif; font-size: 12px; color: #000; }\n" +
-                    "    table { width: 100%; border-collapse: collapse; }\n" +
-                    "    td, th { padding: 4px 8px; border: 1px solid #ccc; font-size: 11px; }\n" +
-                    "    th { background: #f0f0f0; font-weight: bold; }\n" +
-                    "    h1, h2, h3 { text-align: center; }\n" +
-                    "    .header { text-align: center; margin-bottom: 16px; }\n" +
-                    "    .header img { max-width: 120px; }\n" +
-                    "    .govt-text { font-size: 10px; text-align: center; color: #555; }\n" +
-                    "    .cert-title { font-size: 18px; font-weight: bold; text-align: center;\n" +
-                    "                   margin: 12px 0; text-transform: uppercase; }\n" +
-                    "    .watermark { position: fixed; top: 40%; left: 25%; font-size: 60px;\n" +
-                    "                 color: rgba(0,0,0,0.04); transform: rotate(-30deg);\n" +
-                    "                 z-index: -1; white-space: nowrap; }\n" +
-                    "    .footer { text-align: center; margin-top: 20px; font-size: 10px; color: #888; }\n" +
+                    "    @page { size: A4 portrait; margin: 15mm; }\n" +
+                    "    body { font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #333; line-height: 1.4; }\n" +
+                    "    .certificate-container { border: 2px solid #1a5f7a; padding: 15px; background: #fafafa; }\n" +
+                    "    .header-section { text-align: center; border-bottom: 2px solid #1a5f7a; padding-bottom: 10px; margin-bottom: 12px; }\n" +
+                    "    .emblem { font-size: 28px; color: #1a5f7a; margin-bottom: 5px; }\n" +
+                    "    .govt-title { font-size: 11px; color: #666; margin: 2px 0; text-transform: uppercase; letter-spacing: 0.5px; }\n" +
+                    "    .ministry { font-size: 9px; color: #888; margin: 1px 0; }\n" +
+                    "    .cert-title { font-size: 16px; font-weight: bold; color: #1a5f7a; margin: 10px 0 5px; text-transform: uppercase; letter-spacing: 1px; }\n" +
+                    "    .certificate-id { font-size: 9px; color: #888; margin-bottom: 10px; }\n" +
+                    "    .cert-table { width: 100%; border-collapse: collapse; margin: 8px 0; }\n" +
+                    "    .cert-table td { padding: 5px 8px; border: 1px solid #ddd; font-size: 9px; }\n" +
+                    "    .cert-table .label { background: #f0f7fa; font-weight: bold; width: 35%; color: #1a5f7a; }\n" +
+                    "    .cert-table .value { background: #fff; }\n" +
+                    "    .section-title { font-size: 11px; font-weight: bold; color: #1a5f7a; margin: 10px 0 5px; border-bottom: 1px solid #1a5f7a; padding-bottom: 3px; }\n" +
+                    "    .footer-section { margin-top: 12px; padding-top: 8px; border-top: 1px solid #ddd; font-size: 8px; color: #999; text-align: center; }\n" +
+                    "    .verification-badge { display: inline-block; background: #28a745; color: white; padding: 3px 10px; border-radius: 3px; font-size: 9px; font-weight: bold; margin: 8px 0; }\n" +
+                    "    .watermark { position: absolute; top: 40%; left: 30%; font-size: 50px; color: rgba(0,0,0,0.03); transform: rotate(-30deg); z-index: -1; white-space: nowrap; font-weight: bold; }\n" +
                     "  </style>\n" +
                     "</head>\n" +
                     "<body>\n" +
-                    "  <div class=\"govt-text\">Government of India — Ministry of Micro, Small &amp; Medium Enterprises</div>\n" +
-                    "  <div class=\"cert-title\">Udyam Registration Certificate</div>\n" +
-                    "  <div class=\"watermark\">UDYAM VERIFIED</div>\n" +
-                    bodyContent + "\n" +
-                    "  <div class=\"footer\">\n" +
-                    "    Generated by DukaanLocker — " + udyamNumber + "\n" +
+                    "  <div class=\"certificate-container\" style=\"position: relative;\">\n" +
+                    "    <div class=\"watermark\">UDYAM VERIFIED</div>\n" +
+                    "    <div class=\"header-section\">\n" +
+                    "      <div class=\"emblem\">INDIA</div>\n" +
+                    "      <div class=\"govt-title\">Government of India</div>\n" +
+                    "      <div class=\"ministry\">Ministry of Micro, Small &amp; Medium Enterprises</div>\n" +
+                    "      <div class=\"cert-title\">Udyam Registration Certificate</div>\n" +
+                    "      <div class=\"certificate-id\">Certificate No: " + escapeXml(udyamNumber) + "</div>\n" +
+                    "    </div>\n" +
+                    certificateContent.toString() + "\n" +
+                    "    <div style=\"text-align: center; margin-top: 10px;\">\n" +
+                    "      <div class=\"verification-badge\">✓ VERIFIED BY DUKAANLOCKER</div>\n" +
+                    "    </div>\n" +
+                    "    <div class=\"footer-section\">\n" +
+                    "      This certificate is digitally verified by DukaanLocker for business compliance purposes.\n" +
+                    "      Generated on: " + java.time.Instant.now().toString().substring(0, 10) + "\n" +
+                    "    </div>\n" +
                     "  </div>\n" +
                     "</body>\n" +
                     "</html>";
@@ -465,6 +517,66 @@ public class UdyamVerificationService {
                     "The HTML certificate has been stored. Please contact support.",
                     FailureCode.PDF_PROCESSING_ERROR, e);
         }
+    }
+
+    /**
+     * Extracts certificate fields from plain text using regex patterns.
+     * Used as fallback when table parsing fails.
+     */
+    private String extractCertificateFields(String text) {
+        StringBuilder html = new StringBuilder();
+        html.append("<table class=\"cert-table\">");
+
+        // Udyam Number
+        Pattern udyamPattern = Pattern.compile("UDYAM-[A-Z]{2}-\\d{2}-\\d{7}", Pattern.CASE_INSENSITIVE);
+        Matcher m = udyamPattern.matcher(text);
+        if (m.find()) {
+            html.append("<tr><td class=\"label\">Udyam Registration Number</td><td class=\"value\">")
+                .append(escapeXml(m.group().toUpperCase()))
+                .append("</td></tr>");
+        }
+
+        // Enterprise Name - use more robust extraction
+        String lowerText = text.toLowerCase();
+        String[] labels = {"name of enterprise", "enterprise name", "business name"};
+        for (String label : labels) {
+            if (lowerText.contains(label)) {
+                int idx = lowerText.indexOf(label);
+                String afterLabel = text.substring(idx + label.length()).trim();
+                // Skip any colon or whitespace
+                if (afterLabel.startsWith(":") || afterLabel.startsWith("-")) {
+                    afterLabel = afterLabel.substring(1).trim();
+                }
+                // Extract until newline or next common label
+                String name = afterLabel.split("[\\n\\r]")[0].trim();
+                // Further trim if it contains "Type of" or other labels
+                if (name.toLowerCase().contains("type of")) {
+                    name = name.substring(0, name.toLowerCase().indexOf("type of")).trim();
+                }
+                if (!name.isEmpty() && name.length() < 100) {
+                    html.append("<tr><td class=\"label\">Name of Enterprise</td><td class=\"value\">")
+                        .append(escapeXml(name))
+                        .append("</td></tr>");
+                    break;
+                }
+            }
+        }
+
+        html.append("</table>");
+        return html.toString();
+    }
+
+    /**
+     * Escapes special XML characters for safe HTML embedding.
+     */
+    private static String escapeXml(String text) {
+        if (text == null) return "";
+        return text
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&apos;");
     }
 
     // ─── HELPERS ───────────────────────────────────────────────────────────
