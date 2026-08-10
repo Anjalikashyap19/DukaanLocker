@@ -670,38 +670,27 @@ private fun ManagerLoginEmailForm(
                 }
             }
 
-            // Manager badge with instructions
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = colors.secondary.copy(alpha = 0.08f)),
-                border = BorderStroke(1.dp, colors.secondary.copy(alpha = 0.2f)),
-                shape = RoundedCornerShape(12.dp)
+            // Manager badge
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(colors.secondary.copy(alpha = 0.1f))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(
-                    modifier = Modifier.padding(12.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Lock,
-                            contentDescription = null,
-                            tint = colors.secondary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            "Manager Login",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colors.secondary
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        "Ask your business owner for your login email and password.",
-                        fontSize = 11.sp,
-                        color = colors.textSecondary
-                    )
-                }
+                Icon(
+                    Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = colors.secondary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    "Manager accounts are created by business owners",
+                    fontSize = 12.sp,
+                    color = colors.textSecondary
+                )
             }
 
             // Email
