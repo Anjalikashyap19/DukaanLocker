@@ -52,6 +52,8 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
 
     // ── Manager state ──
     var managers by remember { mutableStateOf<List<ManagerResponse>>(emptyList()) }
+    // Maps manager ID to list of assigned shop IDs
+    var managerShopAssignments by remember { mutableStateOf<Map<Long, List<String>>>(emptyMap()) }
 
     // ── Navigation state ──
     var currentScreen by remember { mutableStateOf("splash") }
@@ -149,12 +151,27 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
         }
     }
 
-    // ── Helper: Load managers ──
+    // ── Helper: Load managers and their assigned shops ──
     suspend fun loadManagers() {
         try {
             val response = api.getManagers()
             if (response.isSuccessful) {
-                managers = response.body() ?: emptyList()
+                val mgrs = response.body() ?: emptyList()
+                managers = mgrs
+                // Fetch assigned shops for each manager
+                val assignments = mutableMapOf<Long, List<String>>()
+                for (mgr in mgrs) {
+                    try {
+                        val shopsResponse = api.getManagerShops(mgr.id)
+                        if (shopsResponse.isSuccessful) {
+                            val assignedShops = shopsResponse.body() ?: emptyList()
+                            assignments[mgr.id] = assignedShops.map { it.id.toString() }
+                        }
+                    } catch (e: Exception) {
+                        assignments[mgr.id] = emptyList()
+                    }
+                }
+                managerShopAssignments = assignments
             }
         } catch (e: Exception) {
             // Handle offline or error gracefully
@@ -608,7 +625,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                     ManagerAccess(
                                         code = mgr.managerCode ?: mgr.id.toString(),
                                         managerName = mgr.userName,
-                                        assignedBusinessIds = emptyList()
+                                        assignedBusinessIds = managerShopAssignments[mgr.id] ?: emptyList()
                                     )
                                 },
                                 onAddBusiness = {
@@ -653,7 +670,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                     ManagerAccess(
                                         code = mgr.managerCode ?: mgr.id.toString(),
                                         managerName = mgr.userName,
-                                        assignedBusinessIds = emptyList()
+                                        assignedBusinessIds = managerShopAssignments[mgr.id] ?: emptyList()
                                     )
                                 },
                                 businesses = shops.map { shop ->
@@ -673,10 +690,16 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                         isLoading = true
                                         try {
                                             // Create manager - backend auto-generates unique code
+                                            // Generate unique mobile and email to avoid conflicts
+                                            val timestamp = System.currentTimeMillis() % 10000000L
+                                            val uniqueMobile = "9${timestamp.toString().padStart(9, '0')}"
+                                            val uniqueSuffix = (1000..9999).random()
+                                            val emailPrefix = name.lowercase().replace(" ", ".")
+                                            val uniqueEmail = "${emailPrefix}${uniqueSuffix}@dukaanlocker.com"
                                             val response = api.createManager(CreateManagerRequest(
                                                 userName = name,
-                                                mobileNumber = "0000000000",
-                                                emailId = "${name.lowercase().replace(" ", ".")}@dukaanlocker.com"
+                                                mobileNumber = uniqueMobile,
+                                                emailId = uniqueEmail
                                             ))
                                             if (response.isSuccessful) {
                                                 val newMgr = response.body()!!

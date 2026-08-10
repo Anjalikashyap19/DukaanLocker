@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -218,8 +220,10 @@ private fun AddManagerDialog(
             shape = RoundedCornerShape(20.dp)
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                modifier = Modifier
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Icon(Icons.Default.PersonAdd, contentDescription = null, tint = colors.primary, modifier = Modifier.size(40.dp))
                 Text("Add New Manager", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
@@ -271,7 +275,7 @@ private fun AddManagerDialog(
                                 if (selectedBusinessIds.contains(biz.id)) selectedBusinessIds.remove(biz.id)
                                 else selectedBusinessIds.add(biz.id)
                             }
-                            .padding(vertical = 4.dp),
+                            .padding(vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Checkbox(
@@ -284,11 +288,13 @@ private fun AddManagerDialog(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
-                            Text(biz.name, fontSize = 14.sp, color = Color.White, fontWeight = FontWeight.Medium)
+                            Text(biz.name, fontSize = 14.sp, color = colors.textPrimary, fontWeight = FontWeight.Medium)
                             Text(biz.category, fontSize = 11.sp, color = colors.textSecondary)
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),

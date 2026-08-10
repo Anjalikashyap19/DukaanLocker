@@ -22,12 +22,7 @@ public class CreateManagerRequest {
     @Email(message = "emailId must be a valid email address")
     private String emailId;
 
-    @NotBlank(message = "password is required")
-    @Size(min = 8, max = 64, message = "password must be at least 8 characters long")
-    @Pattern(
-            regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>/?]).{8,}$",
-            message = "password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character"
-    )
+    // Password is optional for manager - they login via code only
     private String password;
 
     // Getters and Setters
