@@ -374,8 +374,8 @@ fun LoginScreen(
                     onRegister = { if (registerWithMsme) validateAndRegisterWithMsme() else validateAndRegister() }
                 )
 
-                // ── MANAGER LOGIN (uses email + password via owner login) ──────────
-                false -> OwnerLoginForm(
+                // ── MANAGER LOGIN (Email + Password with manager branding) ──────
+                false -> ManagerLoginEmailForm(
                     colors = colors,
                     lang = lang,
                     email = loginEmail,
@@ -622,6 +622,142 @@ private fun OwnerLoginForm(
                     Icon(Icons.Default.Login, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(AppStrings.get(lang, "SECURE ACCESS"), fontWeight = FontWeight.Bold, fontSize = 14.sp, letterSpacing = 1.sp)
+                }
+            }
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MANAGER LOGIN EMAIL FORM (Email + Password with manager branding)
+// ══════════════════════════════════════════════════════════════════════════════
+@Composable
+private fun ManagerLoginEmailForm(
+    colors: AppColors,
+    lang: String,
+    email: String, onEmailChange: (String) -> Unit, emailError: Boolean,
+    password: String, onPasswordChange: (String) -> Unit,
+    passwordVisible: Boolean, onTogglePasswordVisible: () -> Unit,
+    passwordError: Boolean,
+    isChecking: Boolean,
+    onBack: () -> Unit,
+    onLogin: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBg),
+        border = BorderStroke(1.dp, colors.secondary.copy(alpha = 0.4f)),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Back + title
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = colors.textSecondary, modifier = Modifier.size(20.dp))
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text("Manager Sign In", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                    Text("Access your assigned businesses", fontSize = 12.sp, color = colors.textSecondary)
+                }
+            }
+
+            // Manager badge
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(colors.secondary.copy(alpha = 0.1f))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = colors.secondary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    "Manager accounts are created by business owners",
+                    fontSize = 12.sp,
+                    color = colors.textSecondary
+                )
+            }
+
+            // Email
+            OutlinedTextField(
+                value = email,
+                onValueChange = onEmailChange,
+                label = { Text("Email Address", color = colors.textSecondary) },
+                placeholder = { Text("you@example.com", color = colors.textSecondary.copy(alpha = 0.4f)) },
+                leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = colors.secondary, modifier = Modifier.size(20.dp)) },
+                isError = emailError,
+                supportingText = if (emailError) {{ Text("Enter a valid email address", color = Color.Red) }} else null,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = colors.secondary, unfocusedBorderColor = colors.border,
+                    focusedLabelColor = colors.secondary, cursorColor = colors.secondary
+                ),
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            // Password with eye toggle
+            OutlinedTextField(
+                value = password,
+                onValueChange = onPasswordChange,
+                label = { Text("Password", color = colors.textSecondary) },
+                placeholder = { Text("Enter your password", color = colors.textSecondary.copy(alpha = 0.4f)) },
+                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = colors.secondary, modifier = Modifier.size(20.dp)) },
+                trailingIcon = {
+                    IconButton(onClick = onTogglePasswordVisible, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                            tint = colors.textSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                },
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                isError = passwordError,
+                supportingText = if (passwordError) {{ Text("Password is required", color = Color.Red) }} else null,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = colors.secondary, unfocusedBorderColor = colors.border,
+                    focusedLabelColor = colors.secondary, cursorColor = colors.secondary
+                ),
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            // Login Button
+            Button(
+                onClick = onLogin,
+                enabled = email.isNotBlank() && password.isNotBlank() && !isChecking,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = colors.secondary, contentColor = colors.textOnPrimary)
+            ) {
+                if (isChecking) {
+                    CircularProgressIndicator(modifier = Modifier.size(22.dp), color = colors.textOnPrimary, strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Default.Login, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("MANAGER ACCESS", fontWeight = FontWeight.Bold, fontSize = 14.sp, letterSpacing = 1.sp)
                 }
             }
         }
