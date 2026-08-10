@@ -1,10 +1,15 @@
 package com.shoplocker.fssai.service;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.CookieManager;
+import java.net.CookiePolicy;
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Date;
@@ -16,13 +21,10 @@ import java.util.regex.Pattern;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import com.shoplocker.fssai.dto.UdyamInitResponse;
 import com.shoplocker.fssai.dto.UdyamVerifyRequest;
 import com.shoplocker.fssai.dto.UdyamVerifyResponse;
@@ -31,6 +33,8 @@ import com.shoplocker.fssai.exception.FssaiException;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+
+import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
@@ -47,1974 +51,937 @@ import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.message.BasicNameValuePair;
 import org.apache.hc.core5.util.Timeout;
 
-
 /**
  * Integrates with the Indian government's Udyam registration portal
- * (https://www.udyamregistration.gov.in/) to:
+ * ({@code https://www.udyamregistration.gov.in/}) to:
+ * <ol>
+ *   <li>Initialise an HTTP session and download a CAPTCHA image.</li>
+ *   <li>Verify a Udyam number + CAPTCHA answer against the portal.</li>
+ *   <li>Fetch the HTML certificate page (PrintUdyamApplication.aspx).</li>
+ *   <li>Convert that HTML to a PDF using OpenHTMLtoPDF and upload to S3.</li>
+ * </ol>
  *
- * 1. Initialise an HTTP session and download a CAPTCHA image.
- * 2. Verify a Udyam number + CAPTCHA answer against the portal.
- * 3. Fetch the HTML certificate page.
- * 4. Convert the government HTML into a PDF.
- * 5. Upload the generated PDF to S3.
- *
- * Session state is kept in an in-memory map keyed by a random UUID.
- * Sessions automatically expire after 5 minutes.
+ * <p>Session state (cookies, ASP.NET view-state, event-validation) is kept in
+ * a in-memory map keyed by a random UUID so that concurrent users don't
+ * interfere with each other. Sessions are auto-expired after 5 minutes.</p>
  */
 @Service
 public class UdyamVerificationService {
 
-    private static final Logger log =
-            LoggerFactory.getLogger(UdyamVerificationService.class);
+    private static final Logger log = LoggerFactory.getLogger(UdyamVerificationService.class);
 
-    /*
-     * ============================================================
-     * UDYAM URLs
-     * ============================================================
-     */
-
-    private static final String BASE_URL =
-            "https://www.udyamregistration.gov.in";
-
-    private static final String VERIFY_PAGE =
-            BASE_URL + "/Udyam_Verify.aspx";
-
-    private static final String CAPTCHA_URL_PREFIX =
-            BASE_URL + "/Captcha/CaptchaControl.aspx?id=";
-
-    private static final String PRINT_PAGE =
-            BASE_URL + "/PrintUdyamApplication.aspx";
-
-
-    /*
-     * ============================================================
-     * SESSION SETTINGS
-     * ============================================================
-     */
-
-    private static final long SESSION_TTL_MS =
-            5 * 60 * 1000; // 5 minutes
-
-    private static final int MAX_SESSIONS =
-            1000;
-
-
-    /*
-     * ============================================================
-     * USER AGENT
-     * ============================================================
-     */
+    private static final String BASE_URL = "https://www.udyamregistration.gov.in";
+    private static final String VERIFY_PAGE = BASE_URL + "/Udyam_Verify.aspx";
+    private static final String CAPTCHA_URL_PREFIX = BASE_URL + "/Captcha/CaptchaControl.aspx?id=";
+    private static final String PRINT_PAGE = BASE_URL + "/PrintUdyamApplication.aspx";
+    private static final long SESSION_TTL_MS = 5 * 60 * 1000; // 5 minutes
+    private static final int MAX_SESSIONS = 1000; // prevent memory exhaustion
 
     private static final String USER_AGENT =
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
-                    "AppleWebKit/537.36 (KHTML, like Gecko) " +
-                    "Chrome/150.0.0.0 Safari/537.36";
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+                    "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36";
 
-
-    /*
-     * ============================================================
-     * SESSION STORE
-     * ============================================================
-     */
-
-    private final ConcurrentHashMap<String, UdyamSession> sessions =
-            new ConcurrentHashMap<>();
-
-
-    /*
-     * ============================================================
-     * S3 SERVICE
-     * ============================================================
-     */
-
+    private final ConcurrentHashMap<String, UdyamSession> sessions = new ConcurrentHashMap<>();
     private final S3Service s3Service;
-
 
     public UdyamVerificationService(S3Service s3Service) {
         this.s3Service = s3Service;
     }
 
-
-    /*
-     * ============================================================
-     * SESSION CLEANER
-     * ============================================================
-     */
-
     @PostConstruct
     void startSessionCleaner() {
-
         Thread t = new Thread(() -> {
-
             while (!Thread.currentThread().isInterrupted()) {
-
                 try {
-
-                    Thread.sleep(60_000);
-
-                    long now =
-                            System.currentTimeMillis();
-
-                    sessions.entrySet().removeIf(
-                            entry ->
-                                    now - entry.getValue().createdAt
-                                            > SESSION_TTL_MS
-                    );
-
+                    Thread.sleep(60_000); // every minute
+                    long now = System.currentTimeMillis();
+                    sessions.entrySet().removeIf(e -> now - e.getValue().createdAt > SESSION_TTL_MS);
                 } catch (InterruptedException e) {
-
                     Thread.currentThread().interrupt();
-
-                } catch (Exception e) {
-
-                    log.error(
-                            "Error while cleaning Udyam sessions",
-                            e
-                    );
                 }
             }
-
         }, "udyam-session-cleaner");
-
         t.setDaemon(true);
         t.start();
     }
 
-
     @PreDestroy
     void shutdown() {
-
-        log.info(
-                "Shutting down Udyam verification service"
-        );
-
         sessions.clear();
     }
 
-
-    // ============================================================
-    // PUBLIC API
-    // ============================================================
-
+    // ─── PUBLIC API ────────────────────────────────────────────────────────
 
     /**
-     * STEP 1
-     *
-     * Initialise session with Udyam portal.
-     *
-     * Gets:
-     * - ASP.NET cookies
-     * - VIEWSTATE
-     * - VIEWSTATEGENERATOR
-     * - EVENTVALIDATION
-     * - CAPTCHA
+     * STEP 1 — Initialise a session with the Udyam portal.
+     * Visits the verify page to obtain ASP.NET session cookies and
+     * view-state tokens, then downloads the CAPTCHA image.
      */
     public UdyamInitResponse initSession() {
+        BasicCookieStore cookieStore = new BasicCookieStore();
+        RequestConfig config = RequestConfig.custom()
+                .setConnectTimeout(Timeout.ofMilliseconds(30_000))
+                .setResponseTimeout(Timeout.ofMilliseconds(60_000))
+                .setConnectionRequestTimeout(Timeout.ofMilliseconds(30_000))
+                .build();
 
-        BasicCookieStore cookieStore =
-                new BasicCookieStore();
+        try (CloseableHttpClient client = HttpClients.custom()
+                .setDefaultCookieStore(cookieStore)
+                .setDefaultRequestConfig(config)
+                .build()) {
 
-        RequestConfig config =
-                RequestConfig.custom()
-                        .setConnectTimeout(
-                                Timeout.ofMilliseconds(30_000)
-                        )
-                        .setResponseTimeout(
-                                Timeout.ofMilliseconds(60_000)
-                        )
-                        .setConnectionRequestTimeout(
-                                Timeout.ofMilliseconds(30_000)
-                        )
-                        .build();
-
-
-        try (CloseableHttpClient client =
-                     HttpClients.custom()
-                             .setDefaultCookieStore(cookieStore)
-                             .setDefaultRequestConfig(config)
-                             .build()) {
-
-
-            // ====================================================
-            // STEP 1 - LOAD VERIFY PAGE
-            // ====================================================
-
-            HttpGet pageRequest =
-                    new HttpGet(VERIFY_PAGE);
-
+            // ── STEP 1: Load verify page to get VIEWSTATE etc. ──
+            HttpGet pageRequest = new HttpGet(VERIFY_PAGE);
             addBrowserHeaders(pageRequest);
 
-            log.info(
-                    "Udyam init - fetching verify page: {}",
-                    VERIFY_PAGE
-            );
+            log.info("Udyam init — fetching verify page: {}", VERIFY_PAGE);
+            String html = client.execute(pageRequest, response -> {
+                int status = response.getCode();
+                log.info("Udyam verify page HTTP status: {}", status);
+                if (status != 200) {
+                    throw new IOException("Failed to fetch Udyam verify page, HTTP " + status);
+                }
+                byte[] bytes = EntityUtils.toByteArray(response.getEntity());
+                return new String(bytes, StandardCharsets.UTF_8);
+            });
 
-
-            String html =
-                    client.execute(
-                            pageRequest,
-                            response -> {
-
-                                int status =
-                                        response.getCode();
-
-                                log.info(
-                                        "Udyam verify page HTTP status: {}",
-                                        status
-                                );
-
-                                if (status != 200) {
-
-                                    throw new IOException(
-                                            "Failed to fetch Udyam verify page, HTTP "
-                                                    + status
-                                    );
-                                }
-
-                                byte[] bytes =
-                                        EntityUtils.toByteArray(
-                                                response.getEntity()
-                                        );
-
-                                return new String(
-                                        bytes,
-                                        StandardCharsets.UTF_8
-                                );
-                            }
-                    );
-
-
-            // ====================================================
-            // EXTRACT ASP.NET HIDDEN VALUES
-            // ====================================================
-
-            String viewState =
-                    extractHiddenValue(
-                            html,
-                            "__VIEWSTATE"
-                    );
-
-            String viewStateGenerator =
-                    extractHiddenValue(
-                            html,
-                            "__VIEWSTATEGENERATOR"
-                    );
-
-            String eventValidation =
-                    extractHiddenValue(
-                            html,
-                            "__EVENTVALIDATION"
-                    );
-
+            String viewState = extractHiddenValue(html, "__VIEWSTATE");
+            String viewStateGenerator = extractHiddenValue(html, "__VIEWSTATEGENERATOR");
+            String eventValidation = extractHiddenValue(html, "__EVENTVALIDATION");
 
             if (viewState.isEmpty()) {
-
-                log.warn(
-                        "Udyam init - VIEWSTATE is empty"
-                );
+                log.warn("Udyam init — VIEWSTATE is empty; the portal may have changed its page structure.");
             }
+            log.info("Udyam init — VIEWSTATE length={}, EVENTVALIDATION length={}",
+                    viewState.length(), eventValidation.length());
 
+            // ── STEP 2: Download CAPTCHA image ──
+            SimpleDateFormat sdf = new SimpleDateFormat("M/d/yyyy h:mm:ss a");
+            String timestamp = URLEncoder.encode(sdf.format(new Date()), StandardCharsets.UTF_8);
+            String captchaUrl = CAPTCHA_URL_PREFIX + timestamp;
+            log.info("Udyam init — downloading captcha: {}", captchaUrl);
 
-            log.info(
-                    "Udyam init - VIEWSTATE length={}, EVENTVALIDATION length={}",
-                    viewState.length(),
-                    eventValidation.length()
-            );
-
-
-            // ====================================================
-            // STEP 2 - DOWNLOAD CAPTCHA
-            // ====================================================
-
-            SimpleDateFormat sdf =
-                    new SimpleDateFormat(
-                            "M/d/yyyy h:mm:ss a"
-                    );
-
-
-            String timestamp =
-                    URLEncoder.encode(
-                            sdf.format(new Date()),
-                            StandardCharsets.UTF_8
-                    );
-
-
-            String captchaUrl =
-                    CAPTCHA_URL_PREFIX + timestamp;
-
-
-            log.info(
-                    "Udyam init - downloading captcha"
-            );
-
-
-            HttpGet captchaRequest =
-                    new HttpGet(captchaUrl);
-
+            HttpGet captchaRequest = new HttpGet(captchaUrl);
             addBrowserHeaders(captchaRequest);
+            captchaRequest.setHeader("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
+            captchaRequest.setHeader("Sec-Fetch-Dest", "image");
+            captchaRequest.setHeader("Sec-Fetch-Mode", "no-cors");
+            captchaRequest.setHeader("Sec-Fetch-Site", "same-origin");
 
+            byte[] captchaBytes = client.execute(captchaRequest, response -> {
+                int status = response.getCode();
+                log.info("Udyam captcha HTTP status: {}", status);
+                if (status != 200) {
+                    throw new IOException("Failed to download captcha, HTTP " + status);
+                }
+                // Validate that the response is actually an image
+                Header contentTypeHeader = response.getFirstHeader("Content-Type");
+                String contentType = contentTypeHeader != null ? contentTypeHeader.getValue() : "unknown";
+                log.info("Udyam captcha Content-Type: {}", contentType);
+                if (!contentType.toLowerCase().contains("image/")) {
+                    // The portal may have returned an HTML error/challenge page
+                    log.error("Udyam captcha returned non-image content (Content-Type: {})."
+                                    + " The portal may be temporarily blocking automated requests.",
+                            contentType);
+                    throw new IOException(
+                            "Government portal returned non-image content (Content-Type: " + contentType
+                                    + "). The portal may be temporarily blocking automated requests."
+                                    + " Try again in a few minutes.");
+                }
+                byte[] bytes = EntityUtils.toByteArray(response.getEntity());
+                log.info("Udyam captcha downloaded: {} bytes", bytes.length);
+                if (bytes.length < 100) {
+                    log.error("Udyam captcha suspiciously small ({} bytes) — likely not a real captcha image.", bytes.length);
+                    throw new IOException("Government portal returned an invalid captcha image.");
+                }
+                return bytes;
+            });
 
-            captchaRequest.setHeader(
-                    "Accept",
-                    "image/avif,image/webp,image/apng," +
-                            "image/svg+xml,image/*,*/*;q=0.8"
-            );
+            String captchaBase64 = "data:image/png;base64," + Base64.getEncoder().encodeToString(captchaBytes);
+            log.info("Udyam init — captcha prepared (base64 length={})", captchaBase64.length());
 
-            captchaRequest.setHeader(
-                    "Sec-Fetch-Dest",
-                    "image"
-            );
-
-            captchaRequest.setHeader(
-                    "Sec-Fetch-Mode",
-                    "no-cors"
-            );
-
-            captchaRequest.setHeader(
-                    "Sec-Fetch-Site",
-                    "same-origin"
-            );
-
-
-            byte[] captchaBytes =
-                    client.execute(
-                            captchaRequest,
-                            response -> {
-
-                                int status =
-                                        response.getCode();
-
-                                log.info(
-                                        "Udyam captcha HTTP status: {}",
-                                        status
-                                );
-
-
-                                if (status != 200) {
-
-                                    throw new IOException(
-                                            "Failed to download captcha, HTTP "
-                                                    + status
-                                    );
-                                }
-
-
-                                Header contentTypeHeader =
-                                        response.getFirstHeader(
-                                                "Content-Type"
-                                        );
-
-
-                                String contentType =
-                                        contentTypeHeader != null
-                                                ? contentTypeHeader.getValue()
-                                                : "unknown";
-
-
-                                log.info(
-                                        "Udyam captcha Content-Type: {}",
-                                        contentType
-                                );
-
-
-                                if (!contentType
-                                        .toLowerCase()
-                                        .contains("image/")) {
-
-                                    throw new IOException(
-                                            "Government portal returned non-image content. "
-                                                    + "Content-Type: "
-                                                    + contentType
-                                    );
-                                }
-
-
-                                byte[] bytes =
-                                        EntityUtils.toByteArray(
-                                                response.getEntity()
-                                        );
-
-
-                                log.info(
-                                        "Udyam captcha downloaded: {} bytes",
-                                        bytes.length
-                                );
-
-
-                                if (bytes.length < 100) {
-
-                                    throw new IOException(
-                                            "Government portal returned an invalid captcha image."
-                                    );
-                                }
-
-
-                                return bytes;
-                            }
-                    );
-
-
-            // ====================================================
-            // CAPTCHA BASE64
-            // ====================================================
-
-            String captchaBase64 =
-                    "data:image/png;base64,"
-                            + Base64.getEncoder()
-                            .encodeToString(captchaBytes);
-
-
-            // ====================================================
-            // SESSION LIMIT
-            // ====================================================
-
+            // ── Store session state (with size cap) ──
             if (sessions.size() >= MAX_SESSIONS) {
-
                 throw new FssaiException(
                         "Too many active sessions. Please try again in a minute.",
-                        FailureCode.TEXTRACT_FAILURE
-                );
+                        FailureCode.TEXTRACT_FAILURE);
             }
-
-
-            // ====================================================
-            // CREATE SESSION
-            // ====================================================
-
-            String sessionId =
-                    UUID.randomUUID().toString();
-
-
-            UdyamSession session =
-                    new UdyamSession();
-
-
-            session.createdAt =
-                    System.currentTimeMillis();
-
-
-            session.viewState =
-                    viewState;
-
-            session.viewStateGenerator =
-                    viewStateGenerator;
-
-            session.eventValidation =
-                    eventValidation;
-
-
-            session.cookies =
-                    new ArrayList<>();
-
-
-            for (Cookie cookie :
-                    cookieStore.getCookies()) {
-
-                session.cookies.add(cookie);
+            String sessionId = UUID.randomUUID().toString();
+            UdyamSession session = new UdyamSession();
+            session.createdAt = System.currentTimeMillis();
+            session.viewState = viewState;
+            session.viewStateGenerator = viewStateGenerator;
+            session.eventValidation = eventValidation;
+            session.cookies = new ArrayList<>();
+            for (Cookie c : cookieStore.getCookies()) {
+                session.cookies.add(c);
             }
+            session.captchaImage = captchaBytes;  // store raw bytes for direct image serving
+            sessions.put(sessionId, session);
 
-
-            session.captchaImage =
-                    captchaBytes;
-
-
-            sessions.put(
-                    sessionId,
-                    session
-            );
-
-
-            log.info(
-                    "Udyam session created: {}",
-                    sessionId
-            );
-
-
-            return new UdyamInitResponse(
-                    sessionId,
-                    captchaBase64
-            );
-
+            return new UdyamInitResponse(sessionId, captchaBase64);
 
         } catch (Exception e) {
-
-            log.error(
-                    "Failed to initialise Udyam session",
-                    e
-            );
-
-
+            log.error("Failed to initialise Udyam session", e);
             throw new FssaiException(
-                    "We couldn't connect to the Udyam verification portal right now. "
-                            + "Please try again in a few minutes.",
-                    FailureCode.TEXTRACT_FAILURE,
-                    e
-            );
+                    "We couldn't connect to the Udyam verification portal right now. Please try again in a few minutes.",
+                    FailureCode.TEXTRACT_FAILURE, e);
         }
     }
 
-
     /**
-     * STEP 3 + STEP 4
-     *
-     * Verify Udyam number + CAPTCHA.
-     *
-     * Then:
-     *
-     * Udyam portal
-     *      ↓
-     * PrintUdyamApplication.aspx
-     *      ↓
-     * HTML
-     *      ↓
-     * PDF
-     *      ↓
-     * S3
+     * STEP 3 + 4 — Verify a Udyam number + CAPTCHA, then fetch and convert
+     * the certificate HTML to a PDF.
      */
-    public UdyamVerifyResponse verifyAndGeneratePdf(
-            UdyamVerifyRequest request
-    ) {
-
-
-        // ========================================================
-        // GET AND CONSUME SESSION
-        // ========================================================
-
-        UdyamSession session =
-                sessions.remove(
-                        request.getSessionId()
-                );
-
-
+    public UdyamVerifyResponse verifyAndGeneratePdf(UdyamVerifyRequest request) {
+        UdyamSession session = sessions.remove(request.getSessionId());
         if (session == null) {
-
             throw new FssaiException(
                     "Your session has expired. Please go back and load a new CAPTCHA.",
-                    FailureCode.INVALID_REQUEST
-            );
+                    FailureCode.INVALID_REQUEST);
         }
 
-
-        // ========================================================
-        // RESTORE COOKIES
-        // ========================================================
-
-        BasicCookieStore cookieStore =
-                new BasicCookieStore();
-
-
-        for (Cookie cookie :
-                session.cookies) {
-
-            cookieStore.addCookie(cookie);
+        BasicCookieStore cookieStore = new BasicCookieStore();
+        for (Cookie c : session.cookies) {
+            cookieStore.addCookie(c);
         }
 
+        RequestConfig config = RequestConfig.custom()
+                .setConnectTimeout(Timeout.ofMilliseconds(30_000))
+                .setResponseTimeout(Timeout.ofMilliseconds(60_000))
+                .setConnectionRequestTimeout(Timeout.ofMilliseconds(30_000))
+                .build();
 
-        RequestConfig config =
-                RequestConfig.custom()
-                        .setConnectTimeout(
-                                Timeout.ofMilliseconds(30_000)
-                        )
-                        .setResponseTimeout(
-                                Timeout.ofMilliseconds(60_000)
-                        )
-                        .setConnectionRequestTimeout(
-                                Timeout.ofMilliseconds(30_000)
-                        )
-                        .build();
+        try (CloseableHttpClient client = HttpClients.custom()
+                .setDefaultCookieStore(cookieStore)
+                .setDefaultRequestConfig(config)
+                .build()) {
 
-
-        try (CloseableHttpClient client =
-                     HttpClients.custom()
-                             .setDefaultCookieStore(cookieStore)
-                             .setDefaultRequestConfig(config)
-                             .build()) {
-
-
-            // ====================================================
-            // STEP 3 - VERIFY UDYAM
-            // ====================================================
-
-            HttpPost post =
-                    new HttpPost(VERIFY_PAGE);
-
-
+            // ── STEP 3: Submit verification ──
+            HttpPost post = new HttpPost(VERIFY_PAGE);
             addBrowserHeaders(post);
+            post.setHeader("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+            post.setHeader("Origin", BASE_URL);
+            post.setHeader("X-MicrosoftAjax", "Delta=true");
+            post.setHeader("X-Requested-With", "XMLHttpRequest");
 
-
-            post.setHeader(
-                    "Content-Type",
-                    "application/x-www-form-urlencoded; charset=UTF-8"
-            );
-
-
-            post.setHeader(
-                    "Origin",
-                    BASE_URL
-            );
-
-
-            post.setHeader(
-                    "X-MicrosoftAjax",
-                    "Delta=true"
-            );
-
-
-            post.setHeader(
-                    "X-Requested-With",
-                    "XMLHttpRequest"
-            );
-
-
-            List<NameValuePair> params =
-                    new ArrayList<>();
-
-
-            params.add(
-                    new BasicNameValuePair(
-                            "ctl00$sm",
-                            "ctl00$ContentPlaceHolder1$UpdatePaneldd1|"
-                                    + "ctl00$ContentPlaceHolder1$btnVerify"
-                    )
-            );
-
-
-            params.add(
-                    new BasicNameValuePair(
-                            "__EVENTTARGET",
-                            ""
-                    )
-            );
-
-
-            params.add(
-                    new BasicNameValuePair(
-                            "__EVENTARGUMENT",
-                            ""
-                    )
-            );
-
-
-            params.add(
-                    new BasicNameValuePair(
-                            "__VIEWSTATE",
-                            session.viewState
-                    )
-            );
-
-
-            params.add(
-                    new BasicNameValuePair(
-                            "__VIEWSTATEGENERATOR",
-                            session.viewStateGenerator
-                    )
-            );
-
-
-            params.add(
-                    new BasicNameValuePair(
-                            "__VIEWSTATEENCRYPTED",
-                            ""
-                    )
-            );
-
-
-            params.add(
-                    new BasicNameValuePair(
-                            "ctl00$ContentPlaceHolder1$hdnSetPassword",
-                            ""
-                    )
-            );
-
-
-            params.add(
-                    new BasicNameValuePair(
-                            "ctl00$ContentPlaceHolder1$txtUdyamNo",
-                            request.getUdyamNumber()
-                    )
-            );
-
-
-            params.add(
-                    new BasicNameValuePair(
-                            "ctl00$ContentPlaceHolder1$txtCaptcha",
-                            request.getCaptchaText()
-                    )
-            );
-
-
-            params.add(
-                    new BasicNameValuePair(
-                            "__ASYNCPOST",
-                            "true"
-                    )
-            );
-
-
-            params.add(
-                    new BasicNameValuePair(
-                            "ctl00$ContentPlaceHolder1$btnVerify",
-                            "Verify"
-                    )
-            );
-
-
-            if (session.eventValidation != null
-                    && !session.eventValidation.isEmpty()) {
-
-                params.add(
-                        new BasicNameValuePair(
-                                "__EVENTVALIDATION",
-                                session.eventValidation
-                        )
-                );
+            List<NameValuePair> params = new ArrayList<>();
+            params.add(new BasicNameValuePair("ctl00$sm",
+                    "ctl00$ContentPlaceHolder1$UpdatePaneldd1|ctl00$ContentPlaceHolder1$btnVerify"));
+            params.add(new BasicNameValuePair("__EVENTTARGET", ""));
+            params.add(new BasicNameValuePair("__EVENTARGUMENT", ""));
+            params.add(new BasicNameValuePair("__VIEWSTATE", session.viewState));
+            params.add(new BasicNameValuePair("__VIEWSTATEGENERATOR", session.viewStateGenerator));
+            params.add(new BasicNameValuePair("__VIEWSTATEENCRYPTED", ""));
+            params.add(new BasicNameValuePair("ctl00$ContentPlaceHolder1$hdnSetPassword", ""));
+            params.add(new BasicNameValuePair("ctl00$ContentPlaceHolder1$txtUdyamNo", request.getUdyamNumber()));
+            params.add(new BasicNameValuePair("ctl00$ContentPlaceHolder1$txtCaptcha", request.getCaptchaText()));
+            params.add(new BasicNameValuePair("__ASYNCPOST", "true"));
+            params.add(new BasicNameValuePair("ctl00$ContentPlaceHolder1$btnVerify", "Verify"));
+            if (session.eventValidation != null && !session.eventValidation.isEmpty()) {
+                params.add(new BasicNameValuePair("__EVENTVALIDATION", session.eventValidation));
             }
 
+            post.setEntity(new UrlEncodedFormEntity(params, StandardCharsets.UTF_8));
 
-            post.setEntity(
-                    new UrlEncodedFormEntity(
-                            params,
-                            StandardCharsets.UTF_8
-                    )
-            );
+            String verifyResult = client.execute(post, response -> {
+                int status = response.getCode();
+                log.info("Udyam verify HTTP status: {}", status);
+                byte[] bytes = EntityUtils.toByteArray(response.getEntity());
+                return new String(bytes, StandardCharsets.UTF_8);
+            });
 
+            log.info("Udyam verify response length={}", verifyResult.length());
 
-            String verifyResult =
-                    client.execute(
-                            post,
-                            response -> {
-
-                                int status =
-                                        response.getCode();
-
-                                log.info(
-                                        "Udyam verify HTTP status: {}",
-                                        status
-                                );
-
-
-                                byte[] bytes =
-                                        EntityUtils.toByteArray(
-                                                response.getEntity()
-                                        );
-
-
-                                return new String(
-                                        bytes,
-                                        StandardCharsets.UTF_8
-                                );
-                            }
-                    );
-
-
-            log.info(
-                    "Udyam verify response length={}",
-                    verifyResult.length()
-            );
-
-
-            // ====================================================
-            // CHECK CAPTCHA ERRORS
-            // ====================================================
-
-            String verifyLower =
-                    verifyResult.toLowerCase();
-
-
-            if (verifyLower.contains("invalid captcha")
-                    || verifyLower.contains("wrong captcha")
-                    || verifyLower.contains("captcha mismatch")
-                    || verifyLower.contains("please enter captcha")) {
-
-                return UdyamVerifyResponse.error(
-                        "The CAPTCHA you entered is incorrect. Please try again."
-                );
+            // Check for common error patterns (case-insensitive)
+            String verifyLower = verifyResult.toLowerCase();
+            if (verifyLower.contains("invalid captcha") || verifyLower.contains("wrong captcha")
+                    || verifyLower.contains("captcha mismatch") || verifyLower.contains("please enter captcha")) {
+                return UdyamVerifyResponse.error("The CAPTCHA you entered is incorrect. Please try again.");
             }
-
-
-            // ====================================================
-            // CHECK UDYAM ERRORS
-            // ====================================================
-
-            if (verifyLower.contains("udyam number not found")
-                    || verifyLower.contains("invalid udyam")
+            if (verifyLower.contains("udyam number not found") || verifyLower.contains("invalid udyam")
                     || verifyLower.contains("no record")) {
-
+                return UdyamVerifyResponse.error("The Udyam number was not found on the government portal. Please check and try again.");
+            }
+            // Check if the portal returned an error page or challenge
+            if (verifyLower.contains("access denied") || verifyLower.contains("forbidden")
+                    || verifyLower.contains("blocked") || verifyLower.contains("too many requests")) {
                 return UdyamVerifyResponse.error(
-                        "The Udyam number was not found on the government portal. "
-                                + "Please check and try again."
-                );
+                        "The government portal is temporarily blocking automated requests. " +
+                                "Please try again in a few minutes.");
+            }
+            // Check for session-expired or viewstate errors
+            if (verifyLower.contains("session has expired") || verifyLower.contains("invalid viewstate")
+                    || verifyLower.contains("validation of viewstate mac failed")) {
+                return UdyamVerifyResponse.error(
+                        "Your verification session has expired. Please go back and load a new CAPTCHA.");
             }
 
-
-            // ====================================================
-            // CHECK BLOCKING
-            // ====================================================
-
-            if (verifyLower.contains("access denied")
-                    || verifyLower.contains("forbidden")
-                    || verifyLower.contains("blocked")
-                    || verifyLower.contains("too many requests")) {
-
-                return UdyamVerifyResponse.error(
-                        "The government portal is temporarily blocking automated requests. "
-                                + "Please try again in a few minutes."
-                );
-            }
-
-
-            // ====================================================
-            // CHECK SESSION
-            // ====================================================
-
-            if (verifyLower.contains("session has expired")
-                    || verifyLower.contains("invalid viewstate")
-                    || verifyLower.contains(
-                    "validation of viewstate mac failed"
-            )) {
-
-                return UdyamVerifyResponse.error(
-                        "Your verification session has expired. "
-                                + "Please go back and load a new CAPTCHA."
-                );
-            }
-
-
-            // ====================================================
-            // STEP 4 - FETCH PRINT PAGE
-            // ====================================================
-
-            HttpGet printRequest =
-                    new HttpGet(PRINT_PAGE);
-
-
+            // ── STEP 4: Fetch print page ──
+            HttpGet printRequest = new HttpGet(PRINT_PAGE);
             addBrowserHeaders(printRequest);
+            printRequest.setHeader("Upgrade-Insecure-Requests", "1");
 
+            String printHtml = client.execute(printRequest, response -> {
+                int status = response.getCode();
+                log.info("Udyam print page HTTP status: {}", status);
+                byte[] bytes = EntityUtils.toByteArray(response.getEntity());
+                return new String(bytes, StandardCharsets.UTF_8);
+            });
 
-            printRequest.setHeader(
-                    "Upgrade-Insecure-Requests",
-                    "1"
-            );
-
-
-            log.info(
-                    "Fetching Udyam certificate print page"
-            );
-
-
-            String printHtml =
-                    client.execute(
-                            printRequest,
-                            response -> {
-
-                                int status =
-                                        response.getCode();
-
-                                log.info(
-                                        "Udyam print page HTTP status: {}",
-                                        status
-                                );
-
-
-                                byte[] bytes =
-                                        EntityUtils.toByteArray(
-                                                response.getEntity()
-                                        );
-
-
-                                return new String(
-                                        bytes,
-                                        StandardCharsets.UTF_8
-                                );
-                            }
-                    );
-
-
-            log.info(
-                    "Udyam print page HTML length={}",
-                    printHtml.length()
-            );
-
-
-            // ====================================================
-            // VALIDATE HTML
-            // ====================================================
+            log.info("Udyam print page HTML length={}", printHtml.length());
 
             if (printHtml.length() < 200) {
-
                 return UdyamVerifyResponse.error(
-                        "Could not retrieve the MSME certificate from the government portal. "
-                                + "Please try again or contact support."
-                );
+                        "Could not retrieve the MSME certificate from the government portal. " +
+                                "Please try again or contact support.");
             }
 
-
-            String printLower =
-                    printHtml.toLowerCase();
-
-
-            if (printLower.contains("login")
-                    && printLower.contains("password")) {
-
+            // Check if the print page is actually an error page or login page
+            String printLower = printHtml.toLowerCase();
+            if (printLower.contains("login") && printLower.contains("password")) {
                 return UdyamVerifyResponse.error(
-                        "The government portal session expired before "
-                                + "we could retrieve the certificate. "
-                                + "Please try again with a fresh CAPTCHA."
-                );
+                        "The government portal session expired before we could retrieve the certificate. " +
+                                "Please try again with a fresh CAPTCHA.");
             }
 
+            // ── Convert HTML to PDF ──
+            byte[] pdfBytes = convertHtmlToPdf(printHtml, request.getUdyamNumber());
 
-            // ====================================================
-            // STEP 5 - HTML -> PDF
-            // ====================================================
+            // ── Upload PDF to S3 ──
+            String fileKey = "msme/verify/" + request.getUdyamNumber().toLowerCase()
+                    .replace(" ", "_") + "/udyam_certificate.pdf";
+            String pdfUrl = s3Service.uploadFile(pdfBytes, ContentType.APPLICATION_PDF.getMimeType(), fileKey);
 
-            byte[] pdfBytes =
-                    convertHtmlToPdf(
-                            printHtml,
-                            request.getUdyamNumber()
-                    );
-
-
-            // ====================================================
-            // STEP 6 - UPLOAD PDF TO S3
-            // ====================================================
-
-            String fileKey =
-                    "msme/verify/"
-                            + request.getUdyamNumber()
-                            .toLowerCase()
-                            .replace(" ", "_")
-                            + "/udyam_certificate.pdf";
-
-
-            String pdfUrl =
-                    s3Service.uploadFile(
-                            pdfBytes,
-                            ContentType.APPLICATION_PDF.getMimeType(),
-                            fileKey
-                    );
-
-
-            log.info(
-                    "Udyam certificate uploaded successfully: {}",
-                    fileKey
-            );
-
-
-            // ====================================================
-            // RETURN RESPONSE
-            // ====================================================
-
-            return UdyamVerifyResponse.ok(
-                    pdfUrl,
-                    printHtml,
-                    request.getUdyamNumber()
-            );
-
+            return UdyamVerifyResponse.ok(pdfUrl, printHtml, request.getUdyamNumber());
 
         } catch (FssaiException e) {
-
             throw e;
-
         } catch (Exception e) {
-
-            log.error(
-                    "Failed to verify Udyam number",
-                    e
-            );
-
-
+            log.error("Failed to verify Udyam number", e);
             throw new FssaiException(
-                    "We couldn't complete the Udyam verification right now. "
-                            + "Please try again in a few minutes.",
-                    FailureCode.TEXTRACT_FAILURE,
-                    e
-            );
+                    "We couldn't complete the Udyam verification right now. Please try again in a few minutes.",
+                    FailureCode.TEXTRACT_FAILURE, e);
         }
     }
 
-
-    // ============================================================
-    // HTML -> PDF
-    // ============================================================
+    // ─── HTML \u2192 PDF CONVERSION ─────────────────────────────────────────────
 
     /**
-     * Converts the ORIGINAL government Udyam HTML into PDF.
-     *
-     * IMPORTANT:
-     *
-     * We do NOT extract the certificate fields into a new custom
-     * table anymore.
-     *
-     * Instead, we preserve the original government HTML tables.
-     *
-     * This prevents layouts such as:
-     *
-     * Organisation Type | Organisation Type
-     * Gender             | Gender
-     *
-     * and keeps the original 4-column layout.
+     * Converts the government portal's PrintUdyamApplication HTML into a
+     * professional single-page PDF using OpenHTMLtoPDF. Creates an official-looking
+     * MSME certificate with proper government styling, double borders, and structured
+     * layout that closely resembles the actual Udyam Registration Certificate.
      */
-    private byte[] convertHtmlToPdf(
-            String rawHtml,
-            String udyamNumber
-    ) {
-
+    private byte[] convertHtmlToPdf(String rawHtml, String udyamNumber) {
         try {
+            // Parse the HTML
+            Document doc = Jsoup.parse(rawHtml);
 
-            log.info(
-                    "Starting HTML -> PDF conversion for Udyam {}",
-                    udyamNumber
-            );
-
-
-            // ====================================================
-            // 1. PARSE GOVERNMENT HTML
-            // ====================================================
-
-            Document doc =
-                    Jsoup.parse(
-                            rawHtml,
-                            BASE_URL + "/"
-                    );
-
-
-            /*
-             * ====================================================
-             * 2. REMOVE ELEMENTS THAT SHOULD NOT BE IN PDF
-             * ====================================================
-             */
-
+            // Remove elements that break PDF rendering or are unnecessary
             doc.select("script").remove();
-
             doc.select("noscript").remove();
+            doc.select("link[rel=stylesheet]").remove();
+            doc.select("meta[http-equiv]").remove();
+            doc.select("form").remove(); // Remove ASP.NET form elements
 
-            doc.select("form").unwrap();
+            // Must serialize as XML: jsoup's default HTML5 syntax emits unclosed void
+            // tags (<input>, <img>, <br>) which OpenHTMLtoPDF's strict XML/TRaX parser
+            // rejects with a SAXParseException -> 500. XML syntax self-closes them.
+            doc.outputSettings().syntax(Document.OutputSettings.Syntax.xml);
 
-            // Interactive controls
-            doc.select("input").remove();
+            // Extract certificate data from tables
+            StringBuilder certFields = new StringBuilder();
+            StringBuilder nicCodeRows = new StringBuilder();
 
-            doc.select("button").remove();
+            // Find all tables and extract the certificate data
+            org.jsoup.select.Elements tables = doc.select("table");
+            for (org.jsoup.nodes.Element table : tables) {
+                String tableText = table.text().toLowerCase();
 
-            doc.select("select").remove();
-
-            doc.select("textarea").remove();
-
-
-            // Common print controls
-            doc.select(".btn").remove();
-
-            doc.select(".button").remove();
-
-            doc.select(".print").remove();
-
-            doc.select(".print-button").remove();
-
-            doc.select(".no-print").remove();
-
-            doc.select(".hide-print").remove();
-
-
-            /*
-             * Do NOT remove all images.
-             *
-             * The government header/logo is usually an image.
-             */
-
-
-            /*
-             * ====================================================
-             * 3. FIX IMAGE URLS
-             * ====================================================
-             */
-
-            for (Element img :
-                    doc.select("img[src]")) {
-
-                String src =
-                        img.absUrl("src");
-
-
-                if (src != null
-                        && !src.isEmpty()) {
-
-                    img.attr(
-                            "src",
-                            src
-                    );
+                // Main certificate fields table
+                if (tableText.contains("udyam registration number") ||
+                        tableText.contains("name of enterprise") ||
+                        tableText.contains("type of enterprise")) {
+                    org.jsoup.select.Elements rows = table.select("tr");
+                    for (org.jsoup.nodes.Element row : rows) {
+                        org.jsoup.select.Elements cells = row.select("td, th");
+                        if (cells.size() >= 2) {
+                            String label = cells.get(0).text().trim();
+                            String value = cells.get(1).text().trim();
+                            if (!value.isEmpty()) {
+                                // Skip NIC code rows from main table (we handle them separately)
+                                if (label.toLowerCase().contains("nic")) continue;
+                                certFields.append("<tr><td class=\"field-label\">")
+                                        .append(escapeXml(label))
+                                        .append("</td><td class=\"field-value\">")
+                                        .append(escapeXml(value))
+                                        .append("</td></tr>\n");
+                            }
+                        }
+                    }
+                }
+                // NIC codes table
+                if (tableText.contains("nic 2 digit") || tableText.contains("nic 4 digit") ||
+                        tableText.contains("national industry")) {
+                    org.jsoup.select.Elements rows = table.select("tr");
+                    for (org.jsoup.nodes.Element row : rows) {
+                        org.jsoup.select.Elements cells = row.select("td, th");
+                        if (cells.size() >= 2) {
+                            String nic2 = cells.size() > 0 ? cells.get(0).text().trim() : "";
+                            String nic4 = cells.size() > 1 ? cells.get(1).text().trim() : "";
+                            String activity = cells.size() > 2 ? cells.get(2).text().trim() : "";
+                            if (!nic2.isEmpty() && !nic2.toLowerCase().contains("s.no")) {
+                                nicCodeRows.append("<tr><td>")
+                                        .append(escapeXml(nic2))
+                                        .append("</td><td>")
+                                        .append(escapeXml(nic4))
+                                        .append("</td><td>")
+                                        .append(escapeXml(activity))
+                                        .append("</td></tr>\n");
+                            }
+                        }
+                    }
                 }
             }
 
-
-            /*
-             * ====================================================
-             * 4. FIX LINK URLS
-             * ====================================================
-             */
-
-            for (Element link :
-                    doc.select("link[href]")) {
-
-                String href =
-                        link.absUrl("href");
-
-
-                if (href != null
-                        && !href.isEmpty()) {
-
-                    link.attr(
-                            "href",
-                            href
-                    );
-                }
+            // If no certificate table found, use a fallback approach
+            if (certFields.length() == 0) {
+                String fullText = doc.text();
+                certFields.append(extractCertificateFields(fullText));
             }
 
-
-            /*
-             * ====================================================
-             * 5. REMOVE GOVERNMENT EXTERNAL CSS
-             *
-             * We keep the HTML structure but use CSS suitable
-             * for OpenHTMLtoPDF.
-             * ====================================================
-             */
-
-            doc.select(
-                    "link[rel=stylesheet]"
-            ).remove();
-
-
-            /*
-             * Remove old style blocks because they can contain
-             * browser-specific CSS which OpenHTMLtoPDF does not
-             * understand correctly.
-             */
-            doc.select("style").remove();
-
-
-            /*
-             * ====================================================
-             * 6. NORMALIZE TABLE WIDTHS
-             * ====================================================
-             */
-
-            for (Element table :
-                    doc.select("table")) {
-
-                table.removeAttr("width");
-
-                table.attr(
-                        "style",
-                        "width:100%;"
-                );
+            // Build NIC codes HTML section if data found
+            String nicSection = "";
+            if (nicCodeRows.length() > 0) {
+                nicSection = "    <div class=\"section\">\n" +
+                        "      <div class=\"section-header\">National Industry Classification (NIC) Code(s)</div>\n" +
+                        "      <table class=\"nic-table\">\n" +
+                        "        <tr><th>NIC 2-Digit</th><th>NIC 4-Digit</th><th>Activity Description</th></tr>\n" +
+                        nicCodeRows.toString() +
+                        "      </table>\n" +
+                        "    </div>\n";
             }
 
-
-            /*
-             * Normalize cells.
-             *
-             * IMPORTANT:
-             * We do not remove colspan/rowspan because those are
-             * important for the original government layout.
-             */
-
-            for (Element cell :
-                    doc.select("td, th")) {
-
-                cell.removeAttr("width");
-            }
-
-
-            /*
-             * ====================================================
-             * 7. CLEAN ONLY PROBLEMATIC INLINE CSS
-             * ====================================================
-             */
-
-            for (Element element :
-                    doc.select("[style]")) {
-
-                String styleValue =
-                        element.attr("style");
-
-
-                if (styleValue == null
-                        || styleValue.isEmpty()) {
-
-                    continue;
-                }
-
-
-                /*
-                 * Remove browser-only positioning.
-                 *
-                 * We intentionally DO NOT remove all inline CSS.
-                 */
-                styleValue =
-                        styleValue
-                                .replaceAll(
-                                        "(?i)position\\s*:\\s*fixed\\s*;?",
-                                        ""
-                                )
-                                .replaceAll(
-                                        "(?i)position\\s*:\\s*absolute\\s*;?",
-                                        ""
-                                )
-                                .replaceAll(
-                                        "(?i)float\\s*:\\s*(left|right)\\s*;?",
-                                        ""
-                                );
-
-
-                element.attr(
-                        "style",
-                        styleValue
-                );
-            }
-
-
-            /*
-             * ====================================================
-             * 8. ADD OUR PDF CSS
-             * ====================================================
-             */
-
-            Element head =
-                    doc.head();
-
-
-            if (head == null) {
-
-                head =
-                        doc.prependElement("head");
-            }
-
-
-            Element style =
-                    doc.createElement("style");
-
-
-            style.append(
-                    """
-                    @page {
-                        size: A4 portrait;
-                        margin: 7mm 9mm 9mm 9mm;
-                    }
-
-                    * {
-                        box-sizing: border-box;
-                    }
-
-                    html {
-                        margin: 0;
-                        padding: 0;
-                        background: #ffffff;
-                    }
-
-                    body {
-                        margin: 0;
-                        padding: 0;
-                        background: #ffffff;
-                        color: #000000;
-                        font-family: Arial, Helvetica, sans-serif;
-                        font-size: 8px;
-                        line-height: 1.25;
-                    }
-
-                    /*
-                     * Main certificate wrapper
-                     */
-                    .certificate-container {
-                        width: 100%;
-                        margin: 0;
-                        padding: 0;
-                    }
-
-                    /*
-                     * Images
-                     */
-                    img {
-                        max-width: 100%;
-                        height: auto;
-                    }
-
-                    /*
-                     * Tables
-                     */
-                    table {
-                        width: 100% !important;
-                        max-width: 100% !important;
-                        border-collapse: collapse !important;
-                        border-spacing: 0 !important;
-                        margin-top: 0 !important;
-                        margin-bottom: 6px !important;
-                        page-break-inside: auto;
-                    }
-
-                    tr {
-                        page-break-inside: avoid;
-                        page-break-after: auto;
-                    }
-
-                    td,
-                    th {
-                        border: 1px solid #7aa5d8 !important;
-                        padding: 3px 5px !important;
-                        vertical-align: middle !important;
-                        font-family: Arial, Helvetica, sans-serif !important;
-                        font-size: 8px !important;
-                        line-height: 1.25 !important;
-                        color: #000000 !important;
-                    }
-
-                    th {
-                        font-weight: bold !important;
-                        background: #ffffff !important;
-                    }
-
-                    /*
-                     * Section headings
-                     */
-                    h1,
-                    h2,
-                    h3,
-                    h4,
-                    h5,
-                    h6 {
-                        font-family: Arial, Helvetica, sans-serif !important;
-                        font-size: 9px !important;
-                        font-weight: bold !important;
-                        color: #000000 !important;
-                        margin: 7px 0 3px 0 !important;
-                        padding: 4px 0 !important;
-                        border-bottom: 1px solid #dddddd;
-                        page-break-after: avoid;
-                    }
-
-                    /*
-                     * Paragraphs
-                     */
-                    p {
-                        margin: 2px 0 !important;
-                        padding: 0 !important;
-                    }
-
-                    /*
-                     * Links
-                     */
-                    a {
-                        color: #000000 !important;
-                        text-decoration: none !important;
-                    }
-
-                    /*
-                     * Prevent huge text
-                     */
-                    span,
-                    div {
-                        max-width: 100%;
-                    }
-
-                    /*
-                     * Long text should wrap
-                     */
-                    td,
-                    th,
-                    div,
-                    span,
-                    p {
-                        word-wrap: break-word;
-                        overflow-wrap: break-word;
-                    }
-
-                    /*
-                     * Hide interactive elements
-                     */
-                    input,
-                    button,
-                    select,
-                    textarea {
-                        display: none !important;
-                    }
-
-                    /*
-                     * Hide common navigation/footer controls
-                     */
-                    nav,
-                    footer,
-                    .no-print,
-                    .print,
-                    .print-button,
-                    .btn,
-                    .button {
-                        display: none !important;
-                    }
-
-                    /*
-                     * Keep the certificate header together
-                     */
-                    .header,
-                    .certificate-header,
-                    .top-header {
-                        page-break-inside: avoid;
-                    }
-
-                    /*
-                     * Keep address sections together where possible
-                     */
-                    .address,
-                    .address-section {
-                        page-break-inside: avoid;
-                    }
-
-                    /*
-                     * NIC table
-                     */
-                    .nic-table {
-                        width: 100% !important;
-                        border-collapse: collapse !important;
-                    }
-
-                    .nic-table td,
-                    .nic-table th {
-                        border: 1px solid #7aa5d8 !important;
-                        padding: 3px 5px !important;
-                    }
-
-                    /*
-                     * Small text
-                     */
-                    .small,
-                    .small-text {
-                        font-size: 7px !important;
-                    }
-                    """
-            );
-
-
-            head.appendChild(style);
-
-
-            /*
-             * ====================================================
-             * 9. CREATE WRAPPER
-             * ====================================================
-             *
-             * We keep ALL original government elements.
-             *
-             * We are NOT rebuilding the certificate.
-             */
-
-            Element body =
-                    doc.body();
-
-
-            if (body == null) {
-
-                throw new IOException(
-                        "Government HTML does not contain a body element."
-                );
-            }
-
-
-            Element wrapper =
-                    doc.createElement(
-                            "div"
-                    );
-
-
-            wrapper.attr(
-                    "class",
-                    "certificate-container"
-            );
-
-
-            /*
-             * Copy current body children into wrapper.
-             *
-             * Use a snapshot to avoid modifying the collection
-             * while iterating.
-             */
-
-            List<Element> bodyElements =
-                    new ArrayList<>(
-                            body.children()
-                    );
-
-
-            for (Element child :
-                    bodyElements) {
-
-                child.remove();
-
-                wrapper.appendChild(
-                        child
-                );
-            }
-
-
-            body.appendChild(
-                    wrapper
-            );
-
-
-            /*
-             * ====================================================
-             * 10. ENSURE UDYAM NUMBER EXISTS
-             * ====================================================
-             *
-             * Normally the government HTML already contains it.
-             *
-             * If it does not, add it at the top.
-             */
-
-            String bodyText =
-                    body.text();
-
-
-            if (!bodyText
-                    .toLowerCase()
-                    .contains(
-                            udyamNumber.toLowerCase()
-                    )) {
-
-                Element number =
-                        doc.createElement(
-                                "div"
-                        );
-
-
-                number.attr(
-                        "style",
-                        "text-align:center;" +
-                                "font-weight:bold;" +
-                                "font-size:9px;" +
-                                "margin-bottom:5px;"
-                );
-
-
-                number.text(
-                        "Udyam Registration Number : "
-                                + udyamNumber
-                );
-
-
-                wrapper.insertChildren(
-                        0,
-                        List.of(number)
-                );
-            }
-
-
-            /*
-             * ====================================================
-             * 11. CONVERT TO XHTML/XML
-             * ====================================================
-             */
-
-            doc.outputSettings()
-                    .syntax(
-                            Document.OutputSettings.Syntax.xml
-                    )
-                    .charset(
-                            StandardCharsets.UTF_8
-                    )
-                    .prettyPrint(false);
-
+            // Build the professional XHTML document mimicking the official MSME certificate
 
             String xhtml =
-                    doc.html();
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+                            "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n" +
+
+                            "<head>\n" +
+                            "  <meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"/>\n" +
+
+                            "  <style type=\"text/css\">\n" +
+
+                            "    @page {\n" +
+                            "        size: A4 portrait;\n" +
+                            "        margin: 8mm 10mm 10mm 10mm;\n" +
+                            "    }\n" +
+
+                            "    * {\n" +
+                            "        box-sizing: border-box;\n" +
+                            "    }\n" +
+
+                            "    body {\n" +
+                            "        font-family: Arial, Helvetica, sans-serif;\n" +
+                            "        font-size: 8px;\n" +
+                            "        color: #000000;\n" +
+                            "        line-height: 1.25;\n" +
+                            "        margin: 0;\n" +
+                            "        padding: 0;\n" +
+                            "        background: #ffffff;\n" +
+                            "    }\n" +
+
+        /* =========================================================
+           MAIN CERTIFICATE
+           ========================================================= */
+
+                            "    .certificate {\n" +
+                            "        width: 100%;\n" +
+                            "        margin: 0 auto;\n" +
+                            "        padding: 0;\n" +
+                            "        background: #ffffff;\n" +
+                            "        border: none;\n" +
+                            "    }\n" +
+
+                            "    .inner-border {\n" +
+                            "        width: 100%;\n" +
+                            "        margin: 0;\n" +
+                            "        padding: 0;\n" +
+                            "        border: none;\n" +
+                            "    }\n" +
 
 
-            /*
-             * ====================================================
-             * 12. CREATE PDF
-             * ====================================================
-             */
+        /* =========================================================
+           HEADER
+           ========================================================= */
 
-            ByteArrayOutputStream baos =
-                    new ByteArrayOutputStream();
+                            "    .header {\n" +
+                            "        width: 100%;\n" +
+                            "        text-align: center;\n" +
+                            "        margin: 0 0 8px 0;\n" +
+                            "        padding: 0 0 6px 0;\n" +
+                            "        border-bottom: 2px solid #6f82b5;\n" +
+                            "    }\n" +
+
+                            "    .emblem-row {\n" +
+                            "        text-align: center;\n" +
+                            "        margin: 0 0 2px 0;\n" +
+                            "        padding: 0;\n" +
+                            "    }\n" +
+
+                            "    .ashoka-chakra {\n" +
+                            "        font-size: 22pt;\n" +
+                            "        color: #555555;\n" +
+                            "        line-height: 1;\n" +
+                            "    }\n" +
+
+                            "    .govt-name {\n" +
+                            "        font-size: 9px;\n" +
+                            "        color: #333333;\n" +
+                            "        font-weight: bold;\n" +
+                            "        margin: 1px 0;\n" +
+                            "    }\n" +
+
+                            "    .ministry-name {\n" +
+                            "        font-size: 7.5px;\n" +
+                            "        color: #444444;\n" +
+                            "        margin: 1px 0;\n" +
+                            "    }\n" +
+
+                            "    .cert-title {\n" +
+                            "        font-size: 11px;\n" +
+                            "        font-weight: bold;\n" +
+                            "        color: #333333;\n" +
+                            "        margin: 5px 0 3px 0;\n" +
+                            "        padding: 3px 0;\n" +
+                            "        text-transform: uppercase;\n" +
+                            "        letter-spacing: 0.5px;\n" +
+                            "        border-top: 1px solid #8da4cf;\n" +
+                            "        border-bottom: 1px solid #8da4cf;\n" +
+                            "    }\n" +
+
+                            "    .cert-number {\n" +
+                            "        font-size: 8px;\n" +
+                            "        color: #333333;\n" +
+                            "        margin: 3px 0 0 0;\n" +
+                            "    }\n" +
+
+                            "    .cert-number strong {\n" +
+                            "        color: #000000;\n" +
+                            "        font-size: 8.5px;\n" +
+                            "    }\n" +
 
 
-            PdfRendererBuilder builder =
-                    new PdfRendererBuilder();
+        /* =========================================================
+           CERTIFICATE FIELDS
+           ========================================================= */
+
+                            "    .fields-table {\n" +
+                            "        width: 100%;\n" +
+                            "        border-collapse: collapse;\n" +
+                            "        border-spacing: 0;\n" +
+                            "        margin: 6px 0 8px 0;\n" +
+                            "        table-layout: fixed;\n" +
+                            "    }\n" +
+
+                            "    .fields-table tr {\n" +
+                            "        page-break-inside: avoid;\n" +
+                            "    }\n" +
+
+                            "    .fields-table td {\n" +
+                            "        border: 1px solid #7da4d8;\n" +
+                            "        padding: 4px 5px;\n" +
+                            "        vertical-align: middle;\n" +
+                            "        font-size: 7.8px;\n" +
+                            "        line-height: 1.2;\n" +
+                            "        word-wrap: break-word;\n" +
+                            "    }\n" +
+
+                            "    .field-label {\n" +
+                            "        font-weight: bold;\n" +
+                            "        color: #000000;\n" +
+                            "        background: #ffffff;\n" +
+                            "    }\n" +
+
+                            "    .field-value {\n" +
+                            "        color: #000000;\n" +
+                            "        background: #ffffff;\n" +
+                            "    }\n" +
 
 
-            builder.withHtmlContent(
-                    xhtml,
-                    BASE_URL + "/"
-            );
+        /* =========================================================
+           SECTION HEADERS
+           ========================================================= */
+
+                            "    .section {\n" +
+                            "        width: 100%;\n" +
+                            "        margin: 7px 0 0 0;\n" +
+                            "        padding: 0;\n" +
+                            "    }\n" +
+
+                            "    .section-header {\n" +
+                            "        width: 100%;\n" +
+                            "        font-size: 8px;\n" +
+                            "        font-weight: bold;\n" +
+                            "        color: #000000;\n" +
+                            "        background: #ffffff;\n" +
+                            "        padding: 5px 0;\n" +
+                            "        margin: 0;\n" +
+                            "        border-bottom: 1px solid #d0d0d0;\n" +
+                            "        page-break-after: avoid;\n" +
+                            "    }\n" +
 
 
-            builder.toStream(
-                    baos
-            );
+        /* =========================================================
+           NIC TABLE
+           ========================================================= */
+
+                            "    .nic-table {\n" +
+                            "        width: 100%;\n" +
+                            "        border-collapse: collapse;\n" +
+                            "        border-spacing: 0;\n" +
+                            "        margin: 5px 0 8px 0;\n" +
+                            "        font-size: 7.5px;\n" +
+                            "        table-layout: fixed;\n" +
+                            "    }\n" +
+
+                            "    .nic-table tr {\n" +
+                            "        page-break-inside: avoid;\n" +
+                            "    }\n" +
+
+                            "    .nic-table th {\n" +
+                            "        background: #ffffff;\n" +
+                            "        color: #000000;\n" +
+                            "        border: 1px solid #7da4d8;\n" +
+                            "        padding: 4px 5px;\n" +
+                            "        text-align: left;\n" +
+                            "        font-size: 7.5px;\n" +
+                            "        font-weight: bold;\n" +
+                            "    }\n" +
+
+                            "    .nic-table td {\n" +
+                            "        background: #ffffff;\n" +
+                            "        color: #000000;\n" +
+                            "        border: 1px solid #7da4d8;\n" +
+                            "        padding: 4px 5px;\n" +
+                            "        font-size: 7.5px;\n" +
+                            "        vertical-align: middle;\n" +
+                            "    }\n" +
 
 
-            /*
-             * ====================================================
-             * 13. LOAD SYSTEM FONT
-             * ====================================================
-             */
+        /* =========================================================
+           FOOTER
+           ========================================================= */
 
+                            "    .footer {\n" +
+                            "        width: 100%;\n" +
+                            "        margin-top: 8px;\n" +
+                            "        padding-top: 5px;\n" +
+                            "        border-top: 1px solid #cccccc;\n" +
+                            "        page-break-inside: avoid;\n" +
+                            "    }\n" +
+
+                            "    .verified-badge {\n" +
+                            "        text-align: center;\n" +
+                            "        margin: 4px 0;\n" +
+                            "    }\n" +
+
+                            "    .verified-badge span {\n" +
+                            "        color: #333333;\n" +
+                            "        font-size: 7px;\n" +
+                            "        font-weight: bold;\n" +
+                            "        letter-spacing: 0.3px;\n" +
+                            "    }\n" +
+
+                            "    .disclaimer {\n" +
+                            "        font-size: 6.5px;\n" +
+                            "        color: #666666;\n" +
+                            "        text-align: center;\n" +
+                            "        font-style: italic;\n" +
+                            "        margin: 3px 0;\n" +
+                            "    }\n" +
+
+                            "    .gen-date {\n" +
+                            "        font-size: 6px;\n" +
+                            "        color: #777777;\n" +
+                            "        text-align: right;\n" +
+                            "    }\n" +
+
+
+        /* =========================================================
+           WATERMARK
+           ========================================================= */
+
+                            "    .watermark {\n" +
+                            "        position: absolute;\n" +
+                            "        top: 40%;\n" +
+                            "        left: 28%;\n" +
+                            "        font-size: 42pt;\n" +
+                            "        color: rgba(13, 71, 161, 0.035);\n" +
+                            "        transform: rotate(-35deg);\n" +
+                            "        z-index: 0;\n" +
+                            "        white-space: nowrap;\n" +
+                            "        font-weight: bold;\n" +
+                            "        letter-spacing: 4px;\n" +
+                            "    }\n" +
+
+
+        /* =========================================================
+           GENERAL
+           ========================================================= */
+
+                            "    img {\n" +
+                            "        max-width: 100%;\n" +
+                            "        height: auto;\n" +
+                            "    }\n" +
+
+                            "    p {\n" +
+                            "        margin: 2px 0;\n" +
+                            "    }\n" +
+
+                            "    a {\n" +
+                            "        color: #000000;\n" +
+                            "        text-decoration: none;\n" +
+                            "    }\n" +
+
+                            "  </style>\n" +
+                            "</head>\n" +
+
+                            "<body>\n" +
+
+                            "  <div class=\"certificate\">\n" +
+
+                            "    <div class=\"inner-border\">\n" +
+
+                            "      <div class=\"watermark\">UDYAM</div>\n" +
+
+                            "      <div class=\"header\">\n" +
+
+                            "        <div class=\"emblem-row\">\n" +
+                            "          <span class=\"ashoka-chakra\">☸</span>\n" +
+                            "        </div>\n" +
+
+                            "        <div class=\"govt-name\">\n" +
+                            "          Government of India\n" +
+                            "        </div>\n" +
+
+                            "        <div class=\"ministry-name\">\n" +
+                            "          Ministry of Micro, Small &amp; Medium Enterprises\n" +
+                            "        </div>\n" +
+
+                            "        <div class=\"cert-title\">\n" +
+                            "          Udyam Registration Certificate\n" +
+                            "        </div>\n" +
+
+                            "        <div class=\"cert-number\">\n" +
+                            "          Udyam Registration Number:\n" +
+                            "          <strong>" +
+                            escapeXml(udyamNumber) +
+                            "</strong>\n" +
+                            "        </div>\n" +
+
+                            "      </div>\n" +
+
+                            "      <table class=\"fields-table\">\n" +
+                            certFields.toString() +
+                            "      </table>\n" +
+
+                            nicSection +
+
+                            "      <div class=\"footer\">\n" +
+
+                            "        <div class=\"verified-badge\">\n" +
+                            "          <span>\u2713 DIGITALLY VERIFIED BY DUKAANLOCKER</span>\n" +
+                            "        </div>\n" +
+
+                            "        <div class=\"disclaimer\">\n" +
+                            "          This is a computer generated statement, no signature required.\n" +
+                            "        </div>\n" +
+
+                            "        <div class=\"gen-date\">\n" +
+                            "          Date of Print: " +
+                            new java.text.SimpleDateFormat(
+                                    "dd MMM yyyy, hh:mm a"
+                            ).format(new java.util.Date()) +
+                            "\n" +
+
+                            "        </div>\n" +
+
+                            "      </div>\n" +
+
+                            "    </div>\n" +
+
+                            "  </div>\n" +
+
+                            "</body>\n" +
+                            "</html>";
+
+            // Render to PDF
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            PdfRendererBuilder builder = new PdfRendererBuilder();
+            builder.withHtmlContent(xhtml, BASE_URL + "/");
+            builder.toStream(baos);
+            // Try system fonts, fall back gracefully if not found
             try {
-
                 String[] fontPaths = {
-
-                        // Windows
                         "C:/Windows/Fonts/arial.ttf",
-
-                        // Linux
                         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-
-                        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-
                         "/usr/share/fonts/TTF/DejaVuSans.ttf",
-
-                        // macOS
                         "/System/Library/Fonts/Helvetica.ttc"
                 };
-
-
-                for (String fontPath :
-                        fontPaths) {
-
-                    java.io.File fontFile =
-                            new java.io.File(
-                                    fontPath
-                            );
-
-
+                for (String fontPath : fontPaths) {
+                    java.io.File fontFile = new java.io.File(fontPath);
                     if (fontFile.exists()) {
-
-                        builder.useFont(
-                                fontFile,
-                                "Arial"
-                        );
-
-
-                        log.info(
-                                "PDF font loaded: {}",
-                                fontPath
-                        );
-
-
+                        builder.useFont(fontFile, "Arial");
                         break;
                     }
                 }
-
-
-            } catch (Exception fontException) {
-
-                log.warn(
-                        "Could not load system font. "
-                                + "Using default PDF font.",
-                        fontException
-                );
+            } catch (Exception e) {
+                log.warn("Could not load system font, PDF may use default font", e);
             }
-
-
-            /*
-             * ====================================================
-             * 14. RUN PDF RENDERER
-             * ====================================================
-             */
-
             builder.run();
 
-
-            byte[] pdfBytes =
-                    baos.toByteArray();
-
-
-            /*
-             * ====================================================
-             * 15. VALIDATE PDF
-             * ====================================================
-             */
-
-            if (pdfBytes.length < 1000) {
-
-                throw new IOException(
-                        "Generated PDF is unexpectedly small: "
-                                + pdfBytes.length
-                                + " bytes"
-                );
-            }
-
-
-            /*
-             * Check PDF signature.
-             *
-             * A real PDF normally starts with:
-             *
-             * %PDF-
-             */
-
-            if (pdfBytes.length >= 5) {
-
-                String pdfHeader =
-                        new String(
-                                pdfBytes,
-                                0,
-                                5,
-                                StandardCharsets.US_ASCII
-                        );
-
-
-                if (!pdfHeader.startsWith("%PDF-")) {
-
-                    log.warn(
-                            "Generated file does not start with %PDF-. Header={}",
-                            pdfHeader
-                    );
-                }
-            }
-
-
-            log.info(
-                    "Generated Udyam PDF successfully: {} bytes for {}",
-                    pdfBytes.length,
-                    udyamNumber
-            );
-
-
+            byte[] pdfBytes = baos.toByteArray();
+            log.info("Generated MSME PDF: {} bytes for Udyam {}", pdfBytes.length, udyamNumber);
             return pdfBytes;
 
-
         } catch (Exception e) {
-
-            log.error(
-                    "Failed to convert Udyam HTML to PDF for {}",
-                    udyamNumber,
-                    e
-            );
-
-
+            log.error("Failed to convert Udyam HTML to PDF for {}", udyamNumber, e);
             throw new FssaiException(
-                    "The MSME certificate was verified but we couldn't generate the PDF. "
-                            + "The HTML certificate has been stored. Please contact support.",
-                    FailureCode.PDF_PROCESSING_ERROR,
-                    e
-            );
+                    "The MSME certificate was verified but we couldn't generate the PDF. " +
+                            "The HTML certificate has been stored. Please contact support.",
+                    FailureCode.PDF_PROCESSING_ERROR, e);
         }
     }
 
-
-    // ============================================================
-    // CAPTCHA IMAGE SERVING
-    // ============================================================
-
-
     /**
-     * Returns CAPTCHA image bytes for a session.
+     * Extracts certificate fields from plain text using regex patterns.
+     * Used as fallback when table parsing fails.
      */
-    public byte[] getCaptchaImage(
-            String sessionId
-    ) {
+    private String extractCertificateFields(String text) {
+        StringBuilder html = new StringBuilder();
 
-        UdyamSession session =
-                sessions.get(sessionId);
-
-
-        if (session == null
-                || session.captchaImage == null) {
-
-            return null;
+        // Udyam Number
+        Pattern udyamPattern = Pattern.compile("UDYAM-[A-Z]{2}-\\d{2}-\\d{7}", Pattern.CASE_INSENSITIVE);
+        Matcher m = udyamPattern.matcher(text);
+        if (m.find()) {
+            html.append("<tr><td class=\"field-label\">Udyam Registration Number</td><td class=\"field-value\">")
+                    .append(escapeXml(m.group().toUpperCase()))
+                    .append("</td></tr>");
         }
 
+        // Enterprise Name - use more robust extraction
+        String lowerText = text.toLowerCase();
+        String[] labels = {"name of enterprise", "enterprise name", "business name"};
+        for (String label : labels) {
+            if (lowerText.contains(label)) {
+                int idx = lowerText.indexOf(label);
+                String afterLabel = text.substring(idx + label.length()).trim();
+                // Skip any colon or whitespace
+                if (afterLabel.startsWith(":") || afterLabel.startsWith("-")) {
+                    afterLabel = afterLabel.substring(1).trim();
+                }
+                // Extract until newline or next common label
+                String name = afterLabel.split("[\\n\\r]")[0].trim();
+                // Further trim if it contains "Type of" or other labels
+                if (name.toLowerCase().contains("type of")) {
+                    name = name.substring(0, name.toLowerCase().indexOf("type of")).trim();
+                }
+                if (!name.isEmpty() && name.length() < 100) {
+                    html.append("<tr><td class=\"field-label\">Name of Enterprise</td><td class=\"field-value\">")
+                            .append(escapeXml(name))
+                            .append("</td></tr>");
+                    break;
+                }
+            }
+        }
 
-        return session.captchaImage;
+        return html.toString();
     }
-
-
-    // ============================================================
-    // BROWSER HEADERS
-    // ============================================================
-
-
-    private static void addBrowserHeaders(
-            HttpGet request
-    ) {
-
-        request.setHeader(
-                "Accept",
-                "text/html,application/xhtml+xml," +
-                        "application/xml;q=0.9," +
-                        "image/avif,image/webp," +
-                        "image/apng,*/*;q=0.8"
-        );
-
-
-        request.setHeader(
-                "Accept-Language",
-                "en-GB,en-US;q=0.9,en;q=0.8"
-        );
-
-
-        request.setHeader(
-                "Connection",
-                "keep-alive"
-        );
-
-
-        request.setHeader(
-                "Referer",
-                BASE_URL + "/"
-        );
-
-
-        request.setHeader(
-                "User-Agent",
-                USER_AGENT
-        );
-
-
-        request.setHeader(
-                "Sec-Fetch-Dest",
-                "document"
-        );
-
-
-        request.setHeader(
-                "Sec-Fetch-Mode",
-                "navigate"
-        );
-
-
-        request.setHeader(
-                "Sec-Fetch-Site",
-                "same-origin"
-        );
-    }
-
-
-    private static void addBrowserHeaders(
-            HttpPost request
-    ) {
-
-        request.setHeader(
-                "Accept",
-                "*/*"
-        );
-
-
-        request.setHeader(
-                "Accept-Language",
-                "en-GB,en-US;q=0.9,en;q=0.8"
-        );
-
-
-        request.setHeader(
-                "Cache-Control",
-                "no-cache"
-        );
-
-
-        request.setHeader(
-                "Connection",
-                "keep-alive"
-        );
-
-
-        request.setHeader(
-                "Origin",
-                BASE_URL
-        );
-
-
-        request.setHeader(
-                "Referer",
-                BASE_URL + "/"
-        );
-
-
-        request.setHeader(
-                "User-Agent",
-                USER_AGENT
-        );
-    }
-
-
-    // ============================================================
-    // HIDDEN FIELD EXTRACTION
-    // ============================================================
-
 
     /**
-     * Extracts an ASP.NET hidden field.
-     *
-     * Example:
-     *
-     * <input
-     *      id="__VIEWSTATE"
-     *      value="..."
-     * />
+     * Escapes special XML characters for safe HTML embedding.
      */
-    private static String extractHiddenValue(
-            String html,
-            String fieldName
-    ) {
+    private static String escapeXml(String text) {
+        if (text == null) return "";
+        return text
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&apos;");
+    }
 
-        Pattern inputPattern =
-                Pattern.compile(
-                        "<input[^>]*>",
-                        Pattern.CASE_INSENSITIVE
-                                | Pattern.DOTALL
-                );
+    // ─── HELPERS ───────────────────────────────────────────────────────────
 
+    private static void addBrowserHeaders(HttpGet request) {
+        request.setHeader("Accept",
+                "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8");
+        request.setHeader("Accept-Language", "en-GB,en-US;q=0.9,en;q=0.8");
+        request.setHeader("Connection", "keep-alive");
+        request.setHeader("Referer", BASE_URL + "/");
+        request.setHeader("User-Agent", USER_AGENT);
+        request.setHeader("Sec-Fetch-Dest", "document");
+        request.setHeader("Sec-Fetch-Mode", "navigate");
+        request.setHeader("Sec-Fetch-Site", "same-origin");
+    }
 
-        Matcher inputMatcher =
-                inputPattern.matcher(html);
+    private static void addBrowserHeaders(HttpPost request) {
+        request.setHeader("Accept", "*/*");
+        request.setHeader("Accept-Language", "en-GB,en-US;q=0.9,en;q=0.8");
+        request.setHeader("Cache-Control", "no-cache");
+        request.setHeader("Connection", "keep-alive");
+        request.setHeader("Origin", BASE_URL);
+        request.setHeader("Referer", BASE_URL + "/");
+        request.setHeader("User-Agent", USER_AGENT);
+    }
 
+    /**
+     * Extracts the value of a hidden {@code <input>} field from an HTML string
+     * by matching {@code id="<fieldName>"} and then the {@code value="..."}.
+     */
+    private static String extractHiddenValue(String html, String fieldName) {
+        Pattern inputPattern = Pattern.compile("<input[^>]*>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+        Matcher inputMatcher = inputPattern.matcher(html);
 
         while (inputMatcher.find()) {
-
-            String input =
-                    inputMatcher.group();
-
-
-            if (input.contains(
-                    "id=\"" + fieldName + "\""
-            )) {
-
-                Matcher valueMatcher =
-                        Pattern.compile(
-                                "value=\"([^\"]*)\"",
-                                Pattern.CASE_INSENSITIVE
-                                        | Pattern.DOTALL
-                        ).matcher(input);
-
-
+            String input = inputMatcher.group();
+            if (input.contains("id=\"" + fieldName + "\"")) {
+                Matcher valueMatcher = Pattern.compile(
+                                "value=\"([^\"]*)\"", Pattern.CASE_INSENSITIVE | Pattern.DOTALL)
+                        .matcher(input);
                 if (valueMatcher.find()) {
-
                     return valueMatcher.group(1);
                 }
             }
         }
-
-
         return "";
     }
 
+    // ─── CAPTCHA IMAGE SERVING ───────────────────────────────────────────
 
-    // ============================================================
-    // SESSION CLASS
-    // ============================================================
+    /**
+     * Returns the raw captcha image bytes for the given session, or {@code null}
+     * if the session doesn't exist or has expired.
+     */
+    public byte[] getCaptchaImage(String sessionId) {
+        UdyamSession session = sessions.get(sessionId);
+        if (session == null || session.captchaImage == null) {
+            return null;
+        }
+        return session.captchaImage;
+    }
 
+    // ─── SESSION STATE ─────────────────────────────────────────────────────
 
     private static class UdyamSession {
-
         long createdAt;
-
         String viewState;
-
         String viewStateGenerator;
-
         String eventValidation;
-
         List<Cookie> cookies;
-
-        byte[] captchaImage;
+        byte[] captchaImage;  // raw image bytes for direct serving
     }
 }
