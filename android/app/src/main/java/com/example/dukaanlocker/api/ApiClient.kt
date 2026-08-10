@@ -20,6 +20,7 @@ object ApiClient {
     private const val KEY_EMAIL = "user_email"
     private const val KEY_MOBILE = "user_mobile"
     private const val KEY_ROLE = "user_role"
+    private const val KEY_MANAGER_CODE = "manager_code"
 
     @Volatile private var apiService: ApiService? = null
     @Volatile private var retrofit: Retrofit? = null
@@ -39,6 +40,7 @@ object ApiClient {
             putString(KEY_EMAIL, response.emailId)
             putString(KEY_MOBILE, response.mobileNumber)
             putString(KEY_ROLE, response.role)
+            putString(KEY_MANAGER_CODE, response.managerCode ?: "")
             apply()
         }
     }
@@ -54,6 +56,8 @@ object ApiClient {
     fun getUserMobile(context: Context): String = prefs(context).getString(KEY_MOBILE, "") ?: ""
 
     fun getUserRole(context: Context): String = prefs(context).getString(KEY_ROLE, "") ?: ""
+
+    fun getManagerCode(context: Context): String = prefs(context).getString(KEY_MANAGER_CODE, "") ?: ""
 
     fun isLoggedIn(context: Context): Boolean = getToken(context) != null
 

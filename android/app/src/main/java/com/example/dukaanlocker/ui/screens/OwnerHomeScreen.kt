@@ -68,7 +68,9 @@ fun OwnerHomeScreen(
     onLogout: () -> Unit,
     onBusinessSelected: (String) -> Unit = {},
     isDarkTheme: Boolean = true,
-    onToggleTheme: () -> Unit = {}
+    onToggleTheme: () -> Unit = {},
+    showAddBusiness: Boolean = true,
+    showManageManagers: Boolean = true
 ) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
@@ -153,10 +155,12 @@ fun OwnerHomeScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("YOUR BUSINESSES", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary, letterSpacing = 1.sp)
-                        TextButton(onClick = onManageManagers) {
-                            Icon(Icons.Default.People, contentDescription = null, modifier = Modifier.size(16.dp), tint = colors.primary)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Managers", color = colors.primary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        if (showManageManagers) {
+                            TextButton(onClick = onManageManagers) {
+                                Icon(Icons.Default.People, contentDescription = null, modifier = Modifier.size(16.dp), tint = colors.primary)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Managers", color = colors.primary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
                         }
                     }
                 }
@@ -247,8 +251,8 @@ fun OwnerHomeScreen(
         )
     }
 
-    // FAB for adding businesses
-    if (selectedBusinessId == null) {
+    // FAB for adding businesses (only for owners)
+    if (selectedBusinessId == null && showAddBusiness) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.BottomEnd

@@ -44,6 +44,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
     var currentUserName by remember { mutableStateOf(ApiClient.getUserName(context)) }
     var currentUserEmail by remember { mutableStateOf(ApiClient.getUserEmail(context)) }
     var currentUserRole by remember { mutableStateOf(ApiClient.getUserRole(context)) }
+    var currentUserManagerCode by remember { mutableStateOf(ApiClient.getManagerCode(context)) }
 
     // ── Business/Shop state ──
     var shops by remember { mutableStateOf<List<ShopResponse>>(emptyList()) }
@@ -450,6 +451,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                                 currentUserName = auth.userName
                                                 currentUserEmail = auth.emailId
                                                 currentUserRole = auth.role
+                                                currentUserManagerCode = auth.managerCode ?: code
                                                 isLoggedIn = true
                                                 currentScreen = "manager_home"
                                                 loadShops()
@@ -503,6 +505,13 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                         }
 
                         "add_business" -> {
+                            // Find currently assigned manager for this shop
+                            val currentShopId = editShopTarget?.id?.toString()
+                            val currentManagerId = if (currentShopId != null) {
+                                managerShopAssignments.entries.find { currentShopId in it.value }?.key?.toString()
+                            } else null
+                            var pendingManagerId by remember { mutableStateOf<String?>(currentManagerId) }
+
                             AddBusinessScreen(
                                 initial = editShopTarget?.let { shop ->
                                     BusinessProfile(
@@ -516,10 +525,22 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                         branchName = shop.branchName ?: ""
                                     )
                                 },
+                                managers = managers.map { mgr ->
+                                    ManagerAccess(
+                                        code = mgr.managerCode ?: mgr.id.toString(),
+                                        managerName = mgr.userName,
+                                        assignedBusinessIds = managerShopAssignments[mgr.id] ?: emptyList()
+                                    )
+                                },
+                                assignedManagerId = currentManagerId,
+                                onManagerSelected = { managerId ->
+                                    pendingManagerId = managerId
+                                },
                                 onSave = { biz ->
                                     scope.launch {
                                         isLoading = true
                                         try {
+                                            var shopId: Long? = null
                                             if (editShopTarget != null) {
                                                 api.updateShop(editShopTarget!!.id, UpdateShopRequest(
                                                     shopName = biz.name,
@@ -530,9 +551,10 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                                     city = biz.city,
                                                     branchName = biz.branchName.ifBlank { null }
                                                 ))
+                                                shopId = editShopTarget!!.id
                                                 Toast.makeText(context, "${biz.name} updated!", Toast.LENGTH_SHORT).show()
                                             } else {
-                                                api.createShop(CreateShopRequest(
+                                                val response = api.createShop(CreateShopRequest(
                                                     shopName = biz.name,
                                                     ownerName = biz.ownerName,
                                                     mobile = ApiClient.getUserMobile(context).ifBlank { "0000000000" },
@@ -542,7 +564,19 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                                     city = biz.city,
                                                     branchName = biz.branchName.ifBlank { null }
                                                 ))
+                                                if (response.isSuccessful) {
+                                                    shopId = response.body()?.id
+                                                }
                                                 Toast.makeText(context, "${biz.name} created!", Toast.LENGTH_SHORT).show()
+                                            }
+                                            // Assign to manager if selected and shop was created
+                                            if (shopId != null && pendingManagerId != null) {
+                                                try {
+                                                    api.assignShopToManager(pendingManagerId!!.toLong(), shopId!!)
+                                                    loadManagers()
+                                                } catch (e: Exception) {
+                                                    // Handle error
+                                                }
                                             }
                                             loadShops()
                                             editShopTarget = null
@@ -564,6 +598,8 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                             OwnerHomeScreen(
                                 isDarkTheme = isDarkTheme,
                                 onToggleTheme = onToggleTheme,
+                                showAddBusiness = currentUserRole == "ADMIN",
+                                showManageManagers = currentUserRole == "ADMIN",
                                 user = UserAccount(
                                     mobile = ApiClient.getUserMobile(context),
                                     name = currentUserName,
@@ -670,6 +706,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                     ManagerAccess(
                                         code = mgr.managerCode ?: mgr.id.toString(),
                                         managerName = mgr.userName,
+                                        id = mgr.id.toString(),
                                         assignedBusinessIds = managerShopAssignments[mgr.id] ?: emptyList()
                                     )
                                 },
@@ -685,6 +722,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                         branchName = shop.branchName ?: ""
                                     )
                                 },
+                                managerShopAssignments = managerShopAssignments.mapKeys { it.key.toString() }.mapValues { it.value },
                                 onAddManager = { name, bizList ->
                                     scope.launch {
                                         isLoading = true
@@ -748,10 +786,11 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                     mobile = ApiClient.getUserMobile(context),
                                     name = currentUserName,
                                     email = currentUserEmail,
-                                    role = currentUserRole
+                                    role = currentUserRole,
+                                    managerCode = currentUserManagerCode
                                 ),
                                 managerAccess = ManagerAccess(
-                                    code = currentUserId.toString(),
+                                    code = currentUserManagerCode,
                                     managerName = currentUserName,
                                     assignedBusinessIds = shops.map { it.id.toString() }
                                 ),
@@ -814,6 +853,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                 },
                                 onDeleteDoc = { doc -> },
                                 onLogout = {
+                                    currentUserManagerCode = ""
                                     ApiClient.clearAuth(context)
                                     isLoggedIn = false
                                     currentScreen = "login"

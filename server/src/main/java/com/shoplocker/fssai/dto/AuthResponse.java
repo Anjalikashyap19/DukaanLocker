@@ -18,6 +18,7 @@ public class AuthResponse {
     private String mobileNumber;
     private String emailId;
     private Role role;
+    private String managerCode;
 
     public AuthResponse() {}
 
@@ -32,6 +33,18 @@ public class AuthResponse {
         this.role = role;
     }
 
+    public AuthResponse(String token, Long userId, String userName, String mobileNumber,
+                        String emailId, Role role, String managerCode) {
+        this.token = token;
+        this.tokenType = "Bearer";
+        this.userId = userId;
+        this.userName = userName;
+        this.mobileNumber = mobileNumber;
+        this.emailId = emailId;
+        this.role = role;
+        this.managerCode = managerCode;
+    }
+
     public static AuthResponse from(User user, String token) {
         return new AuthResponse(
                 token,
@@ -39,7 +52,8 @@ public class AuthResponse {
                 user.getUserName(),
                 user.getMobileNumber(),
                 user.getEmailId(),
-                user.getRole());
+                user.getRole(),
+                user.getManagerCode());
     }
 
     public String getToken() { return token; }
@@ -62,4 +76,7 @@ public class AuthResponse {
 
     public Role getRole() { return role; }
     public void setRole(Role role) { this.role = role; }
+
+    public String getManagerCode() { return managerCode; }
+    public void setManagerCode(String managerCode) { this.managerCode = managerCode; }
 }

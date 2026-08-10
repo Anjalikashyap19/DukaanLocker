@@ -38,6 +38,7 @@ import com.example.dukaanlocker.ui.theme.*
 fun ManageManagersScreen(
     managers: List<ManagerAccess>,
     businesses: List<BusinessProfile>,
+    managerShopAssignments: Map<String, List<String>> = emptyMap(),
     onAddManager: (String, List<String>) -> Unit,
     onDeleteManager: (String) -> Unit,
     onBack: () -> Unit
@@ -121,8 +122,12 @@ fun ManageManagersScreen(
 
     // Add Manager Dialog
     if (showAddDialog) {
+        // Filter out businesses already assigned to other managers
+        val assignedBusinessIds = managerShopAssignments.values.flatten().toSet()
+        val availableBusinesses = businesses.filter { it.id !in assignedBusinessIds }
+
         AddManagerDialog(
-            businesses = businesses,
+            businesses = availableBusinesses,
             onDismiss = { showAddDialog = false },
             onConfirm = { name, businessIds ->
                 onAddManager(name, businessIds)

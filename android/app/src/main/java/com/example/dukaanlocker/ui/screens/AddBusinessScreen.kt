@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.dukaanlocker.BuildConfig
 import com.example.dukaanlocker.BusinessProfile
+import com.example.dukaanlocker.ManagerAccess
 import com.example.dukaanlocker.api.OlaMapsClient
 import com.example.dukaanlocker.api.OlaPrediction
 import com.example.dukaanlocker.ui.theme.*
@@ -38,7 +39,10 @@ import kotlinx.coroutines.delay
 @Composable
 fun AddBusinessScreen(
     initial: BusinessProfile? = null,
+    managers: List<ManagerAccess> = emptyList(),
+    assignedManagerId: String? = null,
     onSave: (BusinessProfile) -> Unit,
+    onManagerSelected: ((managerId: String?) -> Unit)? = null,
     onCancel: () -> Unit
 ) {
     val colors = LocalAppColors.current
@@ -55,6 +59,8 @@ fun AddBusinessScreen(
     var suggestions by remember { mutableStateOf<List<OlaPrediction>>(emptyList()) }
     var isSearchingLocation by remember { mutableStateOf(false) }
     var locationSelected by remember { mutableStateOf(false) }
+    var selectedManagerId by remember { mutableStateOf(assignedManagerId) }
+    var showManagerDropdown by remember { mutableStateOf(false) }
 
     val olaMapsApi = remember { OlaMapsClient.apiService }
 
@@ -406,6 +412,47 @@ fun AddBusinessScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            // Assign to Manager (only show if managers are available)
+            if (managers.isNotEmpty() && onAssignManager != null) {
+                ExposedDropdownMenuBox(
+                    expanded = showManagerDropdown,
+                    onExpandedChange = { showManagerDropdown = !showManagerDropdown }
+                ) {
+                    OutlinedTextField(
+                        value = managers.find { it.id == selectedManagerId }?.managerName ?: "Unassigned",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Assign to Manager", color = colors.textSecondary) },
+                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = colors.primary) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showManagerDropdown) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    ExposedDropdownMenu(expanded = showManagerDropdown, onDismissRequest = { showManagerDropdown = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Unassigned", fontWeight = if (selectedManagerId == null) FontWeight.Bold else FontWeight.Normal) },
+                            onClick = { selectedManagerId = null; showManagerDropdown = false }
+                        )
+                        managers.forEach { mgr ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(mgr.managerName, fontWeight = if (selectedManagerId == mgr.id) FontWeight.Bold else FontWeight.Normal)
+                                        Text("Code: ${mgr.code}", fontSize = 11.sp, color = colors.textSecondary)
+                                    }
+                                },
+                                onClick = { selectedManagerId = mgr.id; showManagerDropdown = false }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             // Save Button
             val formValid = name.isNotBlank() && ownerName.isNotBlank()
                     && category.isNotBlank() && branchName.isNotBlank()
@@ -420,6 +467,10 @@ fun AddBusinessScreen(
                                 state = state, city = city, branchName = branchName
                             )
                         )
+                        // Notify parent about selected manager
+                        if (onManagerSelected != null) {
+                            onManagerSelected(selectedManagerId)
+                        }
                     }
                 },
                 enabled = formValid,

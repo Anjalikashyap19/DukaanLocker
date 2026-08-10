@@ -54,6 +54,39 @@ fun ManagerHomeScreen(
     val colors = LocalAppColors.current
     val assignedBusinesses = businesses.filter { it.id in managerAccess.assignedBusinessIds }
     var selectedBusinessId by remember { mutableStateOf<String?>(null) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
+    // Logout confirmation dialog
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            containerColor = colors.cardBg,
+            shape = RoundedCornerShape(16.dp),
+            title = {
+                Text("Logout", fontWeight = FontWeight.Bold, color = colors.textPrimary)
+            },
+            text = {
+                Text("Are you sure you want to logout?", color = colors.textSecondary, fontSize = 14.sp)
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showLogoutDialog = false
+                        onLogout()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Logout", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text("Cancel", color = colors.primary)
+                }
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -85,11 +118,15 @@ fun ManagerHomeScreen(
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text("${user.name} (Manager)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                        Text("Code: ${user.managerCode}", fontSize = 12.sp, color = colors.textSecondary)
+                        Text("Welcome, ${user.name}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                        Text(
+                            "${assignedBusinesses.size} ${if (assignedBusinesses.size == 1) "Business" else "Businesses"} • Manager",
+                            fontSize = 12.sp, color = colors.textSecondary
+                        )
+                        Text("Code: ${managerAccess.code}", fontSize = 11.sp, color = colors.primary)
                     }
                 }
-                IconButton(onClick = onLogout) {
+                IconButton(onClick = { showLogoutDialog = true }) {
                     Icon(Icons.Default.Logout, contentDescription = "Logout", tint = colors.textSecondary)
                 }
             }

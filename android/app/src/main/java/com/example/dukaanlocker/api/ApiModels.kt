@@ -23,7 +23,8 @@ data class AuthResponse(
     @SerializedName("userName") val userName: String,
     @SerializedName("mobileNumber") val mobileNumber: String,
     @SerializedName("emailId") val emailId: String,
-    @SerializedName("role") val role: String
+    @SerializedName("role") val role: String,
+    @SerializedName("managerCode") val managerCode: String? = null
 )
 
 // ── Shops (Businesses) ──────────────────────────────────────────────────────
