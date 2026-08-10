@@ -365,13 +365,13 @@ public class UdyamVerificationService {
         }
     }
 
-    // ─── HTML → PDF CONVERSION ─────────────────────────────────────────────
+    // ─── HTML \u2192 PDF CONVERSION ─────────────────────────────────────────────
 
     /**
      * Converts the government portal's PrintUdyamApplication HTML into a
-     * professional single-page PDF using OpenHTMLtoPDF. Extracts only the
-     * certificate data (enterprise details) and creates a clean, professional
-     * document without website navigation elements.
+     * professional single-page PDF using OpenHTMLtoPDF. Creates an official-looking
+     * MSME certificate with proper government styling, double borders, and structured
+     * layout that closely resembles the actual Udyam Registration Certificate.
      */
     private byte[] convertHtmlToPdf(String rawHtml, String udyamNumber) {
         try {
@@ -390,96 +390,167 @@ public class UdyamVerificationService {
             // rejects with a SAXParseException -> 500. XML syntax self-closes them.
             doc.outputSettings().syntax(Document.OutputSettings.Syntax.xml);
 
-            // Extract only the certificate content from the table
-            StringBuilder certificateContent = new StringBuilder();
+            // Extract certificate data from tables
+            StringBuilder certFields = new StringBuilder();
+            StringBuilder nicCodeRows = new StringBuilder();
             
             // Find all tables and extract the certificate data
             org.jsoup.select.Elements tables = doc.select("table");
             for (org.jsoup.nodes.Element table : tables) {
-                // Check if this table contains certificate data (has labels like "Udyam Registration Number")
                 String tableText = table.text().toLowerCase();
+                
+                // Main certificate fields table
                 if (tableText.contains("udyam registration number") || 
                     tableText.contains("name of enterprise") || 
                     tableText.contains("type of enterprise")) {
-                    
-                    // This is the certificate table - extract its rows
-                    certificateContent.append("<table class=\"cert-table\">\n");
                     org.jsoup.select.Elements rows = table.select("tr");
                     for (org.jsoup.nodes.Element row : rows) {
                         org.jsoup.select.Elements cells = row.select("td, th");
                         if (cells.size() >= 2) {
                             String label = cells.get(0).text().trim();
                             String value = cells.get(1).text().trim();
-                            // Only include fields that have actual content
                             if (!value.isEmpty()) {
-                                certificateContent.append("<tr><td class=\"label\">")
+                                // Skip NIC code rows from main table (we handle them separately)
+                                if (label.toLowerCase().contains("nic")) continue;
+                                certFields.append("<tr><td class=\"field-label\">")
                                     .append(escapeXml(label))
-                                    .append("</td><td class=\"value\">")
+                                    .append("</td><td class=\"field-value\">")
                                     .append(escapeXml(value))
                                     .append("</td></tr>\n");
                             }
                         }
                     }
-                    certificateContent.append("</table>\n");
-                    break; // Found the certificate table, stop
+                }
+                // NIC codes table
+                if (tableText.contains("nic 2 digit") || tableText.contains("nic 4 digit") ||
+                    tableText.contains("national industry")) {
+                    org.jsoup.select.Elements rows = table.select("tr");
+                    for (org.jsoup.nodes.Element row : rows) {
+                        org.jsoup.select.Elements cells = row.select("td, th");
+                        if (cells.size() >= 2) {
+                            String nic2 = cells.size() > 0 ? cells.get(0).text().trim() : "";
+                            String nic4 = cells.size() > 1 ? cells.get(1).text().trim() : "";
+                            String activity = cells.size() > 2 ? cells.get(2).text().trim() : "";
+                            if (!nic2.isEmpty() && !nic2.toLowerCase().contains("s.no")) {
+                                nicCodeRows.append("<tr><td>")
+                                    .append(escapeXml(nic2))
+                                    .append("</td><td>")
+                                    .append(escapeXml(nic4))
+                                    .append("</td><td>")
+                                    .append(escapeXml(activity))
+                                    .append("</td></tr>\n");
+                            }
+                        }
+                    }
                 }
             }
 
             // If no certificate table found, use a fallback approach
-            if (certificateContent.length() == 0) {
-                // Try to extract data using regex patterns from MsmeDataParser
+            if (certFields.length() == 0) {
                 String fullText = doc.text();
-                certificateContent.append(extractCertificateFields(fullText));
+                certFields.append(extractCertificateFields(fullText));
             }
 
-            // Build a clean, professional XHTML document for OpenHTMLtoPDF
+            // Build NIC codes HTML section if data found
+            String nicSection = "";
+            if (nicCodeRows.length() > 0) {
+                nicSection = "    <div class=\"section\">\n" +
+                    "      <div class=\"section-header\">National Industry Classification (NIC) Code(s)</div>\n" +
+                    "      <table class=\"nic-table\">\n" +
+                    "        <tr><th>NIC 2-Digit</th><th>NIC 4-Digit</th><th>Activity Description</th></tr>\n" +
+                    nicCodeRows.toString() +
+                    "      </table>\n" +
+                    "    </div>\n";
+            }
+
+            // Build the professional XHTML document mimicking official MSME certificate
             String xhtml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
-                    "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\"\n" +
-                    "  \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n" +
-                    "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n" +
-                    "<head>\n" +
-                    "  <meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"/>\n" +
-                    "  <style>\n" +
-                    "    @page { size: A4 portrait; margin: 15mm; }\n" +
-                    "    body { font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #333; line-height: 1.4; }\n" +
-                    "    .certificate-container { border: 2px solid #1a5f7a; padding: 15px; background: #fafafa; }\n" +
-                    "    .header-section { text-align: center; border-bottom: 2px solid #1a5f7a; padding-bottom: 10px; margin-bottom: 12px; }\n" +
-                    "    .emblem { font-size: 28px; color: #1a5f7a; margin-bottom: 5px; }\n" +
-                    "    .govt-title { font-size: 11px; color: #666; margin: 2px 0; text-transform: uppercase; letter-spacing: 0.5px; }\n" +
-                    "    .ministry { font-size: 9px; color: #888; margin: 1px 0; }\n" +
-                    "    .cert-title { font-size: 16px; font-weight: bold; color: #1a5f7a; margin: 10px 0 5px; text-transform: uppercase; letter-spacing: 1px; }\n" +
-                    "    .certificate-id { font-size: 9px; color: #888; margin-bottom: 10px; }\n" +
-                    "    .cert-table { width: 100%; border-collapse: collapse; margin: 8px 0; }\n" +
-                    "    .cert-table td { padding: 5px 8px; border: 1px solid #ddd; font-size: 9px; }\n" +
-                    "    .cert-table .label { background: #f0f7fa; font-weight: bold; width: 35%; color: #1a5f7a; }\n" +
-                    "    .cert-table .value { background: #fff; }\n" +
-                    "    .section-title { font-size: 11px; font-weight: bold; color: #1a5f7a; margin: 10px 0 5px; border-bottom: 1px solid #1a5f7a; padding-bottom: 3px; }\n" +
-                    "    .footer-section { margin-top: 12px; padding-top: 8px; border-top: 1px solid #ddd; font-size: 8px; color: #999; text-align: center; }\n" +
-                    "    .verification-badge { display: inline-block; background: #28a745; color: white; padding: 3px 10px; border-radius: 3px; font-size: 9px; font-weight: bold; margin: 8px 0; }\n" +
-                    "    .watermark { position: absolute; top: 40%; left: 30%; font-size: 50px; color: rgba(0,0,0,0.03); transform: rotate(-30deg); z-index: -1; white-space: nowrap; font-weight: bold; }\n" +
-                    "  </style>\n" +
-                    "</head>\n" +
-                    "<body>\n" +
-                    "  <div class=\"certificate-container\" style=\"position: relative;\">\n" +
-                    "    <div class=\"watermark\">UDYAM VERIFIED</div>\n" +
-                    "    <div class=\"header-section\">\n" +
-                    "      <div class=\"emblem\">INDIA</div>\n" +
-                    "      <div class=\"govt-title\">Government of India</div>\n" +
-                    "      <div class=\"ministry\">Ministry of Micro, Small &amp; Medium Enterprises</div>\n" +
-                    "      <div class=\"cert-title\">Udyam Registration Certificate</div>\n" +
-                    "      <div class=\"certificate-id\">Certificate No: " + escapeXml(udyamNumber) + "</div>\n" +
-                    "    </div>\n" +
-                    certificateContent.toString() + "\n" +
-                    "    <div style=\"text-align: center; margin-top: 10px;\">\n" +
-                    "      <div class=\"verification-badge\">✓ VERIFIED BY DUKAANLOCKER</div>\n" +
-                    "    </div>\n" +
-                    "    <div class=\"footer-section\">\n" +
-                    "      This certificate is digitally verified by DukaanLocker for business compliance purposes.\n" +
-                    "      Generated on: " + java.time.Instant.now().toString().substring(0, 10) + "\n" +
-                    "    </div>\n" +
-                    "  </div>\n" +
-                    "</body>\n" +
-                    "</html>";
+                "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\"\n" +
+                "  \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n" +
+                "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n" +
+                "<head>\n" +
+                "  <meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"/>\n" +
+                "  <style>\n" +
+                "    @page { size: A4 portrait; margin: 12mm 15mm; }\n" +
+                "    * { box-sizing: border-box; }\n" +
+                "    body { font-family: 'Times New Roman', Times, serif; font-size: 9.5pt; color: #1a1a1a; line-height: 1.35; margin: 0; padding: 0; }\n" +
+                "    \n" +
+                "    /* Main Certificate Border - Double border like official document */\n" +
+                "    .certificate { border: 3px double #0d47a1; padding: 0; position: relative; background: #fff; }\n" +
+                "    .inner-border { border: 1px solid #1565c0; margin: 4px; padding: 12px 15px; }\n" +
+                "    \n" +
+                "    /* Header Section */\n" +
+                "    .header { text-align: center; padding-bottom: 8px; border-bottom: 2px solid #0d47a1; margin-bottom: 10px; }\n" +
+                "    .emblem-row { text-align: center; margin-bottom: 4px; }\n" +
+                "    .ashoka-chakra { font-size: 32pt; color: #0d47a1; }\n" +
+                "    .govt-name { font-size: 10pt; color: #333; text-transform: uppercase; letter-spacing: 2px; font-weight: bold; margin: 3px 0 2px; }\n" +
+                "    .ministry-name { font-size: 8.5pt; color: #555; margin: 1px 0; font-style: italic; }\n" +
+                "    .cert-title { font-size: 13pt; font-weight: bold; color: #0d47a1; margin: 10px 0 5px; text-transform: uppercase; letter-spacing: 1.5px; border-top: 1px solid #1565c0; border-bottom: 1px solid #1565c0; padding: 5px 0; }\n" +
+                "    .cert-number { font-size: 9pt; color: #333; margin: 6px 0 2px; }\n" +
+                "    .cert-number strong { color: #0d47a1; font-size: 10pt; }\n" +
+                "    \n" +
+                "    /* Certificate Fields Table */\n" +
+                "    .fields-table { width: 100%; border-collapse: collapse; margin: 8px 0; }\n" +
+                "    .fields-table tr { border-bottom: 1px solid #e0e0e0; }\n" +
+                "    .fields-table td { padding: 4px 8px; vertical-align: top; font-size: 9pt; }\n" +
+                "    .field-label { width: 38%; font-weight: bold; color: #0d47a1; background: #e3f2fd; padding: 4px 8px; border-right: 1px solid #bbdefb; }\n" +
+                "    .field-value { color: #1a1a1a; background: #fff; }\n" +
+                "    \n" +
+                "    /* Section Styles */\n" +
+                "    .section { margin: 8px 0; }\n" +
+                "    .section-header { font-size: 9.5pt; font-weight: bold; color: #0d47a1; background: #e3f2fd; padding: 4px 8px; border-left: 3px solid #0d47a1; margin-bottom: 5px; }\n" +
+                "    \n" +
+                "    /* NIC Code Table */\n" +
+                "    .nic-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }\n" +
+                "    .nic-table th { background: #1565c0; color: #fff; padding: 3px 6px; text-align: left; font-size: 8pt; }\n" +
+                "    .nic-table td { padding: 3px 6px; border-bottom: 1px solid #e0e0e0; }\n" +
+                "    .nic-table tr:nth-child(even) { background: #f5f5f5; }\n" +
+                "    \n" +
+                "    /* Footer */\n" +
+                "    .footer { margin-top: 10px; padding-top: 6px; border-top: 2px solid #0d47a1; }\n" +
+                "    .disclaimer { font-size: 7.5pt; color: #666; text-align: center; font-style: italic; margin-bottom: 4px; }\n" +
+                "    .gen-date { font-size: 7pt; color: #999; text-align: right; }\n" +
+                "    .verified-badge { text-align: center; margin: 6px 0; }\n" +
+                "    .verified-badge span { background: #1565c0; color: #fff; padding: 2px 12px; font-size: 7.5pt; font-weight: bold; letter-spacing: 0.5px; }\n" +
+                "    \n" +
+                "    /* Watermark */\n" +
+                "    .watermark { position: absolute; top: 35%; left: 25%; font-size: 48pt; color: rgba(13,71,161,0.04); transform: rotate(-35deg); z-index: 0; white-space: nowrap; font-weight: bold; letter-spacing: 5px; }\n" +
+                "  </style>\n" +
+                "</head>\n" +
+                "<body>\n" +
+                "  <div class=\"certificate\">\n" +
+                "    <div class=\"inner-border\">\n" +
+                "      <div class=\"watermark\">UDYAM</div>\n" +
+                "      \n" +
+                "      <!-- Header -->\n" +
+                "      <div class=\"header\">\n" +
+                "        <div class=\"emblem-row\">\n" +
+                "          <span class=\"ashoka-chakra\">\u2638</span>\n" +
+                "        </div>\n" +
+                "        <div class=\"govt-name\">Government of India</div>\n" +
+                "        <div class=\"ministry-name\">Ministry of Micro, Small &amp; Medium Enterprises</div>\n" +
+                "        <div class=\"cert-title\">Udyam Registration Certificate</div>\n" +
+                "        <div class=\"cert-number\">Udyam Registration Number: <strong>" + escapeXml(udyamNumber) + "</strong></div>\n" +
+                "      </div>\n" +
+                "      \n" +
+                "      <!-- Certificate Fields -->\n" +
+                "      <table class=\"fields-table\">\n" +
+                certFields.toString() +
+                "      </table>\n" +
+                "      \n" +
+                "      <!-- NIC Codes Section -->\n" +
+                nicSection +
+                "      \n" +
+                "      <!-- Footer -->\n" +
+                "      <div class=\"footer\">\n" +
+                "        <div class=\"verified-badge\"><span>\u2713 DIGITALLY VERIFIED BY DUKAANLOCKER</span></div>\n" +
+                "        <div class=\"disclaimer\">This is a computer generated statement, no signature required.</div>\n" +
+                "        <div class=\"gen-date\">Date of Print: " + new java.text.SimpleDateFormat("dd MMM yyyy, hh:mm a").format(new java.util.Date()) + "</div>\n" +
+                "      </div>\n" +
+                "    </div>\n" +
+                "  </div>\n" +
+                "</body>\n" +
+                "</html>";
 
             // Render to PDF
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -525,13 +596,12 @@ public class UdyamVerificationService {
      */
     private String extractCertificateFields(String text) {
         StringBuilder html = new StringBuilder();
-        html.append("<table class=\"cert-table\">");
 
         // Udyam Number
         Pattern udyamPattern = Pattern.compile("UDYAM-[A-Z]{2}-\\d{2}-\\d{7}", Pattern.CASE_INSENSITIVE);
         Matcher m = udyamPattern.matcher(text);
         if (m.find()) {
-            html.append("<tr><td class=\"label\">Udyam Registration Number</td><td class=\"value\">")
+            html.append("<tr><td class=\"field-label\">Udyam Registration Number</td><td class=\"field-value\">")
                 .append(escapeXml(m.group().toUpperCase()))
                 .append("</td></tr>");
         }
@@ -554,7 +624,7 @@ public class UdyamVerificationService {
                     name = name.substring(0, name.toLowerCase().indexOf("type of")).trim();
                 }
                 if (!name.isEmpty() && name.length() < 100) {
-                    html.append("<tr><td class=\"label\">Name of Enterprise</td><td class=\"value\">")
+                    html.append("<tr><td class=\"field-label\">Name of Enterprise</td><td class=\"field-value\">")
                         .append(escapeXml(name))
                         .append("</td></tr>");
                     break;
@@ -562,7 +632,6 @@ public class UdyamVerificationService {
             }
         }
 
-        html.append("</table>");
         return html.toString();
     }
 
