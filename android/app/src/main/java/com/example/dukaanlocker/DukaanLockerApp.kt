@@ -295,7 +295,8 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                                 currentUserEmail = auth.emailId
                                                 currentUserRole = auth.role
                                                 isLoggedIn = true
-                                                currentScreen = "owner_home"
+                                                // Route based on role: MANAGER goes to manager_home, ADMIN goes to owner_home
+                                                currentScreen = if (auth.role == "MANAGER") "manager_home" else "owner_home"
                                                 loadShops()
                                                 if (auth.role == "ADMIN") loadManagers()
                                                 Toast.makeText(context, "Welcome, ${auth.userName}!", Toast.LENGTH_SHORT).show()
@@ -419,9 +420,11 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                         onDone()
                                     }
                                 },
-                                onManagerLogin = { code ->
-                                    // Manager login uses email/password, not code
-                                    Toast.makeText(context, "Please use email & password to login as manager", Toast.LENGTH_LONG).show()
+                                onManagerLogin = { email ->
+                                    // Manager login goes through the same email/password flow as owner
+                                    // The LoginScreen shows OwnerLoginForm for both roles
+                                    // This callback is now handled by onOwnerLogin with role-based routing
+                                    Toast.makeText(context, "Please enter your email and password", Toast.LENGTH_SHORT).show()
                                 }
                             )
                         }
