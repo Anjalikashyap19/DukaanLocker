@@ -37,10 +37,10 @@ data class BusinessProfile(
 )
 
 data class ManagerAccess(
-    val id: String = "",
     val code: String,
     val managerName: String,
-    val assignedBusinessIds: List<String>
+    val assignedBusinessIds: List<String>,
+    val id: String? = null
 )
 
 data class ShopDetails(
@@ -158,7 +158,7 @@ object LockerStorage {
         managers.forEach { m ->
             val ids = JSONArray().also { a -> m.assignedBusinessIds.forEach { a.put(it) } }
             arr.put(JSONObject().apply {
-                put("id", m.id); put("code", m.code); put("managerName", m.managerName)
+                put("code", m.code); put("managerName", m.managerName)
                 put("assignedBusinessIds", ids)
             })
         }
@@ -171,12 +171,8 @@ object LockerStorage {
         (0 until arr.length()).map { i ->
             arr.getJSONObject(i).let { j ->
                 val idsArr = j.getJSONArray("assignedBusinessIds")
-                ManagerAccess(
-                    id = j.optString("id", ""),
-                    code = j.getString("code"),
-                    managerName = j.getString("managerName"),
-                    assignedBusinessIds = (0 until idsArr.length()).map { idsArr.getString(it) }
-                )
+                ManagerAccess(j.getString("code"), j.getString("managerName"),
+                    (0 until idsArr.length()).map { idsArr.getString(it) })
             }
         }
     } catch (e: Exception) { emptyList() }

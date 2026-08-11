@@ -413,7 +413,7 @@ fun AddBusinessScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             // Assign to Manager (only show if managers are available)
-            if (managers.isNotEmpty() && onAssignManager != null) {
+            if (managers.isNotEmpty() && onManagerSelected != null) {
                 ExposedDropdownMenuBox(
                     expanded = showManagerDropdown,
                     onExpandedChange = { showManagerDropdown = !showManagerDropdown }

@@ -90,6 +90,8 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                 shopDocuments = shopDocuments.filter { it.shopId != shopId } + docs
             }
         } catch (e: Exception) {
+            // Log error for debugging
+            android.util.Log.e("DukaanLocker", "Failed to load documents for shop $shopId", e)
         }
     }
 
@@ -148,7 +150,8 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                 }
             }
         } catch (e: Exception) {
-            // Handle offline or error gracefully
+            // Log error for debugging
+            android.util.Log.e("DukaanLocker", "Failed to load shops", e)
         }
     }
 
@@ -169,13 +172,16 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                             assignments[mgr.id] = assignedShops.map { it.id.toString() }
                         }
                     } catch (e: Exception) {
+                        // Log error for debugging
+                        android.util.Log.e("DukaanLocker", "Failed to load shops for manager ${mgr.id}", e)
                         assignments[mgr.id] = emptyList()
                     }
                 }
                 managerShopAssignments = assignments
             }
         } catch (e: Exception) {
-            // Handle offline or error gracefully
+            // Log error for debugging
+            android.util.Log.e("DukaanLocker", "Failed to load managers", e)
         }
     }
 
@@ -480,7 +486,10 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                                 operationScope = wizard.operationScope,
                                                 businessPresence = wizard.digitalReadiness
                                             ))
-                                        } catch (e: Exception) { /* proceed anyway */ }
+                                        } catch (e: Exception) {
+                                            // Log error for debugging
+                                            android.util.Log.e("DukaanLocker", "Failed to save wizard profile", e)
+                                        }
                                         currentScreen = "add_business"
                                     }
                                 },
@@ -492,7 +501,10 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                                 operationScope = "CITY",
                                                 businessPresence = "PHYSICAL"
                                             ))
-                                        } catch (e: Exception) { /* proceed anyway */ }
+                                        } catch (e: Exception) {
+                                            // Log error for debugging
+                                            android.util.Log.e("DukaanLocker", "Failed to save wizard profile (skip)", e)
+                                        }
                                         currentScreen = "add_business"
                                     }
                                 },
@@ -527,6 +539,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                 },
                                 managers = managers.map { mgr ->
                                     ManagerAccess(
+                                        id = mgr.id.toString(),
                                         code = mgr.managerCode ?: mgr.id.toString(),
                                         managerName = mgr.userName,
                                         assignedBusinessIds = managerShopAssignments[mgr.id] ?: emptyList()
@@ -659,6 +672,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                 },
                                 managers = managers.map { mgr ->
                                     ManagerAccess(
+                                        id = mgr.id.toString(),
                                         code = mgr.managerCode ?: mgr.id.toString(),
                                         managerName = mgr.userName,
                                         assignedBusinessIds = managerShopAssignments[mgr.id] ?: emptyList()
@@ -767,7 +781,10 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                             for (shop in shops) {
                                                 try {
                                                     api.deactivateAssignment(managerId, shop.id)
-                                                } catch (e: Exception) { }
+                                                } catch (e: Exception) {
+                                                    // Log error for debugging
+                                                    android.util.Log.e("DukaanLocker", "Failed to deactivate assignment for manager $managerId", e)
+                                                }
                                             }
                                             loadManagers()
                                             Toast.makeText(context, "Manager access revoked", Toast.LENGTH_SHORT).show()
@@ -790,6 +807,7 @@ fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (S
                                     managerCode = currentUserManagerCode
                                 ),
                                 managerAccess = ManagerAccess(
+                                    id = currentUserId.toString(),
                                     code = currentUserManagerCode,
                                     managerName = currentUserName,
                                     assignedBusinessIds = shops.map { it.id.toString() }
