@@ -2,14 +2,15 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    id("com.google.gms.google-services")
 }
 
 android {
-    namespace = "com.example.dukaanlocker"
+    namespace = "com.iadv.dukaanlocker"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.dukaanlocker"
+        applicationId = "com.iadv.dukaanlocker"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
@@ -49,8 +50,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
-    kotlinOptions {
-        jvmTarget = "21"
+    kotlin {
+        jvmToolchain(21)
     }
     buildFeatures {
         compose = true
@@ -59,6 +60,17 @@ android {
 }
 
 dependencies {
+
+    implementation(platform("com.google.firebase:firebase-bom:34.17.0"))
+    implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-auth")
+    
+    // Google Sign-In
+    implementation("com.google.android.gms:play-services-auth:21.3.0")
+    
+    // Biometric Authentication
+    implementation("androidx.biometric:biometric:1.2.0-alpha05")
+    
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
