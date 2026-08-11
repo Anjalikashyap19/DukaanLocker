@@ -17,6 +17,9 @@ interface ApiService {
     @POST("api/auth/login-by-code")
     suspend fun loginByCode(@Body request: ManagerCodeLoginRequest): Response<AuthResponse>
 
+    @POST("api/auth/register-google")
+    suspend fun registerWithGoogle(@Body request: GoogleRegisterRequest): Response<AuthResponse>
+
     // ── Shops ────────────────────────────────────────────────────────────────
 
     @POST("api/shops")

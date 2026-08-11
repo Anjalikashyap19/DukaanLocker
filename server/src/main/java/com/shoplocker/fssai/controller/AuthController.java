@@ -1,6 +1,7 @@
 package com.shoplocker.fssai.controller;
 
 import com.shoplocker.fssai.dto.AuthResponse;
+import com.shoplocker.fssai.dto.GoogleRegisterRequest;
 import com.shoplocker.fssai.dto.LoginRequest;
 import com.shoplocker.fssai.dto.ManagerCodeLoginRequest;
 import com.shoplocker.fssai.dto.MsmeAuthResponse;
@@ -76,6 +77,20 @@ public class AuthController {
             @Valid @RequestBody RegisterWithMsmeRequest request) {
         MsmeAuthResponse response = authService.registerWithMsme(request, udyamService);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @Operation(
+            summary = "Register with Google account",
+            description = "Creates a new account using Google authentication. " +
+                          "If the email already exists, logs in the user instead. " +
+                          "No password required — Firebase handles authentication."
+    )
+    @SecurityRequirements
+    @PostMapping("/register-google")
+    public ResponseEntity<AuthResponse> registerWithGoogle(
+            @Valid @RequestBody GoogleRegisterRequest request) {
+        AuthResponse response = authService.registerWithGoogle(request);
+        return ResponseEntity.ok(response);
     }
 
     @Operation(

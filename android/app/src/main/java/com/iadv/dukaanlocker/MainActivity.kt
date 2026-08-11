@@ -1,20 +1,33 @@
 package com.iadv.dukaanlocker
 
-import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
+import com.iadv.dukaanlocker.api.BiometricAuthManager
 import com.iadv.dukaanlocker.api.GoogleSignInHelper
+import com.iadv.dukaanlocker.api.ApiClient
+import com.iadv.dukaanlocker.api.GoogleRegisterRequest
+import com.iadv.dukaanlocker.api.parseErrorMessage
+import kotlinx.coroutines.launch
 import java.util.Locale
 
-class MainActivity : ComponentActivity() {
-    private lateinit var googleSignInHelper: GoogleSignInHelper
-    private var onGoogleSignInResult: ((String, String, String) -> Unit)? = null
-    private var onGoogleSignInError: ((Exception) -> Unit)? = null
+// Use FragmentActivity (not ComponentActivity) so BiometricPrompt works
+class MainActivity : FragmentActivity() {
+
+    lateinit var googleSignInHelper: GoogleSignInHelper
+        private set
+    lateinit var biometricAuthManager: BiometricAuthManager
+        private set
+
+    // Callbacks for Google Sign-Up result
+    private var onGoogleSignUpSuccess: ((token: String, userId: Long, userName: String, email: String, role: String) -> Unit)? = null
+    private var onGoogleSignUpError: ((Exception) -> Unit)? = null
 
     private val googleSignInLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -23,18 +36,56 @@ class MainActivity : ComponentActivity() {
         try {
             val account = task.getResult(ApiException::class.java)
             account?.idToken?.let { idToken ->
+                // Step 1: Authenticate with Firebase
                 googleSignInHelper.firebaseAuthWithGoogle(
                     idToken = idToken,
-                    onSuccess = { uid, email, displayName ->
-                        onGoogleSignInResult?.invoke(uid, email, displayName)
+                    onSuccess = { firebaseUid, email, displayName ->
+                        // Step 2: Register/Login with backend
+                        registerWithBackend(firebaseUid, email, displayName)
                     },
                     onError = { exception ->
-                        onGoogleSignInError?.invoke(exception)
+                        onGoogleSignUpError?.invoke(exception)
                     }
                 )
+            } ?: run {
+                onGoogleSignUpError?.invoke(Exception("No ID token received from Google"))
             }
         } catch (e: ApiException) {
-            onGoogleSignInError?.invoke(e)
+            onGoogleSignUpError?.invoke(e)
+        }
+    }
+
+    /**
+     * Call backend API to register or login the Google user.
+     * Backend will create a new user if email doesn't exist, or login if it does.
+     */
+    private fun registerWithBackend(firebaseUid: String, email: String, displayName: String) {
+        lifecycleScope.launch {
+            try {
+                val api = ApiClient.getApiService(this@MainActivity)
+                val response = api.registerWithGoogle(
+                    GoogleRegisterRequest(
+                        firebaseUid = firebaseUid,
+                        userName = displayName,
+                        emailId = email
+                    )
+                )
+                if (response.isSuccessful) {
+                    val auth = response.body()!!
+                    onGoogleSignUpSuccess?.invoke(
+                        auth.token,
+                        auth.userId,
+                        auth.userName,
+                        auth.emailId,
+                        auth.role
+                    )
+                } else {
+                    val errorMsg = response.parseErrorMessage()
+                    onGoogleSignUpError?.invoke(Exception(errorMsg))
+                }
+            } catch (e: Exception) {
+                onGoogleSignUpError?.invoke(e)
+            }
         }
     }
 
@@ -44,6 +95,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         
         googleSignInHelper = GoogleSignInHelper(this)
+        biometricAuthManager = BiometricAuthManager(this)
         
         setContent {
             DukaanLockerApp(
@@ -51,16 +103,27 @@ class MainActivity : ComponentActivity() {
                     LockerStorage.saveLanguage(this, code)
                 },
                 onGoogleSignIn = {
-                    onGoogleSignInResult = { uid, email, displayName ->
-                        // Handle successful Google Sign-In
-                        // This will be connected to DukaanLockerApp
-                    }
-                    onGoogleSignInError = { exception ->
-                        // Handle Google Sign-In error
-                        android.util.Log.e("GoogleSignIn", "Error: ${exception.message}")
-                    }
+                    // Launch Google Sign-In flow
                     val signInIntent = googleSignInHelper.getSignInIntent()
                     googleSignInLauncher.launch(signInIntent)
+                },
+                onGoogleSignUpResult = { token, userId, userName, email, role ->
+                    // Save auth and navigate to home
+                    val authResponse = com.iadv.dukaanlocker.api.AuthResponse(
+                        token = token,
+                        tokenType = "Bearer",
+                        userId = userId,
+                        userName = userName,
+                        mobileNumber = "",
+                        emailId = email,
+                        role = role
+                    )
+                    ApiClient.saveAuth(this, authResponse)
+                    Toast.makeText(this, "Welcome, $userName!", Toast.LENGTH_SHORT).show()
+                    // The UI will automatically navigate due to isLoggedIn state change
+                },
+                onGoogleSignUpError = { exception ->
+                    Toast.makeText(this, "Google Sign-Up failed: ${exception.message}", Toast.LENGTH_LONG).show()
                 }
             )
         }

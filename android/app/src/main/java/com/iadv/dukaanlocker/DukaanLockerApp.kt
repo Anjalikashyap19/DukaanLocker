@@ -32,7 +32,13 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 @Composable
-fun DukaanLockerApp(onThemeChange: (Boolean) -> Unit = {}, onLanguageChanged: (String) -> Unit = {}, onGoogleSignIn: () -> Unit = {}) {
+fun DukaanLockerApp(
+    onThemeChange: (Boolean) -> Unit = {},
+    onLanguageChanged: (String) -> Unit = {},
+    onGoogleSignIn: () -> Unit = {},
+    onGoogleSignUpResult: ((token: String, userId: Long, userName: String, email: String, role: String) -> Unit)? = null,
+    onGoogleSignUpError: ((Exception) -> Unit)? = null
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val api = remember { ApiClient.getApiService(context) }

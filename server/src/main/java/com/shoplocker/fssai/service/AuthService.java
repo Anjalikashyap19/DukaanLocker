@@ -1,6 +1,7 @@
 package com.shoplocker.fssai.service;
 
 import com.shoplocker.fssai.dto.AuthResponse;
+import com.shoplocker.fssai.dto.GoogleRegisterRequest;
 import com.shoplocker.fssai.dto.LoginRequest;
 import com.shoplocker.fssai.dto.ManagerCodeLoginRequest;
 import com.shoplocker.fssai.dto.MsmeAuthResponse;
@@ -177,6 +178,65 @@ public class AuthService {
      * @param request contains the 6-character manager code
      * @return AuthResponse with JWT token
      */
+    /**
+     * Register a new user via Google account, or login if email already exists.
+     * Uses Firebase UID as a unique identifier. No password required.
+     *
+     * @param request contains firebaseUid, userName, emailId from Google
+     * @return AuthResponse with JWT token
+     */
+    @Transactional
+    public AuthResponse registerWithGoogle(GoogleRegisterRequest request) {
+        String email = normalizeEmail(request.getEmailId());
+        String name = request.getUserName() != null ? request.getUserName().trim() : "Google User";
+        String firebaseUid = request.getFirebaseUid().trim();
+
+        if (email == null || email.isBlank()) {
+            throw new FssaiException("Invalid registration details", FailureCode.INVALID_REQUEST);
+        }
+
+        // Check if user already exists with this email
+        java.util.Optional<User> existingUser = userRepository.findByEmailId(email);
+        if (existingUser.isPresent()) {
+            // User already exists — just log them in
+            User user = existingUser.get();
+            String token = jwtService.generateToken(user);
+            log.info("Google login: existing user email={}", email);
+            return AuthResponse.from(user, token);
+        }
+
+        // Create new user from Google account
+        User user = new User();
+        user.setUserName(name);
+        user.setEmailId(email);
+        user.setMobileNumber(generateUniqueMobile());
+        // Google users don't have a password — use a random hash that can't be matched
+        user.setPassword(passwordEncoder.encode("google-oauth-no-password-" + firebaseUid));
+        user.setRole(Role.ADMIN);
+        user.setEnabled(true);
+
+        User saved = userRepository.save(user);
+        String token = jwtService.generateToken(saved);
+
+        log.info("Google registration: userId={} email={}", saved.getId(), email);
+        return AuthResponse.from(saved, token);
+    }
+
+    /**
+     * Generate a unique 10-digit mobile number for Google users.
+     * Uses timestamp-based generation to avoid collisions.
+     */
+    private String generateUniqueMobile() {
+        String mobile;
+        int attempts = 0;
+        do {
+            long timestamp = System.currentTimeMillis() % 10000000000L;
+            mobile = String.format("%010d", timestamp + attempts);
+            attempts++;
+        } while (userRepository.existsByMobileNumber(mobile) && attempts < 100);
+        return mobile;
+    }
+
     public AuthResponse loginByCode(ManagerCodeLoginRequest request) {
         String code = request.getManagerCode().trim().toUpperCase();
 

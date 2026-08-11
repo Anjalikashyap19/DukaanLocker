@@ -373,7 +373,8 @@ fun LoginScreen(
                     captchaError = regCaptchaError,
                     isChecking = regIsChecking,
                     onBack = { selectedView = null; regIsChecking = false },
-                    onRegister = { if (registerWithMsme) validateAndRegisterWithMsme() else validateAndRegister() }
+                    onRegister = { if (registerWithMsme) validateAndRegisterWithMsme() else validateAndRegister() },
+                    onGoogleSignIn = onGoogleSignIn
                 )
 
                 // ── MANAGER LOGIN (uses access code) ──────────
@@ -518,7 +519,7 @@ private fun RoleSelectionContent(
 
         Spacer(modifier = Modifier.height(18.dp))
 
-        // Google Sign-In Button
+        // Google Sign-Up Button
         Button(
             onClick = onGoogleSignIn,
             modifier = Modifier
@@ -537,7 +538,7 @@ private fun RoleSelectionContent(
                 tint = Color.Unspecified
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Continue with Google", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+            Text("Sign up with Google", fontWeight = FontWeight.Medium, fontSize = 14.sp)
         }
     }
 }
@@ -674,7 +675,8 @@ private fun RegisterForm(
     captchaInput: String, msmeCaptchaLoading: Boolean = false, onCaptchaInputChange: (String) -> Unit, captchaError: Boolean,
     isChecking: Boolean,
     onBack: () -> Unit,
-    onRegister: () -> Unit
+    onRegister: () -> Unit,
+    onGoogleSignIn: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
@@ -977,6 +979,43 @@ private fun RegisterForm(
                         fontWeight = FontWeight.Bold, fontSize = 14.sp, letterSpacing = 1.sp
                     )
                 }
+            }
+
+            // ── OR separator ──
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HorizontalDivider(modifier = Modifier.weight(1f), color = colors.border.copy(alpha = 0.5f))
+                Text(
+                    "  OR  ",
+                    fontSize = 11.sp,
+                    color = colors.textSecondary.copy(alpha = 0.6f),
+                    letterSpacing = 1.sp
+                )
+                HorizontalDivider(modifier = Modifier.weight(1f), color = colors.border.copy(alpha = 0.5f))
+            }
+
+            // ── Google Sign-Up Button ──
+            Button(
+                onClick = onGoogleSignIn,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.White,
+                    contentColor = Color.DarkGray
+                ),
+                border = BorderStroke(1.dp, Color.LightGray)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = "Google",
+                    tint = Color.Unspecified
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Sign up with Google", fontWeight = FontWeight.Medium, fontSize = 14.sp)
             }
         }
     }

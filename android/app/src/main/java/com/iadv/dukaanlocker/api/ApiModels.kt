@@ -116,6 +116,13 @@ data class ManagerCodeLoginRequest(
     @SerializedName("managerCode") val managerCode: String
 )
 
+data class GoogleRegisterRequest(
+    @SerializedName("firebaseUid") val firebaseUid: String,
+    @SerializedName("userName") val userName: String,
+    @SerializedName("emailId") val emailId: String,
+    @SerializedName("mobileNumber") val mobileNumber: String? = null
+)
+
 // ── Business Profile ─────────────────────────────────────────────────────────
 
 data class BusinessProfileRequest(

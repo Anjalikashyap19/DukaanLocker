@@ -13,7 +13,7 @@ class GoogleSignInHelper(private val context: Context) {
     
     // TODO: Replace with your actual Web Client ID from Firebase Console
     // Go to Firebase Console > Authentication > Sign-in method > Google > Web SDK configuration
-    private val webClientId = "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com"
+    private val webClientId = "733563364874-v71tsg3phavb9b12oiu7vjhjnjtv8qg1.apps.googleusercontent.com.apps.googleusercontent.com"
     
     private val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
         .requestIdToken(webClientId)
@@ -30,9 +30,13 @@ class GoogleSignInHelper(private val context: Context) {
         firebaseAuth.signOut()
     }
     
+    /**
+     * Authenticate with Google and get user info for registration.
+     * Returns (firebaseUid, email, displayName) for Google Sign-Up flow.
+     */
     fun firebaseAuthWithGoogle(
         idToken: String,
-        onSuccess: (String, String, String) -> Unit,
+        onSuccess: (firebaseUid: String, email: String, displayName: String) -> Unit,
         onError: (Exception) -> Unit
     ) {
         val credential = GoogleAuthProvider.getCredential(idToken, null)
@@ -44,9 +48,9 @@ class GoogleSignInHelper(private val context: Context) {
                         onSuccess(
                             it.uid,
                             it.email ?: "",
-                            it.displayName ?: ""
+                            it.displayName ?: "Google User"
                         )
-                    }
+                    } ?: onError(Exception("No user found after Google authentication"))
                 } else {
                     task.exception?.let { onError(it) }
                 }
