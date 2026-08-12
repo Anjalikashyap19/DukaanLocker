@@ -445,18 +445,7 @@ private fun RoleSelectionContent(
     ) {
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Biometric Login small text (only show if biometric login is enabled)
-        if (isBiometricLoginEnabled) {
-            Text(
-                text = "Biometric Login",
-                modifier = Modifier
-                    .clickable { onBiometricLogin() }
-                    .padding(bottom = 8.dp),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color(0xFFF59E0B) // Yellow color
-            )
-        }
+       
 
         Text(
             text = AppStrings.get(lang, "GET STARTED"),

@@ -66,6 +66,20 @@ object BiometricCredentialManager {
     }
 
     /**
+     * Ensure the Android Keystore key exists. Creates it if needed.
+     * Must be called before getCryptoCipher() on first use.
+     */
+    fun ensureKeyExists(): Boolean {
+        return try {
+            getOrCreateKey()
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("BiometricCredential", "Failed to create Keystore key", e)
+            false
+        }
+    }
+
+    /**
      * Check if biometric login credentials are stored.
      */
     fun hasStoredCredentials(context: Context): Boolean {

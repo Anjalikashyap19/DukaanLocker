@@ -113,11 +113,14 @@ class BiometricAuthManager(private val context: Context) {
      */
     fun getCryptoCipher(): Cipher? {
         return try {
+            // Ensure the key exists (creates it on first use)
+            BiometricCredentialManager.ensureKeyExists()
             val key = getKeystoreKey() ?: return null
             val cipher = Cipher.getInstance(BiometricCredentialManager.TRANSFORMATION)
             cipher.init(Cipher.ENCRYPT_MODE, key)
             cipher
         } catch (e: Exception) {
+            android.util.Log.e("BiometricAuth", "getCryptoCipher failed: ${e.javaClass.simpleName}: ${e.message}", e)
             null
         }
     }
@@ -135,6 +138,7 @@ class BiometricAuthManager(private val context: Context) {
             cipher.init(Cipher.DECRYPT_MODE, key, spec)
             cipher
         } catch (e: Exception) {
+            android.util.Log.e("BiometricAuth", "getDecryptionCipher failed: ${e.javaClass.simpleName}: ${e.message}", e)
             null
         }
     }
