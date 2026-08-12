@@ -2,6 +2,7 @@ package com.shoplocker.fssai.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 
 /**
  * Biometric login request payload.
@@ -10,7 +11,7 @@ import jakarta.validation.constraints.NotBlank;
  */
 public class BiometricLoginRequest {
 
-    @NotBlank(message = "userId is required")
+    @NotNull(message = "userId is required")
     private Long userId;
 
     @NotBlank(message = "emailId is required")

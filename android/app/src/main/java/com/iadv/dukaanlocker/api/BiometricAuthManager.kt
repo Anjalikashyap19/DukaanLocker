@@ -208,7 +208,7 @@ class BiometricAuthManager(private val context: Context) {
 
     /**
      * Convenience method for biometric login with lambda callbacks.
-     * Returns the CryptoObject on success for Keystore decryption.
+     * Returns the CryptoObject on success for Keystore encryption.
      */
     fun authenticateWithCrypto(
         activity: FragmentActivity,
@@ -220,6 +220,95 @@ class BiometricAuthManager(private val context: Context) {
     ) {
         authenticateWithCrypto(
             activity = activity,
+            title = title,
+            subtitle = subtitle,
+            callback = object : CryptoBiometricCallback {
+                override fun onBiometricSuccess(cryptoObject: BiometricPrompt.CryptoObject) = onSuccess(cryptoObject)
+                override fun onBiometricError(errorCode: Int, errorMessage: String) = onError(errorMessage)
+                override fun onBiometricFailed() = onFailed()
+            }
+        )
+    }
+
+    // ── Biometric Login with DECRYPT mode (for decryption after biometric auth) ──
+
+    /**
+     * Show biometric authentication prompt WITH a DECRYPT_MODE CryptoObject.
+     * This is used for biometric login - the CryptoObject cryptographically
+     * binds the authentication to the Android Keystore key for DECRYPTION.
+     *
+     * @param activity The activity to show the prompt in (must be FragmentActivity)
+     * @param iv The initialization vector used during encryption (stored in SharedPreferences)
+     * @param title Title of the biometric prompt
+     * @param subtitle Subtitle/description of the prompt
+     * @param callback Callback with CryptoObject on success
+     */
+    fun authenticateWithDecryptCrypto(
+        activity: FragmentActivity,
+        iv: ByteArray,
+        title: String = "Biometric Login",
+        subtitle: String = "Use your fingerprint to sign in",
+        callback: CryptoBiometricCallback
+    ) {
+        val executor = ContextCompat.getMainExecutor(context)
+
+        // Create cipher with Keystore key for DECRYPTION
+        val cipher = getDecryptionCipher(iv)
+        if (cipher == null) {
+            callback.onBiometricError(0, "Failed to initialize biometric key. Please try again.")
+            return
+        }
+
+        val cryptoObject = BiometricPrompt.CryptoObject(cipher)
+
+        val biometricCallback = object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                super.onAuthenticationSucceeded(result)
+                val crypto = result.cryptoObject
+                if (crypto != null) {
+                    callback.onBiometricSuccess(crypto)
+                } else {
+                    callback.onBiometricError(0, "Authentication succeeded but crypto object is null")
+                }
+            }
+
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                super.onAuthenticationError(errorCode, errString)
+                callback.onBiometricError(errorCode, errString.toString())
+            }
+
+            override fun onAuthenticationFailed() {
+                super.onAuthenticationFailed()
+                callback.onBiometricFailed()
+            }
+        }
+
+        val biometricPrompt = BiometricPrompt(activity, executor, biometricCallback)
+
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle(title)
+            .setSubtitle(subtitle)
+            .setNegativeButtonText("Cancel")
+            .build()
+
+        biometricPrompt.authenticate(promptInfo, cryptoObject)
+    }
+
+    /**
+     * Convenience method for biometric login (decryption) with lambda callbacks.
+     */
+    fun authenticateWithDecryptCrypto(
+        activity: FragmentActivity,
+        iv: ByteArray,
+        title: String = "Biometric Login",
+        subtitle: String = "Use your fingerprint to sign in",
+        onSuccess: (BiometricPrompt.CryptoObject) -> Unit,
+        onError: (String) -> Unit,
+        onFailed: () -> Unit
+    ) {
+        authenticateWithDecryptCrypto(
+            activity = activity,
+            iv = iv,
             title = title,
             subtitle = subtitle,
             callback = object : CryptoBiometricCallback {

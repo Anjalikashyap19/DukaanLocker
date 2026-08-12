@@ -15,6 +15,11 @@ import javax.crypto.spec.GCMParameterSpec
  * Manages encrypted storage of login credentials using Android Keystore.
  * Used for biometric login - credentials are encrypted and can only be
  * decrypted after biometric authentication via CryptoObject.
+ *
+ * Strategy: We encrypt all fields as a SINGLE concatenated string in one cipher operation.
+ * This avoids the issue of reusing the cipher after doFinal() (which causes
+ * IllegalBlockSizeException) and avoids creating new cipher instances (which causes
+ * Key user not authenticated because biometric auth is bound to the original cipher).
  */
 object BiometricCredentialManager {
 
@@ -23,12 +28,9 @@ object BiometricCredentialManager {
     const val TRANSFORMATION = "AES/GCM/NoPadding"
     const val GCM_TAG_LENGTH = 128
     private const val PREFS_NAME = "biometric_credentials"
-    private const val KEY_ENCRYPTED_TOKEN = "encrypted_token"
-    private const val KEY_ENCRYPTED_USER_ID = "encrypted_user_id"
-    private const val KEY_ENCRYPTED_USER_NAME = "encrypted_user_name"
-    private const val KEY_ENCRYPTED_EMAIL = "encrypted_email"
-    private const val KEY_ENCRYPTED_ROLE = "encrypted_role"
+    private const val KEY_ENCRYPTED_DATA = "encrypted_data"
     private const val KEY_IV = "encryption_iv"
+    private const val DELIMITER = "|||"
 
     /**
      * Generate or retrieve the Android Keystore key.
@@ -64,47 +66,28 @@ object BiometricCredentialManager {
     }
 
     /**
-     * Encrypt a single value using Android Keystore.
-     * Returns encrypted bytes and IV.
-     */
-    private fun encryptValue(value: String): Pair<ByteArray, ByteArray> {
-        val key = getOrCreateKey()
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, key)
-
-        val iv = cipher.iv
-        val encrypted = cipher.doFinal(value.toByteArray())
-
-        return Pair(encrypted, iv)
-    }
-
-    /**
-     * Decrypt a single value using Android Keystore.
-     */
-    private fun decryptValue(encryptedData: ByteArray, iv: ByteArray): String {
-        val key = getOrCreateKey()
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        val spec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
-        cipher.init(Cipher.DECRYPT_MODE, key, spec)
-
-        return String(cipher.doFinal(encryptedData))
-    }
-
-    /**
      * Check if biometric login credentials are stored.
      */
     fun hasStoredCredentials(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.contains(KEY_ENCRYPTED_TOKEN)
+        return prefs.contains(KEY_ENCRYPTED_DATA)
     }
 
     /**
-     * Encrypt and store login credentials.
-     * Each field is encrypted with its own cipher instance to avoid GCM reuse.
+     * Encrypt and store login credentials using the authenticated CryptoObject cipher.
+     *
+     * Strategy: Concatenate all fields into a single string with a delimiter,
+     * then encrypt it in ONE cipher operation. This avoids:
+     * - IllegalBlockSizeException (cipher can only doFinal once)
+     * - Key user not authenticated (new cipher instances don't have biometric auth)
+     *
+     * @param context Android context
+     * @param cryptoCipher The authenticated cipher from BiometricPrompt.CryptoObject
      * @return true if credentials were successfully stored
      */
     fun storeCredentials(
         context: Context,
+        cryptoCipher: Cipher,
         token: String,
         userId: Long,
         userName: String,
@@ -112,37 +95,49 @@ object BiometricCredentialManager {
         role: String
     ): Boolean {
         return try {
-            // Encrypt each value separately to avoid GCM cipher reuse
-            val (encryptedToken, _) = encryptValue(token)
-            val (encryptedUserId, _) = encryptValue(userId.toString())
-            val (encryptedUserName, _) = encryptValue(userName)
-            val (encryptedEmail, _) = encryptValue(email)
-            val (encryptedRole, iv) = encryptValue(role)
+            // Clear any stale old-format credentials first
+            clearCredentials(context)
+            
+            // Concatenate all fields into a single string
+            val plainData = listOf(token, userId.toString(), userName, email, role)
+                .joinToString(DELIMITER)
 
+            android.util.Log.d("BiometricCredential", "Storing credentials, plainData length: ${plainData.length}")
+
+            // Encrypt the entire string in ONE operation using the authenticated cipher
+            val encrypted = cryptoCipher.doFinal(plainData.toByteArray())
+            val iv = cryptoCipher.iv
+
+            android.util.Log.d("BiometricCredential", "Encryption successful, encrypted size: ${encrypted.size}, iv size: ${iv.size}")
+
+            // Store the encrypted data and IV
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             prefs.edit().apply {
-                putString(KEY_ENCRYPTED_TOKEN, Base64.encodeToString(encryptedToken, Base64.NO_WRAP))
-                putString(KEY_ENCRYPTED_USER_ID, Base64.encodeToString(encryptedUserId, Base64.NO_WRAP))
-                putString(KEY_ENCRYPTED_USER_NAME, Base64.encodeToString(encryptedUserName, Base64.NO_WRAP))
-                putString(KEY_ENCRYPTED_EMAIL, Base64.encodeToString(encryptedEmail, Base64.NO_WRAP))
-                putString(KEY_ENCRYPTED_ROLE, Base64.encodeToString(encryptedRole, Base64.NO_WRAP))
+                putString(KEY_ENCRYPTED_DATA, Base64.encodeToString(encrypted, Base64.NO_WRAP))
                 putString(KEY_IV, Base64.encodeToString(iv, Base64.NO_WRAP))
                 apply()
             }
+            
+            // Verify the write succeeded
+            val verifyData = prefs.getString(KEY_ENCRYPTED_DATA, null)
+            val verifyIv = prefs.getString(KEY_IV, null)
+            android.util.Log.d("BiometricCredential", "Verification: data=${verifyData != null}, iv=${verifyIv != null}")
+            
             true
         } catch (e: KeyPermanentlyInvalidatedException) {
-            // Key was invalidated (e.g., biometric enrollment changed)
+            android.util.Log.e("BiometricCredential", "KeyPermanentlyInvalidatedException", e)
             clearCredentials(context)
             false
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e("BiometricCredential", "storeCredentials failed: ${e.javaClass.simpleName}: ${e.message}", e)
             false
         }
     }
 
     /**
      * Decrypt and retrieve stored credentials using a CryptoObject cipher.
-     * This is the SECURE method - requires biometric authentication via CryptoObject.
+     *
+     * Decrypts the single encrypted blob and splits by delimiter to get all fields.
      *
      * @param context Android context
      * @param cryptoCipher The authenticated cipher from BiometricPrompt.CryptoObject
@@ -151,67 +146,37 @@ object BiometricCredentialManager {
     fun getCredentialsWithCipher(context: Context, cryptoCipher: Cipher): BiometricCredentials? {
         return try {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val encryptedToken = prefs.getString(KEY_ENCRYPTED_TOKEN, null) ?: return null
-            val encryptedUserId = prefs.getString(KEY_ENCRYPTED_USER_ID, null) ?: return null
-            val encryptedUserName = prefs.getString(KEY_ENCRYPTED_USER_NAME, null) ?: return null
-            val encryptedEmail = prefs.getString(KEY_ENCRYPTED_EMAIL, null) ?: return null
-            val encryptedRole = prefs.getString(KEY_ENCRYPTED_ROLE, null) ?: return null
+            val encryptedData = prefs.getString(KEY_ENCRYPTED_DATA, null)
+            android.util.Log.d("BiometricCredential", "getCredentialsWithCipher: encryptedData=${encryptedData != null}")
+            if (encryptedData == null) return null
 
-            // Use the authenticated cipher to decrypt the first value (token)
-            // For other values, we need separate cipher instances initialized with the IV
-            val iv = cryptoCipher.iv
+            // The cipher is already in DECRYPT_MODE from the CryptoObject
+            // Just use it directly to decrypt
+            val decryptedBytes = cryptoCipher.doFinal(Base64.decode(encryptedData, Base64.NO_WRAP))
+            val decrypted = String(decryptedBytes)
+            android.util.Log.d("BiometricCredential", "Decryption successful, parts: ${decrypted.split(DELIMITER).size}")
 
-            // Decrypt token using the CryptoObject cipher
-            val token = String(cryptoCipher.doFinal(Base64.decode(encryptedToken, Base64.NO_WRAP)))
-
-            // For other fields, create new cipher instances with the same key but different IVs
-            val key = getOrCreateKey()
-
-            val userId = decryptWithKey(key,
-                Base64.decode(encryptedUserId, Base64.NO_WRAP),
-                Base64.decode(iv, Base64.NO_WRAP)
-            ).toLongOrNull() ?: -1
-
-            val userName = decryptWithKey(key,
-                Base64.decode(encryptedUserName, Base64.NO_WRAP),
-                Base64.decode(iv, Base64.NO_WRAP)
-            )
-
-            val email = decryptWithKey(key,
-                Base64.decode(encryptedEmail, Base64.NO_WRAP),
-                Base64.decode(iv, Base64.NO_WRAP)
-            )
-
-            val role = decryptWithKey(key,
-                Base64.decode(encryptedRole, Base64.NO_WRAP),
-                Base64.decode(iv, Base64.NO_WRAP)
-            )
+            // Split by delimiter to get individual fields
+            val parts = decrypted.split(DELIMITER)
+            if (parts.size != 5) {
+                clearCredentials(context)
+                return null
+            }
 
             BiometricCredentials(
-                token = token,
-                userId = userId,
-                userName = userName,
-                email = email,
-                role = role
+                token = parts[0],
+                userId = parts[1].toLongOrNull() ?: -1,
+                userName = parts[2],
+                email = parts[3],
+                role = parts[4]
             )
         } catch (e: KeyPermanentlyInvalidatedException) {
-            // Key was invalidated - credentials are no longer accessible
             clearCredentials(context)
             null
         } catch (e: Exception) {
             e.printStackTrace()
             null
         }
-    }
-
-    /**
-     * Decrypt a value using a specific key and IV.
-     */
-    private fun decryptWithKey(key: SecretKey, encryptedData: ByteArray, iv: ByteArray): String {
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        val spec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
-        cipher.init(Cipher.DECRYPT_MODE, key, spec)
-        return String(cipher.doFinal(encryptedData))
     }
 
     /**

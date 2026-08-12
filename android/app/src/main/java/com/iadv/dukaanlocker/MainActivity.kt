@@ -137,15 +137,40 @@ class MainActivity : FragmentActivity() {
                         onFailed = { onError("Authentication failed. Please try again.") }
                     )
                 },
-                // Biometric Login: Uses CryptoObject for secure Keystore decryption
+                // Biometric Login: Uses CryptoObject for secure Keystore DECRYPTION
                 // Returns CryptoObject on success so DukaanLockerApp can decrypt credentials
                 onBiometricLogin = { onSuccess, onError ->
-                    biometricAuthManager.authenticateWithCrypto(
+                    // Read the stored IV to create a DECRYPT_MODE cipher
+                    val prefs = getSharedPreferences("biometric_credentials", MODE_PRIVATE)
+                    val ivBase64 = prefs.getString("encryption_iv", null)
+                    val hasData = prefs.contains("encrypted_data")
+                    android.util.Log.d("BiometricLogin", "IV present: ${ivBase64 != null}, data present: $hasData, all keys: ${prefs.all.keys}")
+                    if (ivBase64 == null) {
+                        onError("No stored credentials found (hasData=$hasData)")
+                        return@DukaanLockerApp
+                    }
+                    val iv = android.util.Base64.decode(ivBase64, android.util.Base64.NO_WRAP)
+                    
+                    biometricAuthManager.authenticateWithDecryptCrypto(
                         activity = this@MainActivity,
+                        iv = iv,
                         title = "Biometric Login",
                         subtitle = "Use your fingerprint to sign in",
                         onSuccess = { cryptoObject ->
-                            // Pass the CryptoObject to DukaanLockerApp for Keystore decryption
+                            // Pass the CryptoObject (DECRYPT_MODE) to DukaanLockerApp
+                            onSuccess(cryptoObject)
+                        },
+                        onError = { errorMessage -> onError(errorMessage) },
+                        onFailed = { onError("Fingerprint not recognized. Please try again.") }
+                    )
+                },
+                // Authenticate for ENABLING biometric login (ENCRYPT_MODE, no stored credentials needed)
+                onAuthenticateForEnable = { onSuccess, onError ->
+                    biometricAuthManager.authenticateWithCrypto(
+                        activity = this@MainActivity,
+                        title = "Enable Biometric Login",
+                        subtitle = "Scan fingerprint to enable biometric login",
+                        onSuccess = { cryptoObject ->
                             onSuccess(cryptoObject)
                         },
                         onError = { errorMessage -> onError(errorMessage) },
@@ -153,10 +178,11 @@ class MainActivity : FragmentActivity() {
                     )
                 },
                 // Enable biometric login after successful authentication
-                onEnableBiometricLogin = { token, userId, userName, email, role ->
-                    // Encrypt and store credentials using Android Keystore
+                onEnableBiometricLogin = { cipher, token, userId, userName, email, role ->
+                    // Encrypt and store credentials using the authenticated cipher from CryptoObject
                     val stored = BiometricCredentialManager.storeCredentials(
                         context = this,
+                        cryptoCipher = cipher,
                         token = token,
                         userId = userId,
                         userName = userName,

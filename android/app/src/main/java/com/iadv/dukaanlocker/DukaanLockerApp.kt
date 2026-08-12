@@ -46,8 +46,10 @@ fun DukaanLockerApp(
     // Biometric Login: Optional biometric auto-login after logout
     // onSuccess receives the CryptoObject cipher for Keystore decryption
     onBiometricLogin: ((onSuccess: (androidx.biometric.BiometricPrompt.CryptoObject) -> Unit, onError: (String) -> Unit) -> Unit)? = null,
-    // Enable biometric login by encrypting and storing credentials
-    onEnableBiometricLogin: ((token: String, userId: Long, userName: String, email: String, role: String) -> Boolean)? = null
+    // Enable biometric login by encrypting and storing credentials (requires authenticated cipher)
+    onEnableBiometricLogin: ((cipher: javax.crypto.Cipher, token: String, userId: Long, userName: String, email: String, role: String) -> Boolean)? = null,
+    // Authenticate for ENABLING biometric login (ENCRYPT_MODE cipher, no stored credentials needed)
+    onAuthenticateForEnable: ((onSuccess: (androidx.biometric.BiometricPrompt.CryptoObject) -> Unit, onError: (String) -> Unit) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -757,22 +759,28 @@ fun DukaanLockerApp(
                                 isBiometricAvailable = onBiometricLogin != null,
                                 onAuthenticateForBiometric = {
                                     // Require biometric authentication before enabling biometric login
-                                    onBiometricLogin?.invoke(
+                                    // Use ENCRYPT_MODE cipher (no stored credentials needed yet)
+                                    onAuthenticateForEnable?.invoke(
                                         { cryptoObject ->
-                                            // Auth succeeded - now enable biometric login
-                                            // We don't need the CryptoObject for enabling, just proof of auth
-                                            val success = onEnableBiometricLogin?.invoke(
-                                                authToken ?: "",
-                                                currentUserId,
-                                                currentUserName,
-                                                currentUserEmail,
-                                                currentUserRole
-                                            ) ?: false
-                                            if (success) {
-                                                isBiometricLoginEnabled = true
-                                                Toast.makeText(context, "Biometric login enabled!", Toast.LENGTH_SHORT).show()
+                                            // Auth succeeded - use the CryptoObject cipher for encryption
+                                            val cipher = cryptoObject.cipher
+                                            if (cipher != null) {
+                                                val success = onEnableBiometricLogin?.invoke(
+                                                    cipher,
+                                                    authToken ?: "",
+                                                    currentUserId,
+                                                    currentUserName,
+                                                    currentUserEmail,
+                                                    currentUserRole
+                                                ) ?: false
+                                                if (success) {
+                                                    isBiometricLoginEnabled = true
+                                                    Toast.makeText(context, "Biometric login enabled!", Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    Toast.makeText(context, "Failed to enable biometric login", Toast.LENGTH_SHORT).show()
+                                                }
                                             } else {
-                                                Toast.makeText(context, "Failed to enable biometric login", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "Biometric authentication failed. Cipher is null.", Toast.LENGTH_SHORT).show()
                                             }
                                         },
                                         { errorMessage ->

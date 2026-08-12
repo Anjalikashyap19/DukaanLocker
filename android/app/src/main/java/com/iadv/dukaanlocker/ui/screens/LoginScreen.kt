@@ -114,9 +114,11 @@ fun LoginScreen(
     var selectedView by remember { mutableStateOf<Any?>(null) }
     
     // Auto-trigger biometric login prompt when arriving at login screen with biometric enabled
-    LaunchedEffect(isBiometricLoginEnabled) {
-        if (isBiometricLoginEnabled) {
-            kotlinx.coroutines.delay(500) // Small delay to let the screen settle
+    var biometricTriggered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (isBiometricLoginEnabled && !biometricTriggered) {
+            biometricTriggered = true
+            kotlinx.coroutines.delay(800) // Small delay to let the screen settle
             onBiometricLogin()
         }
     }
@@ -443,6 +445,19 @@ private fun RoleSelectionContent(
     ) {
         Spacer(modifier = Modifier.height(8.dp))
 
+        // Biometric Login small text (only show if biometric login is enabled)
+        if (isBiometricLoginEnabled) {
+            Text(
+                text = "Biometric Login",
+                modifier = Modifier
+                    .clickable { onBiometricLogin() }
+                    .padding(bottom = 8.dp),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFFF59E0B) // Yellow color
+            )
+        }
+
         Text(
             text = AppStrings.get(lang, "GET STARTED"),
             fontSize = 11.sp,
@@ -451,60 +466,6 @@ private fun RoleSelectionContent(
             letterSpacing = 2.sp,
             modifier = Modifier.padding(bottom = 16.dp)
         )
-
-        // Biometric Login Button (only show if biometric login is enabled)
-        if (isBiometricLoginEnabled) {
-            Button(
-                onClick = onBiometricLogin,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = colors.primary,
-                    contentColor = colors.background
-                ),
-                border = BorderStroke(1.dp, colors.primary)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Lock,
-                    contentDescription = "Biometric Login",
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(
-                        "Sign in with Biometric",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp
-                    )
-                    Text(
-                        "Use fingerprint or face to sign in",
-                        fontSize = 11.sp,
-                        color = colors.background.copy(alpha = 0.8f)
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Separator
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                HorizontalDivider(modifier = Modifier.weight(1f), color = colors.border.copy(alpha = 0.5f))
-                Text(
-                    "  OR  ",
-                    fontSize = 11.sp,
-                    color = colors.textSecondary.copy(alpha = 0.6f),
-                    letterSpacing = 1.sp
-                )
-                HorizontalDivider(modifier = Modifier.weight(1f), color = colors.border.copy(alpha = 0.5f))
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-        }
 
         // Register Now Card — most prominent
         Card(
