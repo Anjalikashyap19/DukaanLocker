@@ -18,7 +18,7 @@ public class BusinessProfileRequest {
     @NotBlank(message = "operationScope is required")
     private String operationScope;
 
-    @NotBlank(message = "businessPresence is required")
+
     private String businessPresence;
 
     // Getters and Setters
