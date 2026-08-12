@@ -183,6 +183,17 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
+
+        <!-- Flyway — versioned DB migrations. Prod runs spring.jpa.hibernate.ddl-auto=validate,
+             so schema changes MUST be applied via Flyway before Hibernate validates the model. -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
     </dependencies><dependencyManagement>
 		<dependencies>
 			<dependency>
