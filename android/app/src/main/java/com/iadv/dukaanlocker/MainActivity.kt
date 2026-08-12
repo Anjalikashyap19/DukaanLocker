@@ -10,6 +10,7 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
 import com.iadv.dukaanlocker.api.BiometricAuthManager
+import com.iadv.dukaanlocker.api.BiometricCredentialManager
 import com.iadv.dukaanlocker.api.GoogleSignInHelper
 import com.iadv.dukaanlocker.api.ApiClient
 import com.iadv.dukaanlocker.api.GoogleRegisterRequest
@@ -124,6 +125,50 @@ class MainActivity : FragmentActivity() {
                 },
                 onGoogleSignUpError = { exception ->
                     Toast.makeText(this, "Google Sign-Up failed: ${exception.message}", Toast.LENGTH_LONG).show()
+                },
+                // App Unlock: Uses device credential (biometric OR PIN/pattern)
+                onAppUnlock = { onSuccess, onError ->
+                    biometricAuthManager.authenticateWithDeviceCredential(
+                        activity = this@MainActivity,
+                        title = "Unlock Dukaan Locker",
+                        subtitle = "Use fingerprint, face, or device PIN to unlock",
+                        onSuccess = { onSuccess() },
+                        onError = { errorMessage -> onError(errorMessage) },
+                        onFailed = { onError("Authentication failed. Please try again.") }
+                    )
+                },
+                // Biometric Login: Uses CryptoObject for secure Keystore decryption
+                // Returns CryptoObject on success so DukaanLockerApp can decrypt credentials
+                onBiometricLogin = { onSuccess, onError ->
+                    biometricAuthManager.authenticateWithCrypto(
+                        activity = this@MainActivity,
+                        title = "Biometric Login",
+                        subtitle = "Use your fingerprint to sign in",
+                        onSuccess = { cryptoObject ->
+                            // Pass the CryptoObject to DukaanLockerApp for Keystore decryption
+                            onSuccess(cryptoObject)
+                        },
+                        onError = { errorMessage -> onError(errorMessage) },
+                        onFailed = { onError("Fingerprint not recognized. Please try again.") }
+                    )
+                },
+                // Enable biometric login after successful authentication
+                onEnableBiometricLogin = { token, userId, userName, email, role ->
+                    // Encrypt and store credentials using Android Keystore
+                    val stored = BiometricCredentialManager.storeCredentials(
+                        context = this,
+                        token = token,
+                        userId = userId,
+                        userName = userName,
+                        email = email,
+                        role = role
+                    )
+                    if (stored) {
+                        LockerStorage.saveBiometricLoginEnabled(this, true)
+                        true
+                    } else {
+                        false
+                    }
                 }
             )
         }

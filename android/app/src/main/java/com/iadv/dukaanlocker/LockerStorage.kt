@@ -74,6 +74,8 @@ object LockerStorage {
     private const val K_MANAGERS = "managers"
     private const val K_DOCS = "documents"
     private const val K_THEME = "dark_theme"
+    private const val K_BIOMETRIC_ENABLED = "biometric_enabled"
+    private const val K_BIOMETRIC_LOGIN_ENABLED = "biometric_login_enabled"
 
     // ── User ──────────────────────────────────────────────────────────────────
     fun saveUser(ctx: Context, u: UserAccount) {
@@ -240,6 +242,30 @@ object LockerStorage {
 
     fun getLanguage(ctx: Context): String =
         pref(ctx).getString("language", "en") ?: "en"
+
+    // ── Biometric App Unlock (Mandatory on every launch) ──────────────────
+    // Note: App unlock always uses device security, no toggle needed
+    // This is handled by checking if device has biometric/PIN/pattern
+
+    // ── Biometric Login (Optional - for auto-login after logout) ───────────
+    fun saveBiometricLoginEnabled(ctx: Context, enabled: Boolean) =
+        pref(ctx).edit().putBoolean(K_BIOMETRIC_LOGIN_ENABLED, enabled).apply()
+
+    fun isBiometricLoginEnabled(ctx: Context): Boolean =
+        pref(ctx).getBoolean(K_BIOMETRIC_LOGIN_ENABLED, false) // default to disabled
+
+    fun clearBiometricLoginPreference(ctx: Context) =
+        pref(ctx).edit().remove(K_BIOMETRIC_LOGIN_ENABLED).apply()
+
+    // ── Legacy biometric preference (kept for backward compatibility) ──────
+    fun saveBiometricEnabled(ctx: Context, enabled: Boolean) =
+        pref(ctx).edit().putBoolean(K_BIOMETRIC_ENABLED, enabled).apply()
+
+    fun isBiometricEnabled(ctx: Context): Boolean =
+        pref(ctx).getBoolean(K_BIOMETRIC_ENABLED, false)
+
+    fun clearBiometricPreference(ctx: Context) =
+        pref(ctx).edit().remove(K_BIOMETRIC_ENABLED).apply()
 
     private fun pref(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }

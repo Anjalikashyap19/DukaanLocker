@@ -1,6 +1,7 @@
 package com.shoplocker.fssai.service;
 
 import com.shoplocker.fssai.dto.AuthResponse;
+import com.shoplocker.fssai.dto.BiometricLoginRequest;
 import com.shoplocker.fssai.dto.GoogleRegisterRequest;
 import com.shoplocker.fssai.dto.LoginRequest;
 import com.shoplocker.fssai.dto.ManagerCodeLoginRequest;
@@ -574,6 +575,53 @@ public class AuthService {
             doc.setUpdatedAt(now);
             documentRepository.save(doc);
         }
+    }
+
+    /**
+     * Biometric login - issues a fresh JWT token after biometric authentication.
+     * The client has already authenticated via biometric (CryptoObject) and decrypted
+     * stored credentials. This endpoint validates the userId and emailId match,
+     * then issues a new JWT token.
+     *
+     * @param request contains userId and emailId from decrypted biometric credentials
+     * @return AuthResponse with fresh JWT token
+     */
+    @Transactional(readOnly = true)
+    public AuthResponse biometricLogin(BiometricLoginRequest request) {
+        Long userId = request.getUserId();
+        String email = normalizeEmail(request.getEmailId());
+
+        if (userId == null || email == null || email.isBlank()) {
+            throw new FssaiException("Invalid biometric login request", FailureCode.INVALID_REQUEST);
+        }
+
+        // Find user by ID and verify email matches
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> {
+                    log.info("Biometric login failed: user not found for userId={}", userId);
+                    return new FssaiException(
+                            "User not found",
+                            FailureCode.INVALID_CREDENTIALS);
+                });
+
+        if (!user.getEmailId().equals(email)) {
+            log.info("Biometric login failed: email mismatch for userId={}", userId);
+            throw new FssaiException(
+                    "Invalid biometric credentials",
+                    FailureCode.INVALID_CREDENTIALS);
+        }
+
+        if (!user.isEnabled()) {
+            log.info("Biometric login failed: disabled account for userId={}", userId);
+            throw new FssaiException(
+                    "This account has been disabled. Please contact support.",
+                    FailureCode.DISABLED_USER);
+        }
+
+        // Issue fresh JWT token
+        String token = jwtService.generateToken(user);
+        log.info("Biometric login successful: userId={} email={}", userId, email);
+        return AuthResponse.from(user, token);
     }
 
     private static String normalizeEmail(String raw) {

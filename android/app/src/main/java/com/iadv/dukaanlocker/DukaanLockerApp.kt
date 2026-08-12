@@ -8,9 +8,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -37,7 +40,14 @@ fun DukaanLockerApp(
     onLanguageChanged: (String) -> Unit = {},
     onGoogleSignIn: () -> Unit = {},
     onGoogleSignUpResult: ((token: String, userId: Long, userName: String, email: String, role: String) -> Unit)? = null,
-    onGoogleSignUpError: ((Exception) -> Unit)? = null
+    onGoogleSignUpError: ((Exception) -> Unit)? = null,
+    // App Unlock: Mandatory device authentication (biometric OR PIN/pattern)
+    onAppUnlock: ((onSuccess: () -> Unit, onError: (String) -> Unit) -> Unit)? = null,
+    // Biometric Login: Optional biometric auto-login after logout
+    // onSuccess receives the CryptoObject cipher for Keystore decryption
+    onBiometricLogin: ((onSuccess: (androidx.biometric.BiometricPrompt.CryptoObject) -> Unit, onError: (String) -> Unit) -> Unit)? = null,
+    // Enable biometric login by encrypting and storing credentials
+    onEnableBiometricLogin: ((token: String, userId: Long, userName: String, email: String, role: String) -> Boolean)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -77,6 +87,16 @@ fun DukaanLockerApp(
     var docForView by remember { mutableStateOf<DocumentItem?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     
+    // ── App Unlock state (mandatory on every launch) ──
+    var isAppUnlocked by remember { mutableStateOf(false) }
+    var showAppUnlockPrompt by remember { mutableStateOf(false) }
+    var appUnlockFailed by remember { mutableStateOf(false) }
+    
+    // ── Biometric Login state (optional auto-login after logout) ──
+    var isBiometricLoginEnabled by remember { mutableStateOf(LockerStorage.isBiometricLoginEnabled(context)) }
+    var showBiometricLoginPrompt by remember { mutableStateOf(false) }
+    var biometricLoginFailed by remember { mutableStateOf(false) }
+    
     // ── Document Viewer state ──
     var viewDocumentId by remember { mutableStateOf<Long?>(null) }
     var viewDocumentName by remember { mutableStateOf<String>("") }
@@ -86,6 +106,10 @@ fun DukaanLockerApp(
     var isUploading by remember { mutableStateOf(false) }
     var showFetchDialog by remember { mutableStateOf(false) }
     var fetchTargetDoc by remember { mutableStateOf<DocumentItem?>(null) }
+    
+    // ── Dialog states for authentication ──
+    var showAppUnlockFailedDialog by remember { mutableStateOf(false) }
+    var showBiometricLoginFailedDialog by remember { mutableStateOf(false) }
 
     // ── Helper: Load documents for a shop (accumulates into shopDocuments) ──
     suspend fun loadDocuments(shopId: Long) {
@@ -226,15 +250,119 @@ fun DukaanLockerApp(
     fun findBusinessFor(doc: DocumentItem): BusinessProfile? =
         shops.find { it.id.toString() == doc.businessId }?.let { shopToBusiness(it) }
 
-    // ── Determine initial screen ──
-    LaunchedEffect(isLoggedIn) {
-        if (isLoggedIn) {
-            // Navigate to appropriate home screen based on role
-            currentScreen = if (currentUserRole == "MANAGER") "manager_home" else "owner_home"
+    // ── Navigate to home screen ──
+    fun navigateToHome() {
+        currentScreen = if (currentUserRole == "MANAGER") "manager_home" else "owner_home"
+        scope.launch {
             loadShops()
             if (currentUserRole == "ADMIN") {
                 loadManagers()
             }
+        }
+    }
+    
+    // ── Navigate to login screen with biometric login check ──
+    fun navigateToLogin() {
+        currentScreen = "login"
+        // Reset biometric login state for fresh prompt
+        biometricLoginFailed = false
+        showBiometricLoginPrompt = false
+    }
+    
+    // ── APP UNLOCK: Mandatory device authentication on every app launch ──
+    LaunchedEffect(Unit) {
+        if (onAppUnlock != null) {
+            // Show app unlock prompt immediately
+            showAppUnlockPrompt = true
+        } else {
+            // No biometric/device available, skip unlock
+            isAppUnlocked = true
+        }
+    }
+    
+    LaunchedEffect(showAppUnlockPrompt) {
+        if (showAppUnlockPrompt && onAppUnlock != null && !isAppUnlocked) {
+            onAppUnlock(
+                {
+                    // Success - unlock the app
+                    showAppUnlockPrompt = false
+                    isAppUnlocked = true
+                },
+                { errorMessage ->
+                    showAppUnlockPrompt = false
+                    showAppUnlockFailedDialog = true
+                    android.util.Log.w("DukaanLocker", "App unlock failed: $errorMessage")
+                }
+            )
+        }
+    }
+    
+    // ── BIOMETRIC LOGIN: Optional auto-login on login screen ──
+    LaunchedEffect(showBiometricLoginPrompt) {
+        if (showBiometricLoginPrompt && onBiometricLogin != null) {
+            onBiometricLogin(
+                { cryptoObject ->
+                    // Success - CryptoObject received, decrypt credentials and call backend
+                    showBiometricLoginPrompt = false
+                    
+                    // Step 1: Decrypt stored credentials using CryptoObject cipher
+                    val cipher = cryptoObject.cipher
+                    if (cipher != null) {
+                    val credentials = BiometricCredentialManager.getCredentialsWithCipher(
+                        context, cipher
+                    )
+                    if (credentials != null) {
+                        // Step 2: Call backend to get a fresh JWT token
+                        scope.launch {
+                            isLoading = true
+                            try {
+                                val response = api.biometricLogin(
+                                    BiometricLoginRequest(
+                                        userId = credentials.userId,
+                                        emailId = credentials.email
+                                    )
+                                )
+                                if (response.isSuccessful) {
+                                    val auth = response.body()!!
+                                    // Step 3: Save the fresh token
+                                    ApiClient.saveAuth(context, auth)
+                                    authToken = auth.token
+                                    currentUserId = auth.userId
+                                    currentUserName = auth.userName
+                                    currentUserEmail = auth.emailId
+                                    currentUserRole = auth.role
+                                    isLoggedIn = true
+                                    navigateToHome()
+                                    Toast.makeText(context, "Welcome back, ${auth.userName}!", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    // Backend rejected - credentials invalid or user not found
+                                    biometricLoginFailed = true
+                                    Toast.makeText(context, "Biometric login failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
+                                }
+                            } catch (e: Exception) {
+                                biometricLoginFailed = true
+                                Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
+                                android.util.Log.e("DukaanLocker", "Biometric login API error", e)
+                            }
+                            isLoading = false
+                        }
+                    } else {
+                        // Credentials not found or key invalidated
+                        biometricLoginFailed = true
+                        Toast.makeText(context, "Biometric login unavailable. Please sign in normally.", Toast.LENGTH_LONG).show()
+                    }
+                    } else {
+                        // Cipher is null - biometric auth failed
+                        biometricLoginFailed = true
+                        Toast.makeText(context, "Biometric authentication failed. Please try again.", Toast.LENGTH_LONG).show()
+                    }
+                },
+                { errorMessage ->
+                    showBiometricLoginPrompt = false
+                    biometricLoginFailed = true
+                    android.util.Log.w("DukaanLocker", "Biometric login failed: $errorMessage")
+                }
+            )
         }
     }
 
@@ -311,6 +439,13 @@ fun DukaanLockerApp(
                                 onToggleTheme = onToggleTheme,
                                 onBackToMain = {
                                     currentScreen = "onboarding"
+                                },
+                                // Biometric Login: Show prompt if enabled and credentials exist
+                                isBiometricLoginEnabled = isBiometricLoginEnabled && BiometricCredentialManager.hasStoredCredentials(context),
+                                onBiometricLogin = {
+                                    if (!biometricLoginFailed) {
+                                        showBiometricLoginPrompt = true
+                                    }
                                 },
                                 onGoogleSignIn = onGoogleSignIn,
                                 onOwnerLogin = { email, password, onDone ->
@@ -618,6 +753,44 @@ fun DukaanLockerApp(
                             OwnerHomeScreen(
                                 isDarkTheme = isDarkTheme,
                                 onToggleTheme = onToggleTheme,
+                                isBiometricLoginEnabled = isBiometricLoginEnabled,
+                                isBiometricAvailable = onBiometricLogin != null,
+                                onAuthenticateForBiometric = {
+                                    // Require biometric authentication before enabling biometric login
+                                    onBiometricLogin?.invoke(
+                                        { cryptoObject ->
+                                            // Auth succeeded - now enable biometric login
+                                            // We don't need the CryptoObject for enabling, just proof of auth
+                                            val success = onEnableBiometricLogin?.invoke(
+                                                authToken ?: "",
+                                                currentUserId,
+                                                currentUserName,
+                                                currentUserEmail,
+                                                currentUserRole
+                                            ) ?: false
+                                            if (success) {
+                                                isBiometricLoginEnabled = true
+                                                Toast.makeText(context, "Biometric login enabled!", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                Toast.makeText(context, "Failed to enable biometric login", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        { errorMessage ->
+                                            Toast.makeText(context, "Authentication failed: $errorMessage", Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
+                                },
+                                onBiometricLoginToggle = { enabled ->
+                                    if (enabled) {
+                                        // This is handled by onAuthenticateForBiometric
+                                    } else {
+                                        // Disable biometric login
+                                        BiometricCredentialManager.clearCredentials(context)
+                                        LockerStorage.saveBiometricLoginEnabled(context, false)
+                                        isBiometricLoginEnabled = false
+                                        Toast.makeText(context, "Biometric login disabled", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
                                 showAddBusiness = currentUserRole == "ADMIN",
                                 showManageManagers = currentUserRole == "ADMIN",
                                 user = UserAccount(
@@ -712,10 +885,17 @@ fun DukaanLockerApp(
                                     Toast.makeText(context, "${doc.name} - delete via API", Toast.LENGTH_SHORT).show()
                                 },
                                 onLogout = {
+                                    // Clear session but KEEP biometric login enabled
                                     ApiClient.clearAuth(context)
                                     isLoggedIn = false
                                     authToken = null
-                                    currentScreen = "login"
+                                    currentUserId = -1
+                                    currentUserName = ""
+                                    currentUserEmail = ""
+                                    currentUserRole = ""
+                                    navigateToLogin()
+                                    // Note: Biometric login credentials are NOT cleared
+                                    // They persist for auto-login on next launch
                                     Toast.makeText(context, "Logged out", Toast.LENGTH_SHORT).show()
                                 }
                             )
@@ -932,6 +1112,93 @@ fun DukaanLockerApp(
                             business = findBusinessFor(viewDoc)
                                 ?: BusinessProfile(name = currentUserName),
                             onDismiss = { docForView = null }
+                        )
+                    }
+                    
+                    // ── App Unlock Failed Dialog ──
+                    if (showAppUnlockFailedDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showAppUnlockFailedDialog = false },
+                            containerColor = if (isDarkTheme) Color(0xFF1E293B) else Color.White,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                            title = {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(
+                                        Icons.Default.Lock,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        "Authentication Failed",
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isDarkTheme) Color.White else Color.Black
+                                    )
+                                }
+                            },
+                            text = {
+                                Text(
+                                    "Authentication failed. The app requires verification to continue. Please try again.",
+                                    color = if (isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        showAppUnlockFailedDialog = false
+                                        showAppUnlockPrompt = true
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary
+                                    )
+                                ) {
+                                    Text("Try Again", fontWeight = FontWeight.Bold)
+                                }
+                            },
+                            dismissButton = null
+                        )
+                    }
+                    
+                    // ── Biometric Login Failed Dialog ──
+                    if (showBiometricLoginFailedDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showBiometricLoginFailedDialog = false },
+                            containerColor = if (isDarkTheme) Color(0xFF1E293B) else Color.White,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                            title = {
+                                Text(
+                                    "Biometric Login Unavailable",
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isDarkTheme) Color.White else Color.Black
+                                )
+                            },
+                            text = {
+                                Text(
+                                    "Biometric login is not available. Please sign in with your email and password.",
+                                    color = if (isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = { showBiometricLoginFailedDialog = false },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary
+                                    )
+                                ) {
+                                    Text("OK", fontWeight = FontWeight.Bold)
+                                }
+                            },
+                            dismissButton = null
                         )
                     }
                 }

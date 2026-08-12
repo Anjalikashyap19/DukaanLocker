@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.StoreMallDirectory
@@ -69,6 +70,10 @@ fun OwnerHomeScreen(
     onBusinessSelected: (String) -> Unit = {},
     isDarkTheme: Boolean = true,
     onToggleTheme: () -> Unit = {},
+    onBiometricLoginToggle: ((Boolean) -> Unit)? = null,
+    isBiometricLoginEnabled: Boolean = false,
+    isBiometricAvailable: Boolean = false,
+    onAuthenticateForBiometric: (() -> Unit)? = null,
     showAddBusiness: Boolean = true,
     showManageManagers: Boolean = true
 ) {
@@ -76,6 +81,7 @@ fun OwnerHomeScreen(
     val scope = rememberCoroutineScope()
     var selectedBusinessId by remember { mutableStateOf<String?>(null) }
     var showSettings by remember { mutableStateOf(false) }
+    var biometricLoginEnabled by remember { mutableStateOf(isBiometricLoginEnabled) }
 
     // Filter documents for selected business
     val businessDocs = if (selectedBusinessId != null)
@@ -215,6 +221,8 @@ fun OwnerHomeScreen(
                     Text("Role: ${user.role}", color = colors.primary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(8.dp))
                     HorizontalDivider(color = colors.border)
+                    
+                    // Theme Toggle
                     TextButton(onClick = {
                         showSettings = false
                         onToggleTheme()
@@ -230,9 +238,74 @@ fun OwnerHomeScreen(
                             color = colors.primary, fontWeight = FontWeight.Bold
                         )
                     }
+                    
+                    // Biometric Login Toggle (only if biometric is available)
+                    if (isBiometricAvailable && onBiometricLoginToggle != null) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val newValue = !biometricLoginEnabled
+                                    if (newValue) {
+                                        // Require authentication before enabling
+                                        onAuthenticateForBiometric?.invoke()
+                                    } else {
+                                        // Disable directly (no auth needed)
+                                        biometricLoginEnabled = false
+                                        onBiometricLoginToggle(false)
+                                    }
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Lock,
+                                    contentDescription = "Biometric Login",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = colors.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        "Biometric Login",
+                                        color = colors.primary,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                    Text(
+                                        if (biometricLoginEnabled) "Auto-login with fingerprint enabled" else "Enable fingerprint auto-login",
+                                        color = colors.textSecondary,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = biometricLoginEnabled,
+                                onCheckedChange = { newValue ->
+                                    if (newValue) {
+                                        // Require authentication before enabling
+                                        onAuthenticateForBiometric?.invoke()
+                                    } else {
+                                        // Disable directly (no auth needed)
+                                        biometricLoginEnabled = false
+                                        onBiometricLoginToggle(false)
+                                    }
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedTrackColor = colors.primary,
+                                    checkedThumbColor = Color.White
+                                )
+                            )
+                        }
+                    }
+                    
                     Spacer(modifier = Modifier.height(8.dp))
                     HorizontalDivider(color = colors.border)
                     Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Logout Button
                     TextButton(onClick = {
                         showSettings = false
                         onLogout()

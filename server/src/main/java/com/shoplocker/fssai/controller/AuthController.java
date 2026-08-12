@@ -1,6 +1,7 @@
 package com.shoplocker.fssai.controller;
 
 import com.shoplocker.fssai.dto.AuthResponse;
+import com.shoplocker.fssai.dto.BiometricLoginRequest;
 import com.shoplocker.fssai.dto.GoogleRegisterRequest;
 import com.shoplocker.fssai.dto.LoginRequest;
 import com.shoplocker.fssai.dto.ManagerCodeLoginRequest;
@@ -104,6 +105,21 @@ public class AuthController {
     public ResponseEntity<AuthResponse> loginByCode(
             @Valid @RequestBody ManagerCodeLoginRequest request) {
         AuthResponse response = authService.loginByCode(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+            summary = "Biometric login",
+            description = "Issues a fresh JWT token after successful biometric authentication. " +
+                          "The client must first authenticate via biometric (CryptoObject) and " +
+                          "decrypt stored credentials. Then calls this endpoint with userId and emailId " +
+                          "to get a new token."
+    )
+    @SecurityRequirements
+    @PostMapping("/biometric-login")
+    public ResponseEntity<AuthResponse> biometricLogin(
+            @Valid @RequestBody BiometricLoginRequest request) {
+        AuthResponse response = authService.biometricLogin(request);
         return ResponseEntity.ok(response);
     }
 }

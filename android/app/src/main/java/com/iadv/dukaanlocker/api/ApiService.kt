@@ -20,6 +20,9 @@ interface ApiService {
     @POST("api/auth/register-google")
     suspend fun registerWithGoogle(@Body request: GoogleRegisterRequest): Response<AuthResponse>
 
+    @POST("api/auth/biometric-login")
+    suspend fun biometricLogin(@Body request: BiometricLoginRequest): Response<AuthResponse>
+
     // ── Shops ────────────────────────────────────────────────────────────────
 
     @POST("api/shops")

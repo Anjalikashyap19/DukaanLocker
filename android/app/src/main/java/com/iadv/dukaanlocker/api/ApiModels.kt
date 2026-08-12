@@ -123,6 +123,11 @@ data class GoogleRegisterRequest(
     @SerializedName("mobileNumber") val mobileNumber: String? = null
 )
 
+data class BiometricLoginRequest(
+    @SerializedName("userId") val userId: Long,
+    @SerializedName("emailId") val emailId: String
+)
+
 // ── Business Profile ─────────────────────────────────────────────────────────
 
 data class BusinessProfileRequest(
