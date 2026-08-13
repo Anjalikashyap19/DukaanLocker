@@ -51,6 +51,8 @@ public enum FailureCode {
     INVALID_CREDENTIALS        ("invalid_credentials",        HttpStatus.UNAUTHORIZED),
     /** /api/auth/login hit a User that has been disabled in the DB. */
     DISABLED_USER              ("disabled_user",              HttpStatus.FORBIDDEN),
+    /** Too many failed attempts (brute-force guard) on a public auth endpoint. */
+    TOO_MANY_ATTEMPTS          ("too_many_attempts",          HttpStatus.TOO_MANY_REQUESTS),
 
     /** Rasterizer itself crashed (native lib failure, OOM, etc.) - NOT for client-bad PDFs.
      *  Corrupted / encrypted / image-only PDFs use UNSUPPORTED_DOCUMENT_FORMAT (400) instead. */

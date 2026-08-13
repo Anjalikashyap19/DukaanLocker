@@ -36,3 +36,6 @@ build/
 .env
 *.log
 app.jar
+
+### Local runtime databases ###
+server/data/

@@ -2,6 +2,9 @@ package com.iadv.dukaanlocker.api
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
+import com.iadv.dukaanlocker.BuildConfig
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -14,6 +17,7 @@ object ApiClient {
 
     private const val BASE_URL = "https://api.dukaanlocker.com/"
     private const val PREFS_NAME = "dukaan_api_prefs"
+    private const val SECURE_PREFS_NAME = "dukaan_secure_prefs"
     private const val KEY_TOKEN = "jwt_token"
     private const val KEY_USER_ID = "user_id"
     private const val KEY_USER_NAME = "user_name"
@@ -32,20 +36,41 @@ object ApiClient {
     private fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    /**
+     * Encrypted storage for secrets (JWT, manager code). Values are AES-GCM
+     * encrypted with a key in the Android Keystore, so they are never readable
+     * from plaintext prefs files or device backups.
+     */
+    private fun securePrefs(context: Context): SharedPreferences {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        return EncryptedSharedPreferences.create(
+            context,
+            SECURE_PREFS_NAME,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+    }
+
     fun saveAuth(context: Context, response: AuthResponse) {
-        prefs(context).edit().apply {
+        securePrefs(context).edit().apply {
             putString(KEY_TOKEN, response.token)
+            putString(KEY_MANAGER_CODE, response.managerCode ?: "")
+            apply()
+        }
+        prefs(context).edit().apply {
             putLong(KEY_USER_ID, response.userId)
             putString(KEY_USER_NAME, response.userName)
             putString(KEY_EMAIL, response.emailId)
             putString(KEY_MOBILE, response.mobileNumber)
             putString(KEY_ROLE, response.role)
-            putString(KEY_MANAGER_CODE, response.managerCode ?: "")
             apply()
         }
     }
 
-    fun getToken(context: Context): String? = prefs(context).getString(KEY_TOKEN, null)
+    fun getToken(context: Context): String? = securePrefs(context).getString(KEY_TOKEN, null)
 
     fun getUserId(context: Context): Long = prefs(context).getLong(KEY_USER_ID, -1)
 
@@ -57,12 +82,13 @@ object ApiClient {
 
     fun getUserRole(context: Context): String = prefs(context).getString(KEY_ROLE, "") ?: ""
 
-    fun getManagerCode(context: Context): String = prefs(context).getString(KEY_MANAGER_CODE, "") ?: ""
+    fun getManagerCode(context: Context): String = securePrefs(context).getString(KEY_MANAGER_CODE, "") ?: ""
 
     fun isLoggedIn(context: Context): Boolean = getToken(context) != null
 
     fun clearAuth(context: Context) {
         prefs(context).edit().clear().apply()
+        securePrefs(context).edit().clear().apply()
     }
 
     // ── Retrofit Setup ────────────────────────────────────────────────────────
@@ -84,7 +110,12 @@ object ApiClient {
         }
 
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            // Body logging leaks credentials/JWTs to logcat — debug builds only.
+            level = if (BuildConfig.DEBUG) {
+                HttpLoggingInterceptor.Level.BODY
+            } else {
+                HttpLoggingInterceptor.Level.NONE
+            }
         }
 
         return OkHttpClient.Builder()
@@ -117,10 +148,9 @@ object ApiClient {
             chain.proceed(request)
         }
 
-        // Use Level.BASIC for streaming - logs method, URL, status, and response time only
-        // NOT Level.BODY which would try to log the entire PDF binary content
+        // BASIC in debug (method/URL/status only), NONE in release builds.
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE
         }
 
         // Retry interceptor for transient network errors (EOFException, etc.)

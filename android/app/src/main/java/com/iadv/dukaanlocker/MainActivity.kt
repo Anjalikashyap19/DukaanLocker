@@ -40,9 +40,9 @@ class MainActivity : FragmentActivity() {
                 // Step 1: Authenticate with Firebase
                 googleSignInHelper.firebaseAuthWithGoogle(
                     idToken = idToken,
-                    onSuccess = { firebaseUid, email, displayName ->
+                    onSuccess = { token, firebaseUid, email, displayName ->
                         // Step 2: Register/Login with backend
-                        registerWithBackend(firebaseUid, email, displayName)
+                        registerWithBackend(token, firebaseUid, email, displayName)
                     },
                     onError = { exception ->
                         onGoogleSignUpError?.invoke(exception)
@@ -60,7 +60,7 @@ class MainActivity : FragmentActivity() {
      * Call backend API to register or login the Google user.
      * Backend will create a new user if email doesn't exist, or login if it does.
      */
-    private fun registerWithBackend(firebaseUid: String, email: String, displayName: String) {
+    private fun registerWithBackend(idToken: String, firebaseUid: String, email: String, displayName: String) {
         lifecycleScope.launch {
             try {
                 val api = ApiClient.getApiService(this@MainActivity)
@@ -68,7 +68,8 @@ class MainActivity : FragmentActivity() {
                     GoogleRegisterRequest(
                         firebaseUid = firebaseUid,
                         userName = displayName,
-                        emailId = email
+                        emailId = email,
+                        idToken = idToken
                     )
                 )
                 if (response.isSuccessful) {

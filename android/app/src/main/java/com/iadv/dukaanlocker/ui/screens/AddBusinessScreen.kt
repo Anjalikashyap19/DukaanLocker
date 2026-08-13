@@ -23,15 +23,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.iadv.dukaanlocker.BuildConfig
 import com.iadv.dukaanlocker.BusinessProfile
 import com.iadv.dukaanlocker.ManagerAccess
-import com.iadv.dukaanlocker.api.OlaMapsClient
-import com.iadv.dukaanlocker.api.OlaPrediction
+import com.iadv.dukaanlocker.api.ApiClient
+import com.iadv.dukaanlocker.api.LocationSuggestion
 import com.iadv.dukaanlocker.ui.theme.*
 import kotlinx.coroutines.delay
 
@@ -56,13 +56,14 @@ fun AddBusinessScreen(
     var showCategoryDropdown by remember { mutableStateOf(false) }
     var showScaleDropdown by remember { mutableStateOf(false) }
     var showStateDropdown by remember { mutableStateOf(false) }
-    var suggestions by remember { mutableStateOf<List<OlaPrediction>>(emptyList()) }
+    var suggestions by remember { mutableStateOf<List<LocationSuggestion>>(emptyList()) }
     var isSearchingLocation by remember { mutableStateOf(false) }
     var locationSelected by remember { mutableStateOf(false) }
     var selectedManagerId by remember { mutableStateOf(assignedManagerId) }
     var showManagerDropdown by remember { mutableStateOf(false) }
 
-    val olaMapsApi = remember { OlaMapsClient.apiService }
+    val context = LocalContext.current
+    val apiService = remember { ApiClient.getApiService(context) }
 
     val categories = listOf(
         "Beauty, Salon & Personal Care",
@@ -119,10 +120,10 @@ fun AddBusinessScreen(
         isSearchingLocation = true
         delay(400)
         try {
-            val response = olaMapsApi.autocomplete(branchName, BuildConfig.OLA_MAPS_API_KEY)
+            val response = apiService.searchLocations(branchName)
             if (response.isSuccessful && branchName.isNotBlank()) {
-                suggestions = response.body()?.predictions
-                    ?.filter { it.description.contains("India", ignoreCase = true) }
+                suggestions = response.body()?.suggestions
+                    ?.filter { (it.displayName ?: it.fullAddress ?: "").contains("India", ignoreCase = true) }
                     ?: emptyList()
             } else {
                 suggestions = emptyList()
@@ -136,13 +137,21 @@ fun AddBusinessScreen(
     fun normalizeStateName(s: String): String =
         s.lowercase().replace("&", " and ").replace(Regex("[^a-zA-Z\\s]"), "").replace(Regex("\\s+"), " ").trim()
 
-    fun onSuggestionSelected(suggestion: OlaPrediction) {
-        branchName = suggestion.structuredFormatting?.mainText
-            ?: suggestion.description.split(",").first().trim()
+    fun onSuggestionSelected(suggestion: LocationSuggestion) {
+        val displayName = suggestion.displayName ?: suggestion.fullAddress ?: ""
+        branchName = displayName.split(",").first().trim()
         suggestions = emptyList()
         locationSelected = true
 
-        val addressText = suggestion.structuredFormatting?.secondaryText ?: suggestion.description
+        val serverCity = suggestion.city
+        val serverState = suggestion.state
+        if (!serverCity.isNullOrBlank() && !serverState.isNullOrBlank()) {
+            city = serverCity
+            state = serverState
+            return
+        }
+
+        val addressText = suggestion.fullAddress ?: displayName
         val parts = addressText.split(",").map { it.trim() }
         val filtered = parts.filter { !it.equals("India", ignoreCase = true) }
         if (filtered.size >= 2) {
@@ -345,15 +354,13 @@ fun AddBusinessScreen(
                             text = {
                                 Column {
                                     Text(
-                                        text = suggestion.structuredFormatting?.mainText
-                                            ?: suggestion.description.split(",").first().trim(),
+                                        text = suggestion.displayName?.split(",")?.first()?.trim() ?: "",
                                         fontWeight = FontWeight.Medium,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = suggestion.structuredFormatting?.secondaryText
-                                            ?: suggestion.description.split(",").drop(1).joinToString(", ").trim(),
+                                        text = suggestion.fullAddress ?: "",
                                         fontSize = 12.sp,
                                         color = colors.textSecondary,
                                         maxLines = 1,

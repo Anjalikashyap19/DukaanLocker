@@ -143,9 +143,10 @@ services:
       - "8081:8081"
     environment:
       - SPRING_PROFILES_ACTIVE=dev
+      - EXPOSE_DEVTOOLS=true
       - AWS_REGION=us-east-1
       - AWS_BUCKET_NAME=dukaanlocker-documents-local
-      - JWT_SECRET=dk-dev-default-secret-minimum-32-characters-long-for-hs256
+      - JWT_SECRET=replace-with-a-random-32-plus-character-secret
       - JWT_EXPIRATION_MS=86400000
       - EXTERNAL_URL=http://localhost:8081
       - REDIS_HOST=redis

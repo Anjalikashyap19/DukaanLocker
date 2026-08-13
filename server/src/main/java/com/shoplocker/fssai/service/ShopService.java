@@ -35,6 +35,9 @@ public class ShopService {
     @Autowired
     private RequiredDocumentService requiredDocumentService;
 
+    @Autowired
+    private S3Service s3Service;
+
     @Transactional
     public ShopResponse updateShop(Long id, UpdateShopRequest request) {
 
@@ -83,10 +86,6 @@ public class ShopService {
 
         return toShopResponse(updated);
     }
-
-
-    @Autowired
-    private S3Service s3Service;
 
     @Transactional
     public ShopResponse createShop(CreateShopRequest request, String userEmail) {
@@ -242,12 +241,15 @@ public class ShopService {
     }
 
     public DocumentResponse toDocumentResponse(Document doc) {
+        String fileUrl = doc.getFileUrl();
+        String exposedUrl = fileUrl == null || fileUrl.isBlank() ? null
+                : s3Service.extractObjectKeyFromFileUrl(fileUrl);
         return new DocumentResponse(
                 doc.getId(),
                 doc.getShop().getId(),
                 doc.getDocumentType(),
                 doc.getFileName(),
-                doc.getFileUrl(),
+                exposedUrl,
                 doc.getDocumentNumber(),
                 doc.getIssueDate(),
                 doc.getExpiryDate(),

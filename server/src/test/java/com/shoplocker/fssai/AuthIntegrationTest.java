@@ -74,23 +74,21 @@ class AuthIntegrationTest {
     }
 
     // ========================================================================
-    // 0. Swagger / OpenAPI smoke
+    // 0. Swagger / OpenAPI gate (default OFF; see app.security.expose-devtools)
     // ========================================================================
 
     @Test
-    @DisplayName("0a. OpenAPI JSON spec at /v3/api-docs is reachable anonymously")
-    void openApiJsonIsReachable() throws Exception {
+    @DisplayName("0a. OpenAPI JSON spec at /v3/api-docs is NOT exposed when devtools are off")
+    void openApiJsonIsNotReachableByDefault() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.openapi").exists())
-                .andExpect(jsonPath("$.info.title").value("DukaanLocker API"));
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
-    @DisplayName("0b. Swagger UI bootstrap at /swagger-ui/index.html is reachable anonymously")
-    void swaggerUiIndexIsReachable() throws Exception {
+    @DisplayName("0b. Swagger UI bootstrap at /swagger-ui/index.html is NOT exposed when devtools are off")
+    void swaggerUiIndexIsNotReachableByDefault() throws Exception {
         mockMvc.perform(get("/swagger-ui/index.html"))
-                .andExpect(status().isOk());
+                .andExpect(status().isUnauthorized());
     }
 
     // ========================================================================

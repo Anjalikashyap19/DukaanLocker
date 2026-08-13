@@ -321,7 +321,8 @@ fun DukaanLockerApp(
                                 val response = api.biometricLogin(
                                     BiometricLoginRequest(
                                         userId = credentials.userId,
-                                        emailId = credentials.email
+                                        emailId = credentials.email,
+                                        token = credentials.token
                                     )
                                 )
                                 if (response.isSuccessful) {

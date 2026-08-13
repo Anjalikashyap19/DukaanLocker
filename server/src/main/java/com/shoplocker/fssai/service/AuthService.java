@@ -18,6 +18,8 @@ import com.shoplocker.fssai.exception.FssaiException;
 import com.shoplocker.fssai.repository.*;
 import com.shoplocker.fssai.security.JwtService;
 import com.shoplocker.fssai.util.MsmeDataParser;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -69,6 +71,8 @@ public class AuthService {
     private final ShopRepository shopRepository;
     private final DocumentRepository documentRepository;
     private final RequiredDocumentService requiredDocumentService;
+    private final GoogleOAuthService googleOAuthService;
+    private final LoginAttemptService loginAttemptService;
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
@@ -76,7 +80,9 @@ public class AuthService {
                        AuthenticationManager authenticationManager,
                        ShopRepository shopRepository,
                        DocumentRepository documentRepository,
-                       RequiredDocumentService requiredDocumentService) {
+                       RequiredDocumentService requiredDocumentService,
+                       GoogleOAuthService googleOAuthService,
+                       LoginAttemptService loginAttemptService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -84,6 +90,8 @@ public class AuthService {
         this.shopRepository = shopRepository;
         this.documentRepository = documentRepository;
         this.requiredDocumentService = requiredDocumentService;
+        this.googleOAuthService = googleOAuthService;
+        this.loginAttemptService = loginAttemptService;
     }
 
     @Transactional
@@ -188,12 +196,18 @@ public class AuthService {
      */
     @Transactional
     public AuthResponse registerWithGoogle(GoogleRegisterRequest request) {
-        String email = normalizeEmail(request.getEmailId());
         String name = request.getUserName() != null ? request.getUserName().trim() : "Google User";
-        String firebaseUid = request.getFirebaseUid().trim();
 
+        // Verify the Google ID token server-side. The token's verified email is
+        // canonical — the emailId in the request is only trusted after it matches.
+        VerifiedGoogleToken verified = googleOAuthService.verify(request.getIdToken());
+        String email = normalizeEmail(verified.email());
         if (email == null || email.isBlank()) {
-            throw new FssaiException("Invalid registration details", FailureCode.INVALID_REQUEST);
+            throw new FssaiException("Google authentication failed", FailureCode.INVALID_REQUEST);
+        }
+        if (!email.equals(normalizeEmail(request.getEmailId()))) {
+            log.warn("Google token email mismatch: token={} request={}", email, request.getEmailId());
+            throw new FssaiException("Google authentication failed", FailureCode.INVALID_REQUEST);
         }
 
         // Check if user already exists with this email
@@ -212,7 +226,7 @@ public class AuthService {
         user.setEmailId(email);
         user.setMobileNumber(generateUniqueMobile());
         // Google users don't have a password — use a random hash that can't be matched
-        user.setPassword(passwordEncoder.encode("google-oauth-no-password-" + firebaseUid));
+        user.setPassword(passwordEncoder.encode("google-oauth-no-password-" + verified.subject()));
         user.setRole(Role.ADMIN);
         user.setEnabled(true);
 
@@ -238,33 +252,50 @@ public class AuthService {
         return mobile;
     }
 
-    public AuthResponse loginByCode(ManagerCodeLoginRequest request) {
+    public AuthResponse loginByCode(ManagerCodeLoginRequest request, String clientIp) {
         String code = request.getManagerCode().trim().toUpperCase();
+
+        String codeKey = "code:" + code;
+        String ipKey = "ip:" + (clientIp == null ? "unknown" : clientIp);
+
+        if (loginAttemptService.isLocked(codeKey) || loginAttemptService.isLocked(ipKey)) {
+            log.info("Manager login rejected: too many failed attempts");
+            throw new FssaiException(
+                    "Too many failed attempts. Please try again in 15 minutes.",
+                    FailureCode.TOO_MANY_ATTEMPTS);
+        }
 
         User user = userRepository.findByManagerCode(code)
                 .orElseThrow(() -> {
-                    log.info("Manager login failed: invalid code {}", code);
+                    loginAttemptService.registerFailure(codeKey);
+                    loginAttemptService.registerFailure(ipKey);
+                    log.info("Manager login failed: invalid code");
                     return new FssaiException(
                             "Invalid access code",
                             FailureCode.INVALID_CREDENTIALS);
                 });
 
         if (user.getRole() != Role.MANAGER) {
-            log.info("Manager login failed: user {} is not a manager", code);
+            loginAttemptService.registerFailure(codeKey);
+            loginAttemptService.registerFailure(ipKey);
+            log.info("Manager login failed: user is not a manager");
             throw new FssaiException(
                     "Invalid access code",
                     FailureCode.INVALID_CREDENTIALS);
         }
 
         if (!user.isEnabled()) {
-            log.info("Manager login failed: disabled account for code {}", code);
+            log.info("Manager login failed: disabled account");
             throw new FssaiException(
                     "This account has been disabled. Please contact support.",
                     FailureCode.DISABLED_USER);
         }
 
+        loginAttemptService.reset(codeKey);
+        loginAttemptService.reset(ipKey);
+
         String token = jwtService.generateToken(user);
-        log.info("Manager logged in via code: userId={} code={}", user.getId(), code);
+        log.info("Manager logged in via code: userId={}", user.getId());
         return AuthResponse.from(user, token);
     }
 
@@ -590,9 +621,30 @@ public class AuthService {
     public AuthResponse biometricLogin(BiometricLoginRequest request) {
         Long userId = request.getUserId();
         String email = normalizeEmail(request.getEmailId());
+        String proofToken = request.getToken();
 
-        if (userId == null || email == null || email.isBlank()) {
+        if (userId == null || email == null || email.isBlank()
+                || proofToken == null || proofToken.isBlank()) {
             throw new FssaiException("Invalid biometric login request", FailureCode.INVALID_REQUEST);
+        }
+
+        // Verify the client possesses a server-issued JWT bound to this account.
+        // The signature is always verified; expiration is tolerated so a stored
+        // proof token stays usable between sessions.
+        Claims claims;
+        try {
+            claims = jwtService.parseAllowExpired(proofToken);
+        } catch (JwtException e) {
+            log.info("Biometric login failed: invalid proof token for userId={}", userId);
+            throw new FssaiException(
+                    "Invalid biometric credentials",
+                    FailureCode.INVALID_CREDENTIALS);
+        }
+        if (!email.equalsIgnoreCase(claims.getSubject())) {
+            log.info("Biometric login failed: proof token subject mismatch for userId={}", userId);
+            throw new FssaiException(
+                    "Invalid biometric credentials",
+                    FailureCode.INVALID_CREDENTIALS);
         }
 
         // Find user by ID and verify email matches

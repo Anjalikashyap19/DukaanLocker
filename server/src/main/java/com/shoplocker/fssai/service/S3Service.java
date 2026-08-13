@@ -14,6 +14,7 @@ import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
 
 import java.io.InputStream;
+import java.util.UUID;
 
 /**
  * Handles S3 operations for document storage and retrieval.
@@ -51,11 +52,16 @@ public class S3Service {
     }
 
     /**
-     * Uploads file bytes to S3 and returns the public URL.
+     * Uploads file bytes to S3 under an unpredictable object key and returns the URL.
+     *
+     * <p>The caller-provided {@code fileKey} is a stable logical prefix (e.g.
+     * {@code pan/shop_1/pan_card.pdf}). A random token is inserted before the
+     * extension so the stored key cannot be enumerated by guessing sibling
+     * shop/document IDs — even if the bucket were misconfigured as public-read.</p>
      *
      * @param fileBytes    The file content as byte array
      * @param contentType  MIME type of the file (e.g., "application/pdf")
-     * @param fileKey      S3 object key (path in the bucket)
+     * @param fileKey      S3 object key prefix (path in the bucket)
      * @return The S3 object URL
      */
     public String uploadFile(byte[] fileBytes, String contentType, String fileKey) {
@@ -65,20 +71,44 @@ public class S3Service {
                     FailureCode.INVALID_FILE_FORMAT);
         }
 
+        String randomKey = randomizeKey(fileKey);
+
         try {
             PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                     .bucket(bucketName)
-                    .key(fileKey)
+                    .key(randomKey)
                     .contentType(contentType)
                     .build();
             s3Client.putObject(putObjectRequest, RequestBody.fromBytes(fileBytes));
-            return "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
+            return "https://" + bucketName + ".s3.amazonaws.com/" + randomKey;
 
         } catch (Exception e) {
             throw new FssaiException(
                     "We couldn't save your file just now. Please try again in a moment, or contact support if the problem persists.",
                     FailureCode.S3_UPLOAD_FAILED, e);
         }
+    }
+
+    /**
+     * Inserts a random 128-bit token into an object key so the resulting key is
+     * unguessable. Example: {@code pan/shop_1/pan_card.pdf} becomes
+     * {@code pan/shop_1/pan_card/<hex>/pan_card.pdf}.
+     */
+    private String randomizeKey(String fileKey) {
+        String key = fileKey == null ? "" : fileKey;
+        if (key.startsWith("/")) {
+            key = key.substring(1);
+        }
+        if (key.isEmpty()) {
+            return "doc/" + UUID.randomUUID().toString().replace("-", "");
+        }
+        int extIdx = key.lastIndexOf('.');
+        if (extIdx < 0) {
+            return key + "/" + UUID.randomUUID().toString().replace("-", "");
+        }
+        String base = key.substring(0, extIdx);
+        String ext = key.substring(extIdx);
+        return base + "/" + UUID.randomUUID().toString().replace("-", "") + ext;
     }
 
     /**

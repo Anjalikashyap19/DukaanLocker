@@ -17,8 +17,6 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        buildConfigField("String", "OLA_MAPS_API_KEY", "\"${project.findProperty("OLA_MAPS_API_KEY") ?: ""}\"")
     }
 
     buildTypes {
@@ -90,6 +88,9 @@ dependencies {
     implementation(libs.coroutines.core)
     implementation(libs.coroutines.android)
     implementation(libs.coil.compose)
+
+    // Encrypted storage for auth tokens
+    implementation(libs.androidx.security.crypto)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

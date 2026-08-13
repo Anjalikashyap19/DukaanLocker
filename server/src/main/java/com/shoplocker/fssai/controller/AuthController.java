@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -103,8 +104,9 @@ public class AuthController {
     @SecurityRequirements
     @PostMapping("/login-by-code")
     public ResponseEntity<AuthResponse> loginByCode(
-            @Valid @RequestBody ManagerCodeLoginRequest request) {
-        AuthResponse response = authService.loginByCode(request);
+            @Valid @RequestBody ManagerCodeLoginRequest request,
+            HttpServletRequest httpRequest) {
+        AuthResponse response = authService.loginByCode(request, httpRequest.getRemoteAddr());
         return ResponseEntity.ok(response);
     }
 

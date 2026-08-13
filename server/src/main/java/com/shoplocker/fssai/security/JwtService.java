@@ -108,6 +108,25 @@ public class JwtService {
                 .getPayload();
     }
 
+    /**
+     * Parses a token's claims tolerating an expired {@code exp}.
+     *
+     * <p>The signature is ALWAYS verified — jjwt only throws
+     * {@code ExpiredJwtException} after signature validation succeeds — so the
+     * returned claims are genuine even when expired. Used by the biometric login
+     * flow where the stored proof JWT may have expired between app sessions but
+     * still proves possession of a server-issued token.</p>
+     *
+     * @throws JwtException if the signature is invalid or the token is malformed.
+     */
+    public Claims parseAllowExpired(String token) throws JwtException {
+        try {
+            return parse(token);
+        } catch (io.jsonwebtoken.ExpiredJwtException e) {
+            return e.getClaims();
+        }
+    }
+
     public long getExpirationMs() {
         return expirationMs;
     }

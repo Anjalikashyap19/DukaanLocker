@@ -18,11 +18,15 @@ public class BiometricLoginRequest {
     @Email(message = "emailId must be a valid email address")
     private String emailId;
 
+    @NotBlank(message = "token is required")
+    private String token;
+
     public BiometricLoginRequest() {}
 
-    public BiometricLoginRequest(Long userId, String emailId) {
+    public BiometricLoginRequest(Long userId, String emailId, String token) {
         this.userId = userId;
         this.emailId = emailId;
+        this.token = token;
     }
 
     public Long getUserId() { return userId; }
@@ -30,4 +34,7 @@ public class BiometricLoginRequest {
 
     public String getEmailId() { return emailId; }
     public void setEmailId(String emailId) { this.emailId = emailId; }
+
+    public String getToken() { return token; }
+    public void setToken(String token) { this.token = token; }
 }

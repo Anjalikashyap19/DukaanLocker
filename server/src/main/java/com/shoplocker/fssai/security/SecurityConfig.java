@@ -20,6 +20,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -33,7 +34,9 @@ import java.util.List;
  *       {@link UsernamePasswordAuthenticationFilter} so a valid Bearer token
  *       populates {@code SecurityContextHolder} ahead of any username/password
  *       flow.</li>
- *   <li>Public endpoints: /api/auth/**, Swagger UI, OpenAPI spec, H2 console.</li>
+ *   <li>Public endpoints: /api/auth/**, /api/udyam/**, /api/location/**.</li>
+ *   <li>Swagger UI / OpenAPI, H2 console and actuator are public ONLY when
+ *       {@code app.security.expose-devtools=true} (default false).</li>
  *   <li>ADMIN-only endpoints: shop creation (POST /api/shops), my-shops listing,
  *       manager CRUD, manager-shop assignments.</li>
  *   <li>MANAGER-only endpoint: GET /api/managers/me/shops (listed BEFORE the
@@ -58,6 +61,9 @@ public class SecurityConfig {
     @Value("${app.external-url:http://localhost:8081}")
     private String externalUrl;
 
+    @Value("${app.security.expose-devtools:false}")
+    private boolean exposeDevtools;
+
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
                           JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint,
                           JwtAccessDeniedHandler jwtAccessDeniedHandler) {
@@ -77,21 +83,31 @@ public class SecurityConfig {
             .exceptionHandling(ex -> ex
                     .authenticationEntryPoint(jwtAuthenticationEntryPoint)
                     .accessDeniedHandler(jwtAccessDeniedHandler))
-            .authorizeHttpRequests(auth -> auth
+            .authorizeHttpRequests(auth -> {
                     // ── Public (no JWT required) ──────────────────────────────
-                    .requestMatchers(
+                    List<String> publicPaths = new ArrayList<>(List.of(
                             "/api/auth/**",
                             "/api/udyam/**",
-                            "/api/location/**",
-                            "/swagger-ui/**",
-                            "/swagger-ui.html",
-                            "/v3/api-docs",
-                            "/v3/api-docs/**",
-                            "/webjars/**",
-                            "/h2-console/**",
-                            "/actuator/**",
-                            "/error"
-                    ).permitAll()
+                            "/api/location/**"
+                    ));
+                    // Swagger UI / OpenAPI, H2 console and actuator are ONLY exposed
+                    // when app.security.expose-devtools=true (default false). Even with
+                    // the dev profile active, production must never run with these open.
+                    if (exposeDevtools) {
+                        publicPaths.addAll(List.of(
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
+                                "/v3/api-docs",
+                                "/v3/api-docs/**",
+                                "/webjars/**",
+                                "/h2-console/**",
+                                "/actuator/**"
+                        ));
+                    }
+                    publicPaths.add("/error");
+
+                    auth
+                    .requestMatchers(publicPaths.toArray(new String[0])).permitAll()
                     // ── MANAGER-only (must be BEFORE the ADMIN /api/managers/** catch-all) ──
                     .requestMatchers(HttpMethod.GET, "/api/managers/me/shops").hasRole("MANAGER")
                     // ── ADMIN-only endpoints ──────────────────────────────────
@@ -107,7 +123,8 @@ public class SecurityConfig {
                     // ── Document streaming endpoints (JWT required, access checked in service) ──
                     .requestMatchers("/api/documents/**").authenticated()
                     // Default: any other application endpoint requires authentication
-                    .anyRequest().authenticated())
+                    .anyRequest().authenticated();
+            })
             .authenticationProvider(authenticationProvider)
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

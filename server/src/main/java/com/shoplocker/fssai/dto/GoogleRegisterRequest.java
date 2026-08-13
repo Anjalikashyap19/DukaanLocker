@@ -20,6 +20,9 @@ public class GoogleRegisterRequest {
     @Email(message = "emailId must be a valid email address")
     private String emailId;
 
+    @NotBlank(message = "idToken is required")
+    private String idToken;
+
     private String mobileNumber;
 
     public String getFirebaseUid() { return firebaseUid; }
@@ -30,6 +33,9 @@ public class GoogleRegisterRequest {
 
     public String getEmailId() { return emailId; }
     public void setEmailId(String emailId) { this.emailId = emailId; }
+
+    public String getIdToken() { return idToken; }
+    public void setIdToken(String idToken) { this.idToken = idToken; }
 
     public String getMobileNumber() { return mobileNumber; }
     public void setMobileNumber(String mobileNumber) { this.mobileNumber = mobileNumber; }

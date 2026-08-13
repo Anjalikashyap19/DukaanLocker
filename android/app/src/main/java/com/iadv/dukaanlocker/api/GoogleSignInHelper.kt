@@ -11,9 +11,7 @@ import com.google.firebase.auth.GoogleAuthProvider
 
 class GoogleSignInHelper(private val context: Context) {
     
-    // TODO: Replace with your actual Web Client ID from Firebase Console
-    // Go to Firebase Console > Authentication > Sign-in method > Google > Web SDK configuration
-    private val webClientId = "733563364874-v71tsg3phavb9b12oiu7vjhjnjtv8qg1.apps.googleusercontent.com.apps.googleusercontent.com"
+    private val webClientId = "733563364874-v71tsg3phavb9b12oiu7vjhjnjtv8qg1.apps.googleusercontent.com"
     
     private val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
         .requestIdToken(webClientId)
@@ -36,7 +34,7 @@ class GoogleSignInHelper(private val context: Context) {
      */
     fun firebaseAuthWithGoogle(
         idToken: String,
-        onSuccess: (firebaseUid: String, email: String, displayName: String) -> Unit,
+        onSuccess: (idToken: String, firebaseUid: String, email: String, displayName: String) -> Unit,
         onError: (Exception) -> Unit
     ) {
         val credential = GoogleAuthProvider.getCredential(idToken, null)
@@ -46,6 +44,7 @@ class GoogleSignInHelper(private val context: Context) {
                     val user = firebaseAuth.currentUser
                     user?.let {
                         onSuccess(
+                            idToken,
                             it.uid,
                             it.email ?: "",
                             it.displayName ?: "Google User"

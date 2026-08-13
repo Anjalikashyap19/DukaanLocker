@@ -5,15 +5,13 @@ RUN mvn dependency:go-offline -B
 COPY server/src ./src
 RUN mvn clean package -DskipTests -B
 
-FROM mcr.microsoft.com/playwright:latest
-USER root
+# Runtime stage: pinned JRE image, non-root user. Playwright browsers are NOT
+# needed at runtime (no com.microsoft.playwright code paths), so the heavy
+# playwright base image is intentionally not used.
+FROM eclipse-temurin:21-jre-noble
+RUN useradd -m -u 1001 appuser
 WORKDIR /app
-
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends openjdk-21-jre-headless && \
-    rm -rf /var/lib/apt/lists/*
-
-COPY --from=build /app/target/*.jar app.jar
-
+COPY --from=build --chown=appuser:appuser /app/target/*.jar app.jar
+USER appuser
 EXPOSE 8081
 CMD ["java", "-jar", "app.jar"]

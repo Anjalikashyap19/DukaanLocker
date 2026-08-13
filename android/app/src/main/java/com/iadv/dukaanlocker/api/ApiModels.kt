@@ -120,12 +120,14 @@ data class GoogleRegisterRequest(
     @SerializedName("firebaseUid") val firebaseUid: String,
     @SerializedName("userName") val userName: String,
     @SerializedName("emailId") val emailId: String,
+    @SerializedName("idToken") val idToken: String,
     @SerializedName("mobileNumber") val mobileNumber: String? = null
 )
 
 data class BiometricLoginRequest(
     @SerializedName("userId") val userId: Long,
-    @SerializedName("emailId") val emailId: String
+    @SerializedName("emailId") val emailId: String,
+    @SerializedName("token") val token: String
 )
 
 // ── Business Profile ─────────────────────────────────────────────────────────
@@ -150,18 +152,22 @@ data class BusinessProfileResponse(
     @SerializedName("updatedAt") val updatedAt: String?
 )
 
-// ── Location Search ──────────────────────────────────────────────────────────
+// ── Location Search (proxied by backend, matches server LocationSearchResponse) ──
 
 data class LocationSearchResponse(
-    @SerializedName("success") val success: Boolean,
-    @SerializedName("message") val message: String?,
+    @SerializedName("query") val query: String?,
     @SerializedName("suggestions") val suggestions: List<LocationSuggestion>?
 )
 
 data class LocationSuggestion(
-    @SerializedName("displayAddress") val displayAddress: String,
-    @SerializedName("latitude") val latitude: Double,
-    @SerializedName("longitude") val longitude: Double
+    @SerializedName("displayName") val displayName: String?,
+    @SerializedName("fullAddress") val fullAddress: String?,
+    @SerializedName("latitude") val latitude: Double?,
+    @SerializedName("longitude") val longitude: Double?,
+    @SerializedName("city") val city: String?,
+    @SerializedName("state") val state: String?,
+    @SerializedName("country") val country: String?,
+    @SerializedName("pincode") val pincode: String?
 )
 
 // ── Error Response (matches backend FssaiErrorResponse) ──────────────────────
