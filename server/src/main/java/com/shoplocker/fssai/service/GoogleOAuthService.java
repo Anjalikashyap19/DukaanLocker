@@ -31,8 +31,10 @@ public class GoogleOAuthService {
 
     private static final Logger log = LoggerFactory.getLogger(GoogleOAuthService.class);
 
-    private static final String TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo";
+    private static final String TOKENINFO_HOST = "oauth2.googleapis.com";
+    private static final String TOKENINFO_PATH = "/tokeninfo";
     private static final String ISSUER_ACCOUNTS_GOOGLE = "accounts.google.com";
+    private static final String ISSUER_ACCOUNTS_GOOGLE_HTTPS = "https://accounts.google.com";
 
     private final RestClient restClient = RestClient.create();
 
@@ -62,7 +64,9 @@ public class GoogleOAuthService {
         try {
             claims = restClient.get()
                     .uri(uriBuilder -> uriBuilder
-                            .path(TOKENINFO_URL)
+                            .scheme("https")
+                            .host(TOKENINFO_HOST)
+                            .path(TOKENINFO_PATH)
                             .queryParam("id_token", idToken)
                             .build())
                     .retrieve()
@@ -72,7 +76,9 @@ public class GoogleOAuthService {
             throw invalidToken();
         }
 
-        if (claims == null || !ISSUER_ACCOUNTS_GOOGLE.equals(claims.get("iss"))) {
+        if (claims == null
+                || (!ISSUER_ACCOUNTS_GOOGLE.equals(claims.get("iss"))
+                    && !ISSUER_ACCOUNTS_GOOGLE_HTTPS.equals(claims.get("iss")))) {
             log.warn("Google ID token rejected: invalid issuer");
             throw invalidToken();
         }

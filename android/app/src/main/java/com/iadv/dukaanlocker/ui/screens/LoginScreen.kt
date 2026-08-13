@@ -445,7 +445,7 @@ private fun RoleSelectionContent(
     ) {
         Spacer(modifier = Modifier.height(8.dp))
 
-       
+
 
         Text(
             text = AppStrings.get(lang, "GET STARTED"),
