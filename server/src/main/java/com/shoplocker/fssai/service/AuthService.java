@@ -191,6 +191,9 @@ public class AuthService {
      * Register a new user via Google account, or login if email already exists.
      * Uses Firebase UID as a unique identifier. No password required.
      *
+     * <p>For a login-only flow that never creates accounts, see
+     * {@link #loginWithGoogle(GoogleRegisterRequest)}.</p>
+     *
      * @param request contains firebaseUid, userName, emailId from Google
      * @return AuthResponse with JWT token
      */
@@ -200,15 +203,8 @@ public class AuthService {
 
         // Verify the Google ID token server-side. The token's verified email is
         // canonical — the emailId in the request is only trusted after it matches.
-        VerifiedGoogleToken verified = googleOAuthService.verify(request.getIdToken());
+        VerifiedGoogleToken verified = verifyGoogleRequest(request);
         String email = normalizeEmail(verified.email());
-        if (email == null || email.isBlank()) {
-            throw new FssaiException("Google authentication failed", FailureCode.INVALID_REQUEST);
-        }
-        if (!email.equals(normalizeEmail(request.getEmailId()))) {
-            log.warn("Google token email mismatch: token={} request={}", email, request.getEmailId());
-            throw new FssaiException("Google authentication failed", FailureCode.INVALID_REQUEST);
-        }
 
         // Check if user already exists with this email
         java.util.Optional<User> existingUser = userRepository.findByEmailId(email);
@@ -235,6 +231,51 @@ public class AuthService {
 
         log.info("Google registration: userId={} email={}", saved.getId(), email);
         return AuthResponse.from(saved, token);
+    }
+
+    /**
+     * Login an EXISTING user via Google account. Never creates an account: if
+     * the email has no registered user, throws USER_NOT_FOUND (HTTP 404) so
+     * the client can direct the user to register through another flow.
+     *
+     * @param request contains firebaseUid, userName, emailId from Google
+     * @return AuthResponse with JWT token
+     */
+    @Transactional
+    public AuthResponse loginWithGoogle(GoogleRegisterRequest request) {
+        VerifiedGoogleToken verified = verifyGoogleRequest(request);
+        String email = normalizeEmail(verified.email());
+
+        User user = userRepository.findByEmailId(email)
+                .orElseThrow(() -> new FssaiException(
+                        "No account found with this Google email. Please register with email/password first.",
+                        FailureCode.USER_NOT_FOUND));
+
+        String token = jwtService.generateToken(user);
+        log.info("Google login: existing user email={}", email);
+        return AuthResponse.from(user, token);
+    }
+
+    /**
+     * Verify the Google ID token server-side and enforce that the token's
+     * verified email matches the emailId in the request. The token's verified
+     * email is canonical — the request email is only trusted after it matches.
+     *
+     * @param request Google credentials from the client
+     * @return the verified token claims (email, subject)
+     * @throws FssaiException with INVALID_REQUEST if verification fails or the emails mismatch
+     */
+    private VerifiedGoogleToken verifyGoogleRequest(GoogleRegisterRequest request) {
+        VerifiedGoogleToken verified = googleOAuthService.verify(request.getIdToken());
+        String email = normalizeEmail(verified.email());
+        if (email == null || email.isBlank()) {
+            throw new FssaiException("Google authentication failed", FailureCode.INVALID_REQUEST);
+        }
+        if (!email.equals(normalizeEmail(request.getEmailId()))) {
+            log.warn("Google token email mismatch: token={} request={}", email, request.getEmailId());
+            throw new FssaiException("Google authentication failed", FailureCode.INVALID_REQUEST);
+        }
+        return verified;
     }
 
     /**

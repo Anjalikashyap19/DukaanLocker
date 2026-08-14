@@ -17,8 +17,8 @@ interface ApiService {
     @POST("api/auth/login-by-code")
     suspend fun loginByCode(@Body request: ManagerCodeLoginRequest): Response<AuthResponse>
 
-    @POST("api/auth/register-google")
-    suspend fun registerWithGoogle(@Body request: GoogleRegisterRequest): Response<AuthResponse>
+    @POST("api/auth/login-google")
+    suspend fun loginWithGoogle(@Body request: GoogleRegisterRequest): Response<AuthResponse>
 
     @POST("api/auth/biometric-login")
     suspend fun biometricLogin(@Body request: BiometricLoginRequest): Response<AuthResponse>

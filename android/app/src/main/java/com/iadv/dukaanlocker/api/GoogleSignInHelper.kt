@@ -21,7 +21,13 @@ class GoogleSignInHelper(private val context: Context) {
     private val googleSignInClient: GoogleSignInClient = GoogleSignIn.getClient(context, gso)
     private val firebaseAuth = FirebaseAuth.getInstance()
     
-    fun getSignInIntent(): Intent = googleSignInClient.signInIntent
+    fun getSignInIntent(): Intent {
+        // Sign out first so Google always shows the account chooser;
+        // otherwise it silently reuses the previously authorized account
+        // and skips the "select a Gmail account" screen.
+        googleSignInClient.signOut()
+        return googleSignInClient.signInIntent
+    }
     
     fun signOut() {
         googleSignInClient.signOut()

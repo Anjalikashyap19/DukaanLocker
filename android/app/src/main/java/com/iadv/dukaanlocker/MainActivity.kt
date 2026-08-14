@@ -1,7 +1,6 @@
 package com.iadv.dukaanlocker
 
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -27,7 +26,7 @@ class MainActivity : FragmentActivity() {
         private set
 
     // Callbacks for Google Sign-Up result
-    private var onGoogleSignUpSuccess: ((token: String, userId: Long, userName: String, email: String, role: String) -> Unit)? = null
+    private var onGoogleSignUpSuccess: ((token: String, userId: Long, userName: String, email: String, mobileNumber: String, role: String) -> Unit)? = null
     private var onGoogleSignUpError: ((Exception) -> Unit)? = null
 
     private val googleSignInLauncher = registerForActivityResult(
@@ -41,8 +40,8 @@ class MainActivity : FragmentActivity() {
                 googleSignInHelper.firebaseAuthWithGoogle(
                     idToken = idToken,
                     onSuccess = { token, firebaseUid, email, displayName ->
-                        // Step 2: Register/Login with backend
-                        registerWithBackend(token, firebaseUid, email, displayName)
+                        // Step 2: Login with backend (login only — never auto-registers)
+                        loginWithBackend(token, firebaseUid, email, displayName)
                     },
                     onError = { exception ->
                         onGoogleSignUpError?.invoke(exception)
@@ -57,14 +56,15 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * Call backend API to register or login the Google user.
-     * Backend will create a new user if email doesn't exist, or login if it does.
+     * Call backend API to LOGIN an existing Google user.
+     * If the email has no account, the backend returns 404 and the
+     * error is surfaced to the user (no auto-registration).
      */
-    private fun registerWithBackend(idToken: String, firebaseUid: String, email: String, displayName: String) {
+    private fun loginWithBackend(idToken: String, firebaseUid: String, email: String, displayName: String) {
         lifecycleScope.launch {
             try {
                 val api = ApiClient.getApiService(this@MainActivity)
-                val response = api.registerWithGoogle(
+                val response = api.loginWithGoogle(
                     GoogleRegisterRequest(
                         firebaseUid = firebaseUid,
                         userName = displayName,
@@ -79,6 +79,7 @@ class MainActivity : FragmentActivity() {
                         auth.userId,
                         auth.userName,
                         auth.emailId,
+                        auth.mobileNumber,
                         auth.role
                     )
                 } else {
@@ -109,23 +110,11 @@ class MainActivity : FragmentActivity() {
                     val signInIntent = googleSignInHelper.getSignInIntent()
                     googleSignInLauncher.launch(signInIntent)
                 },
-                onGoogleSignUpResult = { token, userId, userName, email, role ->
-                    // Save auth and navigate to home
-                    val authResponse = com.iadv.dukaanlocker.api.AuthResponse(
-                        token = token,
-                        tokenType = "Bearer",
-                        userId = userId,
-                        userName = userName,
-                        mobileNumber = "",
-                        emailId = email,
-                        role = role
-                    )
-                    ApiClient.saveAuth(this, authResponse)
-                    Toast.makeText(this, "Welcome, $userName!", Toast.LENGTH_SHORT).show()
-                    // The UI will automatically navigate due to isLoggedIn state change
-                },
-                onGoogleSignUpError = { exception ->
-                    Toast.makeText(this, "Google Sign-Up failed: ${exception.message}", Toast.LENGTH_LONG).show()
+                registerGoogleAuthHandlers = { onSuccess, onError ->
+                    // Deliver the composable's handlers so the backend/auth callbacks
+                    // can update Compose state and navigate after a successful login
+                    onGoogleSignUpSuccess = onSuccess
+                    onGoogleSignUpError = onError
                 },
                 // App Unlock: Uses device credential (biometric OR PIN/pattern)
                 onAppUnlock = { onSuccess, onError ->

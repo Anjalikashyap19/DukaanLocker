@@ -39,8 +39,9 @@ fun DukaanLockerApp(
     onThemeChange: (Boolean) -> Unit = {},
     onLanguageChanged: (String) -> Unit = {},
     onGoogleSignIn: () -> Unit = {},
-    onGoogleSignUpResult: ((token: String, userId: Long, userName: String, email: String, role: String) -> Unit)? = null,
-    onGoogleSignUpError: ((Exception) -> Unit)? = null,
+    // Google sign-in: MainActivity delivers the auth result back into this composable
+    // through a handler-registration callback (the composable owns auth/navigation state)
+    registerGoogleAuthHandlers: ((onSuccess: (token: String, userId: Long, userName: String, email: String, mobileNumber: String, role: String) -> Unit, onError: (Exception) -> Unit) -> Unit)? = null,
     // App Unlock: Mandatory device authentication (biometric OR PIN/pattern)
     onAppUnlock: ((onSuccess: () -> Unit, onError: (String) -> Unit) -> Unit)? = null,
     // Biometric Login: Optional biometric auto-login after logout
@@ -270,7 +271,36 @@ fun DukaanLockerApp(
         biometricLoginFailed = false
         showBiometricLoginPrompt = false
     }
-    
+
+    // ── GOOGLE SIGN-IN: Receive auth result from MainActivity and update state ──
+    LaunchedEffect(Unit) {
+        registerGoogleAuthHandlers?.invoke(
+            { token, userId, userName, email, mobileNumber, role ->
+                val auth = AuthResponse(
+                    token = token,
+                    tokenType = "Bearer",
+                    userId = userId,
+                    userName = userName,
+                    mobileNumber = mobileNumber,
+                    emailId = email,
+                    role = role
+                )
+                ApiClient.saveAuth(context, auth)
+                authToken = auth.token
+                currentUserId = auth.userId
+                currentUserName = auth.userName
+                currentUserEmail = auth.emailId
+                currentUserRole = auth.role
+                isLoggedIn = true
+                navigateToHome()
+                Toast.makeText(context, "Welcome, $userName!", Toast.LENGTH_SHORT).show()
+            },
+            { exception ->
+                Toast.makeText(context, "Google Sign-In failed: ${exception.message}", Toast.LENGTH_LONG).show()
+            }
+        )
+    }
+
     // ── APP UNLOCK: Mandatory device authentication on every app launch ──
     LaunchedEffect(Unit) {
         if (onAppUnlock != null) {

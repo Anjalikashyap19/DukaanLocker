@@ -8,6 +8,8 @@ import com.shoplocker.fssai.repository.DocumentRepository;
 import com.shoplocker.fssai.repository.ManagerShopAssignmentRepository;
 import com.shoplocker.fssai.repository.ShopRepository;
 import com.shoplocker.fssai.repository.UserRepository;
+import com.shoplocker.fssai.service.GoogleOAuthService;
+import com.shoplocker.fssai.service.VerifiedGoogleToken;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,9 +19,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MvcResult;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -42,6 +47,7 @@ class AuthIntegrationTest {
     @Autowired private DocumentRepository documentRepository;
     @Autowired private ManagerShopAssignmentRepository assignmentRepository;
     @Autowired private PasswordEncoder passwordEncoder;
+    @MockitoBean private GoogleOAuthService googleOAuthService;
 
     private static final String VALID_REGISTER_BODY = """
             {
@@ -960,6 +966,87 @@ class AuthIntegrationTest {
                         .content(VALID_REGISTER_BODY))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.role").value("ADMIN"));
+    }
+
+    // ========================================================================
+    // Google login tests (login-google must never auto-register)
+    // ========================================================================
+
+    @Test
+    @DisplayName("33. Google login succeeds for an existing user")
+    void googleLoginSucceedsForExistingUser() throws Exception {
+        // Register a normal email/password account first
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_REGISTER_BODY))
+                .andExpect(status().isCreated());
+
+        when(googleOAuthService.verify(anyString()))
+                .thenReturn(new VerifiedGoogleToken("google-sub-123", "anjali@example.com", true));
+
+        String googleBody = """
+                {
+                  "firebaseUid": "google-sub-123",
+                  "userName": "Anjali Kashyap",
+                  "emailId": "anjali@example.com",
+                  "idToken": "fake-token"
+                }""";
+        mockMvc.perform(post("/api/auth/login-google")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(googleBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isNotEmpty())
+                .andExpect(jsonPath("$.emailId").value("anjali@example.com"))
+                .andExpect(jsonPath("$.role").value("ADMIN"));
+    }
+
+    @Test
+    @DisplayName("34. Google login for an unknown email returns 404 and does NOT create a user")
+    void googleLoginUnknownEmailReturns404WithoutCreatingUser() throws Exception {
+        when(googleOAuthService.verify(anyString()))
+                .thenReturn(new VerifiedGoogleToken("google-sub-999", "newguy@example.com", true));
+
+        String googleBody = """
+                {
+                  "firebaseUid": "google-sub-999",
+                  "userName": "New Guy",
+                  "emailId": "newguy@example.com",
+                  "idToken": "fake-token"
+                }""";
+        mockMvc.perform(post("/api/auth/login-google")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(googleBody))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("user_not_found"));
+
+        assertThat(userRepository.findByEmailId("newguy@example.com").isPresent())
+                .as("login-google must never auto-register a new account")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("35. register-google still works (regression)")
+    void googleRegisterStillWorks() throws Exception {
+        when(googleOAuthService.verify(anyString()))
+                .thenReturn(new VerifiedGoogleToken("google-sub-777", "fresh@example.com", true));
+
+        String googleBody = """
+                {
+                  "firebaseUid": "google-sub-777",
+                  "userName": "Fresh User",
+                  "emailId": "fresh@example.com",
+                  "idToken": "fake-token"
+                }""";
+        mockMvc.perform(post("/api/auth/register-google")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(googleBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isNotEmpty())
+                .andExpect(jsonPath("$.emailId").value("fresh@example.com"));
+
+        assertThat(userRepository.findByEmailId("fresh@example.com").isPresent())
+                .as("register-google must create a new account for an unknown email")
+                .isTrue();
     }
 
     // ========================================================================

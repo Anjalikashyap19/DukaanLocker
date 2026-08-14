@@ -96,6 +96,20 @@ public class AuthController {
     }
 
     @Operation(
+            summary = "Login with Google account",
+            description = "Logs in an EXISTING user using Google authentication. " +
+                          "Does NOT create new accounts — returns 404 if the email is not " +
+                          "registered, so clients can direct new users to register instead."
+    )
+    @SecurityRequirements
+    @PostMapping("/login-google")
+    public ResponseEntity<AuthResponse> loginWithGoogle(
+            @Valid @RequestBody GoogleRegisterRequest request) {
+        AuthResponse response = authService.loginWithGoogle(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
             summary = "Manager login by access code",
             description = "Authenticates a manager using their unique 6-character access code. " +
                           "No password required. The code is assigned by the business owner when " +
