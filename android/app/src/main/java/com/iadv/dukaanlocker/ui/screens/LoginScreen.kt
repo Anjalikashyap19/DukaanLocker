@@ -48,6 +48,9 @@ import com.iadv.dukaanlocker.ui.strings.AppStrings
 import com.iadv.dukaanlocker.ui.strings.LocalAppLanguage
 import com.iadv.dukaanlocker.ui.theme.*
 import coil.compose.AsyncImage
+import androidx.compose.material3.Icon
+import androidx.compose.ui.res.painterResource
+import com.iadv.dukaanlocker.R
 
 // ── Password Strength ──────────────────────────────────────────────────────────
 private enum class PasswordStrength(val label: String, val color: Color, val level: Int) {
@@ -552,12 +555,12 @@ private fun RoleSelectionContent(
             border = BorderStroke(1.dp, Color.LightGray)
         ) {
             Icon(
-                imageVector = Icons.Default.Person,
-                contentDescription = "Google",
-                tint = Color.Unspecified
+                painter = painterResource(id = R.drawable.ic_google),
+                contentDescription = "Google Sign-In",
+                tint = Color.Unspecified // Crucial! Keeps the original Google brand colors (Red, Yellow, Green, Blue)
             )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Sign up with Google", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+            Spacer(modifier = Modifier.width(7.dp))
+            Text(" Google sign in", fontWeight = FontWeight.Medium, fontSize = 14.sp)
         }
     }
 }
@@ -1000,42 +1003,9 @@ private fun RegisterForm(
                 }
             }
 
-            // ── OR separator ──
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                HorizontalDivider(modifier = Modifier.weight(1f), color = colors.border.copy(alpha = 0.5f))
-                Text(
-                    "  OR  ",
-                    fontSize = 11.sp,
-                    color = colors.textSecondary.copy(alpha = 0.6f),
-                    letterSpacing = 1.sp
-                )
-                HorizontalDivider(modifier = Modifier.weight(1f), color = colors.border.copy(alpha = 0.5f))
-            }
 
-            // ── Google Sign-Up Button ──
-            Button(
-                onClick = onGoogleSignIn,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.White,
-                    contentColor = Color.DarkGray
-                ),
-                border = BorderStroke(1.dp, Color.LightGray)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = "Google",
-                    tint = Color.Unspecified
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Sign up with Google", fontWeight = FontWeight.Medium, fontSize = 14.sp)
-            }
+
+
         }
     }
 }
