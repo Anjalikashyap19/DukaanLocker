@@ -370,8 +370,17 @@ public class UdyamVerificationService {
     /**
      * Converts the government portal's PrintUdyamApplication HTML into a
      * professional single-page PDF using OpenHTMLtoPDF. Creates an official-looking
-     * MSME certificate with proper government styling, double borders, and structured
-     * layout that closely resembles the actual Udyam Registration Certificate.
+     * MSME certificate that closely resembles the actual Udyam Registration Certificate
+     * issued by the Ministry of Micro, Small &amp; Medium Enterprises, Government of India.
+     *
+     * The format includes:
+     * - Government of India header with Ashoka Chakra emblem
+     * - Certificate title and registration number
+     * - Enterprise details (name, type, address, promoter, etc.)
+     * - Investment and turnover details
+     * - NIC codes for business activity
+     * - QR code placeholder for digital verification
+     * - Official signature area
      */
     private byte[] convertHtmlToPdf(String rawHtml, String udyamNumber) {
         try {
@@ -393,6 +402,20 @@ public class UdyamVerificationService {
             // Extract certificate data from tables
             StringBuilder certFields = new StringBuilder();
             StringBuilder nicCodeRows = new StringBuilder();
+            String enterpriseName = "";
+            String entrepreneurName = "";
+            String enterpriseType = "";
+            String address = "";
+            String mobile = "";
+            String email = "";
+            String state = "";
+            String district = "";
+            String city = "";
+            String pincode = "";
+            String dateOfRegistration = "";
+            String pan = "";
+            String investment = "";
+            String turnover = "";
 
             // Find all tables and extract the certificate data
             org.jsoup.select.Elements tables = doc.select("table");
@@ -407,13 +430,45 @@ public class UdyamVerificationService {
                     for (org.jsoup.nodes.Element row : rows) {
                         org.jsoup.select.Elements cells = row.select("td, th");
                         if (cells.size() >= 2) {
-                            String label = cells.get(0).text().trim();
+                            String label = cells.get(0).text().trim().toLowerCase();
                             String value = cells.get(1).text().trim();
                             if (!value.isEmpty()) {
+                                // Extract specific fields for structured layout
+                                if (label.contains("name of enterprise") || label.contains("enterprise name")) {
+                                    enterpriseName = value;
+                                } else if (label.contains("name of entrepreneur") || label.contains("entrepreneur name")
+                                        || label.contains("owner name") || label.contains("proprietor name")) {
+                                    entrepreneurName = value;
+                                } else if (label.contains("type of enterprise") || label.contains("enterprise type")) {
+                                    enterpriseType = value;
+                                } else if (label.contains("mobile") || label.contains("phone")) {
+                                    mobile = value;
+                                } else if (label.contains("email")) {
+                                    email = value;
+                                } else if (label.contains("state")) {
+                                    state = value;
+                                } else if (label.contains("district")) {
+                                    district = value;
+                                } else if (label.contains("city") || label.contains("town")) {
+                                    city = value;
+                                } else if (label.contains("pin")) {
+                                    pincode = value;
+                                } else if (label.contains("date of registration") || label.contains("registration date")) {
+                                    dateOfRegistration = value;
+                                } else if (label.contains("pan") && value.length() == 10) {
+                                    pan = value;
+                                } else if (label.contains("investment") || label.contains("plant and machinery")) {
+                                    investment = value;
+                                } else if (label.contains("turnover")) {
+                                    turnover = value;
+                                }
+
                                 // Skip NIC code rows from main table (we handle them separately)
-                                if (label.toLowerCase().contains("nic")) continue;
+                                if (label.contains("nic")) continue;
+
+                                // Add to fields table for display
                                 certFields.append("<tr><td class=\"field-label\">")
-                                        .append(escapeXml(label))
+                                        .append(escapeXml(cells.get(0).text().trim()))
                                         .append("</td><td class=\"field-value\">")
                                         .append(escapeXml(value))
                                         .append("</td></tr>\n");
@@ -451,6 +506,25 @@ public class UdyamVerificationService {
                 certFields.append(extractCertificateFields(fullText));
             }
 
+            // Build address string
+            if (address.isEmpty()) {
+                StringBuilder addrBuilder = new StringBuilder();
+                if (!city.isEmpty()) addrBuilder.append(city);
+                if (!district.isEmpty()) {
+                    if (addrBuilder.length() > 0) addrBuilder.append(", ");
+                    addrBuilder.append(district);
+                }
+                if (!state.isEmpty()) {
+                    if (addrBuilder.length() > 0) addrBuilder.append(", ");
+                    addrBuilder.append(state);
+                }
+                if (!pincode.isEmpty()) {
+                    if (addrBuilder.length() > 0) addrBuilder.append(" - ");
+                    addrBuilder.append(pincode);
+                }
+                address = addrBuilder.toString();
+            }
+
             // Build NIC codes HTML section if data found
             String nicSection = "";
             if (nicCodeRows.length() > 0) {
@@ -463,6 +537,9 @@ public class UdyamVerificationService {
                         "    </div>\n";
             }
 
+            // Format date for display
+            String printDate = new java.text.SimpleDateFormat("dd MMMM yyyy, hh:mm a").format(new java.util.Date());
+
             // Build the professional XHTML document mimicking official MSME certificate
             String xhtml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
                     "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\"\n" +
@@ -471,81 +548,142 @@ public class UdyamVerificationService {
                     "<head>\n" +
                     "  <meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"/>\n" +
                     "  <style>\n" +
-                    "    @page { size: A4 portrait; margin: 12mm 15mm; }\n" +
+                    "    @page { size: A4 portrait; margin: 10mm 12mm; }\n" +
                     "    * { box-sizing: border-box; }\n" +
-                    "    body { font-family: 'Times New Roman', Times, serif; font-size: 9.5pt; color: #1a1a1a; line-height: 1.35; margin: 0; padding: 0; }\n" +
+                    "    body { font-family: 'Times New Roman', Times, serif; font-size: 9pt; color: #1a1a1a; line-height: 1.3; margin: 0; padding: 0; }\n" +
                     "    \n" +
-                    "    /* Main Certificate Border - Double border like official document */\n" +
-                    "    .certificate { border: 3px double #0d47a1; padding: 0; position: relative; background: #fff; }\n" +
-                    "    .inner-border { border: 1px solid #1565c0; margin: 4px; padding: 12px 15px; }\n" +
+                    "    /* Main Certificate Border - Triple border like official document */\n" +
+                    "    .certificate { border: 4px double #0d47a1; padding: 0; position: relative; background: #fff; }\n" +
+                    "    .inner-border { border: 2px solid #1565c0; margin: 6px; padding: 15px 18px; }\n" +
+                    "    .innermost-border { border: 1px solid #90caf9; margin: 3px; padding: 10px 12px; }\n" +
                     "    \n" +
                     "    /* Header Section */\n" +
-                    "    .header { text-align: center; padding-bottom: 8px; border-bottom: 2px solid #0d47a1; margin-bottom: 10px; }\n" +
-                    "    .emblem-row { text-align: center; margin-bottom: 4px; }\n" +
-                    "    .ashoka-chakra { font-size: 32pt; color: #0d47a1; }\n" +
-                    "    .govt-name { font-size: 10pt; color: #333; text-transform: uppercase; letter-spacing: 2px; font-weight: bold; margin: 3px 0 2px; }\n" +
-                    "    .ministry-name { font-size: 8.5pt; color: #555; margin: 1px 0; font-style: italic; }\n" +
-                    "    .cert-title { font-size: 13pt; font-weight: bold; color: #0d47a1; margin: 10px 0 5px; text-transform: uppercase; letter-spacing: 1.5px; border-top: 1px solid #1565c0; border-bottom: 1px solid #1565c0; padding: 5px 0; }\n" +
-                    "    .cert-number { font-size: 9pt; color: #333; margin: 6px 0 2px; }\n" +
-                    "    .cert-number strong { color: #0d47a1; font-size: 10pt; }\n" +
+                    "    .header { text-align: center; padding-bottom: 10px; border-bottom: 3px double #0d47a1; margin-bottom: 12px; }\n" +
+                    "    .emblem-row { text-align: center; margin-bottom: 6px; }\n" +
+                    "    .ashoka-chakra { font-size: 36pt; color: #0d47a1; }\n" +
+                    "    .govt-name { font-size: 11pt; color: #1a1a1a; text-transform: uppercase; letter-spacing: 3px; font-weight: bold; margin: 4px 0 2px; }\n" +
+                    "    .ministry-name { font-size: 9pt; color: #333; margin: 2px 0; font-style: italic; letter-spacing: 1px; }\n" +
+                    "    .cert-title { font-size: 14pt; font-weight: bold; color: #0d47a1; margin: 12px 0 8px; text-transform: uppercase; letter-spacing: 2px; border-top: 2px solid #0d47a1; border-bottom: 2px solid #0d47a1; padding: 6px 0; }\n" +
+                    "    .cert-number { font-size: 10pt; color: #333; margin: 8px 0 4px; }\n" +
+                    "    .cert-number strong { color: #0d47a1; font-size: 11pt; letter-spacing: 0.5px; }\n" +
                     "    \n" +
                     "    /* Certificate Fields Table */\n" +
-                    "    .fields-table { width: 100%; border-collapse: collapse; margin: 8px 0; }\n" +
+                    "    .fields-table { width: 100%; border-collapse: collapse; margin: 10px 0; }\n" +
                     "    .fields-table tr { border-bottom: 1px solid #e0e0e0; }\n" +
-                    "    .fields-table td { padding: 4px 8px; vertical-align: top; font-size: 9pt; }\n" +
-                    "    .field-label { width: 38%; font-weight: bold; color: #0d47a1; background: #e3f2fd; padding: 4px 8px; border-right: 1px solid #bbdefb; }\n" +
-                    "    .field-value { color: #1a1a1a; background: #fff; }\n" +
+                    "    .fields-table td { padding: 5px 10px; vertical-align: top; font-size: 9pt; }\n" +
+                    "    .field-label { width: 40%; font-weight: bold; color: #0d47a1; background: #e3f2fd; padding: 5px 10px; border-right: 2px solid #1565c0; }\n" +
+                    "    .field-value { color: #1a1a1a; background: #fff; padding-left: 12px; }\n" +
                     "    \n" +
                     "    /* Section Styles */\n" +
-                    "    .section { margin: 8px 0; }\n" +
-                    "    .section-header { font-size: 9.5pt; font-weight: bold; color: #0d47a1; background: #e3f2fd; padding: 4px 8px; border-left: 3px solid #0d47a1; margin-bottom: 5px; }\n" +
+                    "    .section { margin: 10px 0; }\n" +
+                    "    .section-header { font-size: 10pt; font-weight: bold; color: #0d47a1; background: #e3f2fd; padding: 5px 10px; border-left: 4px solid #0d47a1; margin-bottom: 6px; letter-spacing: 0.5px; }\n" +
                     "    \n" +
                     "    /* NIC Code Table */\n" +
                     "    .nic-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }\n" +
-                    "    .nic-table th { background: #1565c0; color: #fff; padding: 3px 6px; text-align: left; font-size: 8pt; }\n" +
-                    "    .nic-table td { padding: 3px 6px; border-bottom: 1px solid #e0e0e0; }\n" +
+                    "    .nic-table th { background: #1565c0; color: #fff; padding: 4px 8px; text-align: left; font-size: 8pt; letter-spacing: 0.5px; }\n" +
+                    "    .nic-table td { padding: 4px 8px; border-bottom: 1px solid #e0e0e0; }\n" +
                     "    .nic-table tr:nth-child(even) { background: #f5f5f5; }\n" +
                     "    \n" +
+                    "    /* Two-column layout for investment/turnover */\n" +
+                    "    .two-col { display: table; width: 100%; margin: 8px 0; }\n" +
+                    "    .two-col .col { display: table-cell; width: 50%; vertical-align: top; }\n" +
+                    "    .two-col .col:first-child { padding-right: 8px; }\n" +
+                    "    .two-col .col:last-child { padding-left: 8px; }\n" +
+                    "    .stat-box { border: 1px solid #1565c0; padding: 8px 10px; background: #e3f2fd; text-align: center; }\n" +
+                    "    .stat-label { font-size: 8pt; color: #333; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }\n" +
+                    "    .stat-value { font-size: 11pt; font-weight: bold; color: #0d47a1; }\n" +
+                    "    \n" +
+                    "    /* QR Code Section */\n" +
+                    "    .qr-section { text-align: center; margin: 10px 0; padding: 8px; border: 1px dashed #1565c0; background: #f5f5f5; }\n" +
+                    "    .qr-placeholder { font-size: 9pt; color: #666; font-style: italic; }\n" +
+                    "    .qr-code { font-size: 24pt; color: #0d47a1; margin: 4px 0; }\n" +
+                    "    \n" +
                     "    /* Footer */\n" +
-                    "    .footer { margin-top: 10px; padding-top: 6px; border-top: 2px solid #0d47a1; }\n" +
-                    "    .disclaimer { font-size: 7.5pt; color: #666; text-align: center; font-style: italic; margin-bottom: 4px; }\n" +
-                    "    .gen-date { font-size: 7pt; color: #999; text-align: right; }\n" +
-                    "    .verified-badge { text-align: center; margin: 6px 0; }\n" +
-                    "    .verified-badge span { background: #1565c0; color: #fff; padding: 2px 12px; font-size: 7.5pt; font-weight: bold; letter-spacing: 0.5px; }\n" +
+                    "    .footer { margin-top: 12px; padding-top: 8px; border-top: 3px double #0d47a1; }\n" +
+                    "    .disclaimer { font-size: 8pt; color: #666; text-align: center; font-style: italic; margin-bottom: 6px; }\n" +
+                    "    .gen-date { font-size: 7.5pt; color: #999; text-align: right; margin-top: 4px; }\n" +
+                    "    .verified-badge { text-align: center; margin: 8px 0; }\n" +
+                    "    .verified-badge span { background: #1565c0; color: #fff; padding: 3px 16px; font-size: 8pt; font-weight: bold; letter-spacing: 1px; }\n" +
+                    "    \n" +
+                    "    /* Signature Section */\n" +
+                    "    .signature-section { display: table; width: 100%; margin-top: 15px; }\n" +
+                    "    .signature-left { display: table-cell; width: 50%; text-align: left; vertical-align: bottom; }\n" +
+                    "    .signature-right { display: table-cell; width: 50%; text-align: right; vertical-align: bottom; }\n" +
+                    "    .signature-line { border-top: 1px solid #333; width: 150px; margin-top: 40px; padding-top: 4px; font-size: 8pt; color: #333; }\n" +
+                    "    .signature-title { font-size: 7.5pt; color: #666; margin-top: 2px; }\n" +
                     "    \n" +
                     "    /* Watermark */\n" +
-                    "    .watermark { position: absolute; top: 35%; left: 25%; font-size: 48pt; color: rgba(13,71,161,0.04); transform: rotate(-35deg); z-index: 0; white-space: nowrap; font-weight: bold; letter-spacing: 5px; }\n" +
+                    "    .watermark { position: absolute; top: 35%; left: 25%; font-size: 52pt; color: rgba(13,71,161,0.03); transform: rotate(-35deg); z-index: 0; white-space: nowrap; font-weight: bold; letter-spacing: 8px; }\n" +
                     "  </style>\n" +
                     "</head>\n" +
                     "<body>\n" +
                     "  <div class=\"certificate\">\n" +
                     "    <div class=\"inner-border\">\n" +
-                    "      <div class=\"watermark\">UDYAM</div>\n" +
-                    "      \n" +
-                    "      <!-- Header -->\n" +
-                    "      <div class=\"header\">\n" +
-                    "        <div class=\"emblem-row\">\n" +
-                    "          <span class=\"ashoka-chakra\">\u2638</span>\n" +
+                    "      <div class=\"innermost-border\">\n" +
+                    "        <div class=\"watermark\">UDYAM</div>\n" +
+                    "        \n" +
+                    "        <!-- Header -->\n" +
+                    "        <div class=\"header\">\n" +
+                    "          <div class=\"emblem-row\">\n" +
+                    "            <span class=\"ashoka-chakra\">\u2638</span>\n" +
+                    "          </div>\n" +
+                    "          <div class=\"govt-name\">Government of India</div>\n" +
+                    "          <div class=\"ministry-name\">Ministry of Micro, Small &amp; Medium Enterprises</div>\n" +
+                    "          <div class=\"cert-title\">Udyam Registration Certificate</div>\n" +
+                    "          <div class=\"cert-number\">Udyam Registration Number: <strong>" + escapeXml(udyamNumber) + "</strong></div>\n" +
                     "        </div>\n" +
-                    "        <div class=\"govt-name\">Government of India</div>\n" +
-                    "        <div class=\"ministry-name\">Ministry of Micro, Small &amp; Medium Enterprises</div>\n" +
-                    "        <div class=\"cert-title\">Udyam Registration Certificate</div>\n" +
-                    "        <div class=\"cert-number\">Udyam Registration Number: <strong>" + escapeXml(udyamNumber) + "</strong></div>\n" +
-                    "      </div>\n" +
-                    "      \n" +
-                    "      <!-- Certificate Fields -->\n" +
-                    "      <table class=\"fields-table\">\n" +
+                    "        \n" +
+                    "        <!-- Enterprise Details -->\n" +
+                    "        <table class=\"fields-table\">\n" +
                     certFields.toString() +
-                    "      </table>\n" +
-                    "      \n" +
-                    "      <!-- NIC Codes Section -->\n" +
+                    "        </table>\n" +
+                    "        \n" +
+                    "        <!-- Investment & Turnover Section -->\n" +
+                    (!investment.isEmpty() || !turnover.isEmpty() ? 
+                    "        <div class=\"two-col\">\n" +
+                    "          <div class=\"col\">\n" +
+                    "            <div class=\"stat-box\">\n" +
+                    "              <div class=\"stat-label\">Investment in Plant &amp; Machinery / Equipment</div>\n" +
+                    "              <div class=\"stat-value\">" + (!investment.isEmpty() ? escapeXml(investment) : "Not Available") + "</div>\n" +
+                    "            </div>\n" +
+                    "          </div>\n" +
+                    "          <div class=\"col\">\n" +
+                    "            <div class=\"stat-box\">\n" +
+                    "              <div class=\"stat-label\">Annual Turnover (as per GST)</div>\n" +
+                    "              <div class=\"stat-value\">" + (!turnover.isEmpty() ? escapeXml(turnover) : "Not Available") + "</div>\n" +
+                    "            </div>\n" +
+                    "          </div>\n" +
+                    "        </div>\n" : "") +
+                    "        \n" +
+                    "        <!-- NIC Codes Section -->\n" +
                     nicSection +
-                    "      \n" +
-                    "      <!-- Footer -->\n" +
-                    "      <div class=\"footer\">\n" +
-                    "        <div class=\"verified-badge\"><span>\u2713 DIGITALLY VERIFIED BY DUKAANLOCKER</span></div>\n" +
-                    "        <div class=\"disclaimer\">This is a computer generated statement, no signature required.</div>\n" +
-                    "        <div class=\"gen-date\">Date of Print: " + new java.text.SimpleDateFormat("dd MMM yyyy, hh:mm a").format(new java.util.Date()) + "</div>\n" +
+                    "        \n" +
+                    "        <!-- QR Code Section -->\n" +
+                    "        <div class=\"qr-section\">\n" +
+                    "          <div class=\"qr-code\">\u25A3</div>\n" +
+                    "          <div class=\"qr-placeholder\">Scan to verify registration on Udyam Portal</div>\n" +
+                    "          <div style=\"font-size: 7pt; color: #999; margin-top: 2px;\">https://udyamregistration.gov.in</div>\n" +
+                    "        </div>\n" +
+                    "        \n" +
+                    "        <!-- Footer -->\n" +
+                    "        <div class=\"footer\">\n" +
+                    "          <div class=\"verified-badge\"><span>\u2713 DIGITALLY VERIFIED BY DUKAANLOCKER</span></div>\n" +
+                    "          <div class=\"disclaimer\">This is a computer generated certificate. No physical signature is required.</div>\n" +
+                    "          \n" +
+                    "          <!-- Signature Section -->\n" +
+                    "          <div class=\"signature-section\">\n" +
+                    "            <div class=\"signature-left\">\n" +
+                    "              <div class=\"signature-line\">Enterprise Seal / Stamp</div>\n" +
+                    "              <div class=\"signature-title\">Authorized Signatory</div>\n" +
+                    "            </div>\n" +
+                    "            <div class=\"signature-right\">\n" +
+                    "              <div class=\"signature-line\">Registering Authority</div>\n" +
+                    "              <div class=\"signature-title\">Ministry of MSME, Government of India</div>\n" +
+                    "            </div>\n" +
+                    "          </div>\n" +
+                    "          \n" +
+                    "          <div class=\"gen-date\">Date of Issue: " + printDate + "</div>\n" +
+                    "        </div>\n" +
                     "      </div>\n" +
                     "    </div>\n" +
                     "  </div>\n" +

@@ -20,6 +20,7 @@ public class UdyamPdfReproTest {
 
     private String buildRealisticPrintHtml() {
         // Realistic HTML with website navigation elements that should be filtered out
+        // This includes all fields from the official Udyam certificate format
         return "<!DOCTYPE html>\n"
             + "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n"
             + "<head><title>Udyam Registration Certificate</title>\n"
@@ -54,16 +55,20 @@ public class UdyamPdfReproTest {
             + "  <table border=\"1\">\n"
             + "    <tr><td>Udyam Registration Number</td><td>UDYAM-MH-00-0000000</td></tr>\n"
             + "    <tr><td>Name of Enterprise</td><td>Test Enterprises Pvt Ltd</td></tr>\n"
-            + "    <tr><td>Entrepreneur Name</td><td>Rajesh Kumar</td></tr>\n"
+            + "    <tr><td>Name of Entrepreneur</td><td>Rajesh Kumar</td></tr>\n"
             + "    <tr><td>Type of Enterprise</td><td>Micro</td></tr>\n"
             + "    <tr><td>Major Activity</td><td>47 - Retail Trade</td></tr>\n"
             + "    <tr><td>Type of Organization</td><td>Proprietary</td></tr>\n"
+            + "    <tr><td>PAN</td><td>ABCDE1234F</td></tr>\n"
             + "    <tr><td>Mobile</td><td>9876543210</td></tr>\n"
             + "    <tr><td>Email</td><td>test@example.com</td></tr>\n"
             + "    <tr><td>State</td><td>Maharashtra</td></tr>\n"
             + "    <tr><td>District</td><td>Mumbai</td></tr>\n"
             + "    <tr><td>City/Town</td><td>Mumbai</td></tr>\n"
             + "    <tr><td>Pincode</td><td>400001</td></tr>\n"
+            + "    <tr><td>Date of Registration</td><td>15/08/2024</td></tr>\n"
+            + "    <tr><td>Investment in Plant & Machinery</td><td>Rs. 5,00,000</td></tr>\n"
+            + "    <tr><td>Annual Turnover</td><td>Rs. 25,00,000</td></tr>\n"
             + "  </table>\n"
             + "  <input type=\"hidden\" name=\"__VIEWSTATE\" id=\"__VIEWSTATE\" value=\"abc\">\n"
             + "</div>\n"

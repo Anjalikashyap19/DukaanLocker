@@ -935,8 +935,13 @@ fun CertificateViewerDialog(
             Column(
                 modifier = Modifier.fillMaxWidth().padding(20.dp)
             ) {
+                // Header with government branding
                 Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("GOVERNMENT OF INDIA", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray, letterSpacing = 1.sp)
+                    // Ashoka Chakra symbol
+                    Text("☸", fontSize = 32.sp, color = colors.primary)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    Text("GOVERNMENT OF INDIA", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray, letterSpacing = 2.sp)
                     Text(
                         when (doc.type) {
                             "GST" -> "DEPARTMENT OF REVENUE • GOODS AND SERVICES TAX"
@@ -945,7 +950,7 @@ fun CertificateViewerDialog(
                             "DrugLicense" -> "DRUG CONTROL ADMINISTRATION"
                             "HealthTrade" -> "MUNICIPAL CORPORATION REGULATORY DEPT"
                             "FireNOC" -> "STATE FIRE AND EMERGENCY SERVICES"
-                            "Udyam" -> "MINISTRY OF MICRO, SMALL & MEDIUM ENTERPRISES"
+                            "Udyam", "MSME_CERTIFICATE" -> "MINISTRY OF MICRO, SMALL & MEDIUM ENTERPRISES"
                             "PAN" -> "INCOME TAX DEPARTMENT • GOVERNMENT OF INDIA"
                             "TAN" -> "INCOME TAX DEPARTMENT • TDS WING"
                             "BusinessRegistration" -> "MINISTRY OF CORPORATE AFFAIRS • ROC"
@@ -981,20 +986,100 @@ fun CertificateViewerDialog(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     HorizontalDivider(color = colors.primary, thickness = 2.dp, modifier = Modifier.width(180.dp))
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(doc.name.uppercase(), fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = Color.Black, textAlign = TextAlign.Center)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Certificate title
+                    Text(doc.name.uppercase(), fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = colors.primary, textAlign = TextAlign.Center)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    // Registration number highlighted
+                    Text(doc.regNumber, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.Black, fontFamily = FontFamily.Monospace)
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    CertificateField("Registration / License No", doc.regNumber, isHighlight = true)
-                    CertificateField("Legal Name of Business", business.name.uppercase())
-                    CertificateField("Name of Proprietor/Owner", business.ownerName)
-                    CertificateField("State of Registration", business.state)
-                    CertificateField("Category & Scale", "${business.category} (${business.scale})")
-                    CertificateField("Issue Date", doc.issueDate)
-                    CertificateField("Validity / Expiry Date", doc.expiryDate)
+                // Certificate fields based on document type
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // For MSME/Udyam certificates, show specialized fields
+                    if (doc.type == "Udyam" || doc.type == "MSME_CERTIFICATE") {
+                        CertificateField("Udyam Registration Number", doc.regNumber, isHighlight = true)
+                        CertificateField("Name of Enterprise", business.name.uppercase())
+                        CertificateField("Name of Entrepreneur/Owner", business.ownerName)
+                        CertificateField("Type of Enterprise", business.scale)
+                        CertificateField("Major Activity", business.category)
+                        CertificateField("State of Registration", business.state)
+                        if (business.city.isNotBlank()) {
+                            CertificateField("District / City", business.city)
+                        }
+                        CertificateField("Issue Date", doc.issueDate)
+                        CertificateField("Validity", "Permanent (No Expiry)")
+                        
+                        // Investment & Turnover section (if available)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Investment box
+                            Card(
+                                modifier = Modifier.weight(1f),
+                                colors = CardDefaults.cardColors(containerColor = colors.primary.copy(alpha = 0.1f)),
+                                border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.3f)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text("INVESTMENT", fontSize = 8.sp, color = colors.textSecondary, fontWeight = FontWeight.Bold)
+                                    Text("Not Available", fontSize = 12.sp, color = colors.primary, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            // Turnover box
+                            Card(
+                                modifier = Modifier.weight(1f),
+                                colors = CardDefaults.cardColors(containerColor = colors.primary.copy(alpha = 0.1f)),
+                                border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.3f)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text("TURNOVER", fontSize = 8.sp, color = colors.textSecondary, fontWeight = FontWeight.Bold)
+                                    Text("Not Available", fontSize = 12.sp, color = colors.primary, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                        
+                        // QR Code placeholder
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
+                            border = BorderStroke(1.dp, colors.border),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text("▣", fontSize = 28.sp, color = colors.primary)
+                                Text("Scan to verify on Udyam Portal", fontSize = 9.sp, color = colors.textSecondary, fontStyle = FontStyle.Italic)
+                            }
+                        }
+                    } else {
+                        // Generic certificate fields for other document types
+                        CertificateField("Registration / License No", doc.regNumber, isHighlight = true)
+                        CertificateField("Legal Name of Business", business.name.uppercase())
+                        CertificateField("Name of Proprietor/Owner", business.ownerName)
+                        CertificateField("State of Registration", business.state)
+                        CertificateField("Category & Scale", "${business.category} (${business.scale})")
+                        CertificateField("Issue Date", doc.issueDate)
+                        CertificateField("Validity / Expiry Date", doc.expiryDate)
+                    }
+                    
+                    // Locker Status (common for all)
                     CertificateField("Locker Status", if (doc.status == "FETCHED") "VERIFIED GOVERNMENT DATA" else "SECURE USER UPLOADS",
                         textColor = if (doc.status == "FETCHED") colors.success else colors.secondary)
                 }

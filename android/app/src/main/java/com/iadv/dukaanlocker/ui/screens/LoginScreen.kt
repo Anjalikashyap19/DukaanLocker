@@ -317,13 +317,12 @@ fun LoginScreen(
                     onSelectRegister = { selectedView = "register" },
                     onSelectOwnerLogin = { selectedView = true },
 
-                    onSelectMsmeLogin = { selectedView = "msme_login" },
                     onSelectManagerLogin = { selectedView = false },
                     onGoogleSignIn = onGoogleSignIn,
                     onBiometricLogin = onBiometricLogin
                 )
 
-                // ── OWNER LOGIN (Email + Password only) ────────────────────
+                // ── OWNER LOGIN (Email + Password, or Udyam number + OTP) ──
                 true -> OwnerLoginForm(
                     colors = colors,
                     lang = lang,
@@ -337,7 +336,9 @@ fun LoginScreen(
                     passwordError = loginPasswordError,
                     isChecking = loginIsChecking,
                     onBack = { selectedView = null; loginIsChecking = false },
-                    onLogin = { validateAndLogin() }
+                    onLogin = { validateAndLogin() },
+                    onMsmeLoginRequest = onMsmeLoginRequest,
+                    onMsmeLoginVerify = onMsmeLoginVerify
                 )
 
                 // ── REGISTER FORM ──────────────────────────────────────────
@@ -397,15 +398,6 @@ fun LoginScreen(
                     onGoogleSignIn = onGoogleSignIn
                 )
 
-                // ── MSME LOGIN (Udyam number + OTP) ──────────
-                "msme_login" -> MsmeLoginForm(
-                    colors = colors,
-                    lang = lang,
-                    onMsmeLoginRequest = onMsmeLoginRequest,
-                    onMsmeLoginVerify = onMsmeLoginVerify,
-                    onBack = { selectedView = null }
-                )
-
                 // ── MANAGER LOGIN (uses access code) ──────────
                 false -> ManagerLoginForm(
                     colors = colors,
@@ -449,7 +441,6 @@ private fun RoleSelectionContent(
     isBiometricLoginEnabled: Boolean = false,
     onSelectRegister: () -> Unit,
     onSelectOwnerLogin: () -> Unit,
-    onSelectMsmeLogin: () -> Unit,
     onSelectManagerLogin: () -> Unit,
     onGoogleSignIn: () -> Unit = {},
     onBiometricLogin: () -> Unit = {}
@@ -543,16 +534,6 @@ private fun RoleSelectionContent(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // MSME Login Card
-        RoleCard(
-            icon = Icons.Default.Business,
-            title = AppStrings.get(lang, "MSME / Udyam Owner"),
-            subtitle = AppStrings.get(lang, "Sign in with Udyam number & OTP"),
-            onClick = onSelectMsmeLogin
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
         // Manager Login Card
         RoleCard(
             icon = Icons.Default.Lock,
@@ -600,8 +581,24 @@ private fun OwnerLoginForm(
     passwordError: Boolean,
     isChecking: Boolean,
     onBack: () -> Unit,
-    onLogin: () -> Unit
+    onLogin: () -> Unit,
+    onMsmeLoginRequest: (msmeNumber: String, onResult: (Boolean, String?) -> Unit) -> Unit = { _, _ -> },
+    onMsmeLoginVerify: (msmeNumber: String, otp: String, onResult: (Boolean, String?) -> Unit) -> Unit = { _, _, _ -> }
 ) {
+    // When the Udyam-number + OTP toggle is on, render the MSME login flow
+    // in place of the email + password form.
+    var msmeMode by remember { mutableStateOf(false) }
+    if (msmeMode) {
+        MsmeLoginForm(
+            colors = colors,
+            lang = lang,
+            onMsmeLoginRequest = onMsmeLoginRequest,
+            onMsmeLoginVerify = onMsmeLoginVerify,
+            onBack = { msmeMode = false }
+        )
+        return
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = colors.cardBg),
@@ -627,6 +624,42 @@ private fun OwnerLoginForm(
                     Text(AppStrings.get(lang, "Owner Sign In"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
                     Text(AppStrings.get(lang, "Access your business dashboard"), fontSize = 12.sp, color = colors.textSecondary)
                 }
+            }
+
+            // ── Udyam (MSME) login toggle ──
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(colors.primary.copy(alpha = 0.06f))
+                    .padding(horizontal = 14.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Business,
+                    contentDescription = null,
+                    tint = colors.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        AppStrings.get(lang, "Have a Udyam number?"),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.textPrimary
+                    )
+                    Text(
+                        AppStrings.get(lang, "Sign in with Udyam number & OTP"),
+                        fontSize = 11.sp,
+                        color = colors.textSecondary
+                    )
+                }
+                Switch(
+                    checked = msmeMode,
+                    onCheckedChange = { msmeMode = it },
+                    colors = SwitchDefaults.colors(checkedTrackColor = colors.primary)
+                )
             }
 
             // Email
