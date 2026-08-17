@@ -561,7 +561,7 @@ fun DukaanLockerApp(
                                         }
                                     }
                                 },
-                                onRegisterWithMsme = { msmeNumber, mobile, password, sessionId, captchaText, onDone ->
+                                onRegisterWithMsme = { msmeNumber, mobile, sessionId, captchaText, onDone ->
                                     scope.launch {
                                         isLoading = true
                                         try {
@@ -569,7 +569,6 @@ fun DukaanLockerApp(
                                                 RegisterWithMsmeRequest(
                                                     msmeNumber = msmeNumber,
                                                     mobileNumber = mobile,
-                                                    password = password,
                                                     sessionId = sessionId,
                                                     captchaText = captchaText
                                                 )
@@ -617,6 +616,60 @@ fun DukaanLockerApp(
                                         }
                                         isLoading = false
                                         onDone()
+                                    }
+                                },
+                                onMsmeLoginRequest = { msmeNumber, onResult ->
+                                    scope.launch {
+                                        try {
+                                            val response = api.msmeLoginRequest(MsmeOtpRequest(msmeNumber = msmeNumber))
+                                            if (response.isSuccessful) {
+                                                val body = response.body()
+                                                onResult(true, body?.message)
+                                            } else {
+                                                onResult(false, response.parseErrorMessage())
+                                            }
+                                        } catch (e: Exception) {
+                                            onResult(false, "Network error: ${e.message}")
+                                        }
+                                    }
+                                },
+                                onMsmeLoginVerify = { msmeNumber, otp, onResult ->
+                                    scope.launch {
+                                        isLoading = true
+                                        try {
+                                            val response = api.msmeLoginVerify(
+                                                MsmeOtpVerifyRequest(msmeNumber = msmeNumber, otp = otp)
+                                            )
+                                            if (response.isSuccessful) {
+                                                val auth = response.body()!!
+                                                val authResponse = AuthResponse(
+                                                    token = auth.token,
+                                                    tokenType = auth.tokenType,
+                                                    userId = auth.userId,
+                                                    userName = auth.userName,
+                                                    mobileNumber = auth.mobileNumber,
+                                                    emailId = auth.emailId,
+                                                    role = auth.role
+                                                )
+                                                ApiClient.saveAuth(context, authResponse)
+                                                authToken = auth.token
+                                                currentUserId = auth.userId
+                                                currentUserName = auth.userName
+                                                currentUserEmail = auth.emailId
+                                                currentUserRole = auth.role
+                                                isLoggedIn = true
+                                                currentScreen = "owner_home"
+                                                loadShops()
+                                                if (auth.role == "ADMIN") loadManagers()
+                                                Toast.makeText(context, "Welcome back, ${auth.userName}!", Toast.LENGTH_LONG).show()
+                                                onResult(true, null)
+                                            } else {
+                                                onResult(false, response.parseErrorMessage())
+                                            }
+                                        } catch (e: Exception) {
+                                            onResult(false, "Network error: ${e.message}")
+                                        }
+                                        isLoading = false
                                     }
                                 },
                                 onManagerLogin = { code ->

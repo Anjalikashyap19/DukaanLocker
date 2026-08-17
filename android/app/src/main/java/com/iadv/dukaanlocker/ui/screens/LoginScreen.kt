@@ -101,8 +101,10 @@ fun LoginScreen(
     onOwnerLogin: (email: String, password: String, onDone: () -> Unit) -> Unit,
     onManagerLogin: (code: String) -> Unit,
     onRegister: (name: String, email: String, password: String, mobile: String, onDone: () -> Unit) -> Unit,
-    onRegisterWithMsme: (msmeNumber: String, mobile: String, password: String, sessionId: String, captchaText: String, onDone: () -> Unit) -> Unit = { _, _, _, _, _, onDone -> onDone() },
+    onRegisterWithMsme: (msmeNumber: String, mobile: String, sessionId: String, captchaText: String, onDone: () -> Unit) -> Unit = { _, _, _, _, onDone -> onDone() },
     onInitMsmeCaptcha: (onResult: (sessionId: String, captchaImage: String) -> Unit) -> Unit = { onResult -> onResult("", "") },
+    onMsmeLoginRequest: (msmeNumber: String, onResult: (success: Boolean, message: String?) -> Unit) -> Unit = { _, _ -> },
+    onMsmeLoginVerify: (msmeNumber: String, otp: String, onResult: (success: Boolean, message: String?) -> Unit) -> Unit = { _, _, _ -> },
     onGoogleSignIn: () -> Unit = {},
     onBackToMain: () -> Unit,
     isDarkTheme: Boolean = true,
@@ -193,15 +195,13 @@ fun LoginScreen(
     fun validateAndRegisterWithMsme() {
         regMsmeError = !isValidMsme(regMsmeNumber)
         regMobileError = regMobile.length != 10
-        regPasswordError = !isStrongPassword(regPassword)
         // For government captcha: validate non-empty (server validates correctness)
         regCaptchaError = regCaptchaInput.isBlank()
-        if (!regMsmeError && !regMobileError && !regPasswordError && !regCaptchaError) {
+        if (!regMsmeError && !regMobileError && !regCaptchaError) {
             regIsChecking = true
             onRegisterWithMsme(
                 regMsmeNumber.trim().uppercase(),
                 regMobile,
-                regPassword,
                 msmeSessionId,
                 regCaptchaInput.trim()
             ) {
@@ -316,6 +316,8 @@ fun LoginScreen(
                     isBiometricLoginEnabled = isBiometricLoginEnabled,
                     onSelectRegister = { selectedView = "register" },
                     onSelectOwnerLogin = { selectedView = true },
+
+                    onSelectMsmeLogin = { selectedView = "msme_login" },
                     onSelectManagerLogin = { selectedView = false },
                     onGoogleSignIn = onGoogleSignIn,
                     onBiometricLogin = onBiometricLogin
@@ -395,6 +397,15 @@ fun LoginScreen(
                     onGoogleSignIn = onGoogleSignIn
                 )
 
+                // ── MSME LOGIN (Udyam number + OTP) ──────────
+                "msme_login" -> MsmeLoginForm(
+                    colors = colors,
+                    lang = lang,
+                    onMsmeLoginRequest = onMsmeLoginRequest,
+                    onMsmeLoginVerify = onMsmeLoginVerify,
+                    onBack = { selectedView = null }
+                )
+
                 // ── MANAGER LOGIN (uses access code) ──────────
                 false -> ManagerLoginForm(
                     colors = colors,
@@ -438,6 +449,7 @@ private fun RoleSelectionContent(
     isBiometricLoginEnabled: Boolean = false,
     onSelectRegister: () -> Unit,
     onSelectOwnerLogin: () -> Unit,
+    onSelectMsmeLogin: () -> Unit,
     onSelectManagerLogin: () -> Unit,
     onGoogleSignIn: () -> Unit = {},
     onBiometricLogin: () -> Unit = {}
@@ -527,6 +539,16 @@ private fun RoleSelectionContent(
             title = AppStrings.get(lang, "Business Owner"),
             subtitle = AppStrings.get(lang, "Sign in with email & password"),
             onClick = onSelectOwnerLogin
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // MSME Login Card
+        RoleCard(
+            icon = Icons.Default.Business,
+            title = AppStrings.get(lang, "MSME / Udyam Owner"),
+            subtitle = AppStrings.get(lang, "Sign in with Udyam number & OTP"),
+            onClick = onSelectMsmeLogin
         )
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -908,7 +930,8 @@ private fun RegisterForm(
                 )
             }
 
-            // Password with eye toggle + strength indicator
+            // Password with eye toggle + strength indicator (normal registration only)
+            if (!registerWithMsme) {
             OutlinedTextField(
                 value = password,
                 onValueChange = onPasswordChange,
@@ -970,6 +993,7 @@ private fun RegisterForm(
                 ),
                 shape = RoundedCornerShape(12.dp)
             )
+            }
 
             Spacer(modifier = Modifier.height(2.dp))
 
@@ -977,7 +1001,7 @@ private fun RegisterForm(
             Button(
                 onClick = onRegister,
                 enabled = if (registerWithMsme) {
-                    msmeNumber.isNotBlank() && mobile.length == 10 && password.length >= 8 &&
+                    msmeNumber.isNotBlank() && mobile.length == 10 &&
                         captchaInput.isNotBlank() && !isChecking
                 } else {
                     name.isNotBlank() && email.isNotBlank() && password.length >= 8 && mobile.length == 10 && !isChecking
@@ -1266,6 +1290,177 @@ private fun ManagerLoginForm(
 // ══════════════════════════════════════════════════════════════════════════════
 // REUSABLE ROLE CARD
 // ══════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// MSME (Udyam) LOGIN FORM — two steps: Udyam number -> OTP
+// ══════════════════════════════════════════════════════════════════
+@Composable
+private fun MsmeLoginForm(
+    colors: AppColors,
+    lang: String,
+    onMsmeLoginRequest: (msmeNumber: String, onResult: (Boolean, String?) -> Unit) -> Unit,
+    onMsmeLoginVerify: (msmeNumber: String, otp: String, onResult: (Boolean, String?) -> Unit) -> Unit,
+    onBack: () -> Unit
+) {
+    var step by remember { mutableStateOf("number") } // "number" | "otp"
+    var msmeNumber by remember { mutableStateOf("") }
+    var otp by remember { mutableStateOf("") }
+    var numberError by remember { mutableStateOf(false) }
+    var otpError by remember { mutableStateOf(false) }
+    var isChecking by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBg),
+        border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.6f)),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(22.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Back + title
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = colors.textSecondary, modifier = Modifier.size(20.dp))
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        AppStrings.get(lang, "MSME Login"),
+                        fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary
+                    )
+                    Text(
+                        AppStrings.get(lang, if (step == "number") "Enter your Udyam number" else "Enter the OTP sent to your mobile"),
+                        fontSize = 12.sp, color = colors.textSecondary
+                    )
+                }
+            }
+
+            if (step == "number") {
+                OutlinedTextField(
+                    value = msmeNumber,
+                    onValueChange = { msmeNumber = it.filter { ch -> ch.isLetterOrDigit() || ch == '-' }.uppercase(); numberError = false; message = null },
+                    label = { Text(AppStrings.get(lang, "MSME / Udyam Number"), color = colors.textSecondary) },
+                    placeholder = { Text("UDYAM-XX-XX-XXXXXXX", color = colors.textSecondary.copy(alpha = 0.4f)) },
+                    leadingIcon = { Icon(Icons.Default.Business, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
+                    isError = numberError,
+                    supportingText = if (numberError) {{
+                        Text(AppStrings.get(lang, "Enter a valid Udyam number (e.g. UDYAM-UP-09-0001234)"), color = Color.Red)
+                    }} else null,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
+                        focusedLabelColor = colors.primary, cursorColor = colors.primary
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+            } else {
+                OutlinedTextField(
+                    value = otp,
+                    onValueChange = { otp = it.filter { ch -> ch.isDigit() }.take(8); otpError = false; message = null },
+                    label = { Text(AppStrings.get(lang, "OTP"), color = colors.textSecondary) },
+                    placeholder = { Text("6-digit OTP", color = colors.textSecondary.copy(alpha = 0.4f)) },
+                    leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
+                    isError = otpError,
+                    supportingText = if (otpError) {{
+                        Text(AppStrings.get(lang, "Enter the 6-digit OTP"), color = Color.Red)
+                    }} else null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
+                        focusedLabelColor = colors.primary, cursorColor = colors.primary
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+
+            if (!message.isNullOrBlank()) {
+                Text(
+                    text = message!!,
+                    fontSize = 12.sp,
+                    color = if (otpError || numberError) Color.Red else colors.primary,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Button(
+                onClick = {
+                    if (step == "number") {
+                        numberError = !isValidMsme(msmeNumber)
+                        if (!numberError) {
+                            isChecking = true
+                            message = null
+                            onMsmeLoginRequest(msmeNumber.trim().uppercase()) { success, msg ->
+                                isChecking = false
+                                if (success) {
+                                    step = "otp"
+                                    message = msg
+                                } else {
+                                    numberError = true
+                                    message = msg ?: AppStrings.get(lang, "Could not send OTP. Please try again.")
+                                }
+                            }
+                        }
+                    } else {
+                        otpError = otp.length < 4
+                        if (!otpError) {
+                            isChecking = true
+                            message = null
+                            onMsmeLoginVerify(msmeNumber.trim().uppercase(), otp) { success, msg ->
+                                isChecking = false
+                                if (!success) {
+                                    otpError = true
+                                    message = msg ?: AppStrings.get(lang, "Invalid OTP. Please try again.")
+                                }
+                                // On success the app callback navigates away (saves auth).
+                            }
+                        }
+                    }
+                },
+                enabled = !isChecking,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = colors.background)
+            ) {
+                if (isChecking) {
+                    CircularProgressIndicator(modifier = Modifier.size(22.dp), color = colors.background, strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Default.Business, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        AppStrings.get(lang, if (step == "number") "SEND OTP" else "VERIFY & LOGIN"),
+                        fontWeight = FontWeight.Bold, fontSize = 14.sp, letterSpacing = 1.sp
+                    )
+                }
+            }
+
+            if (step == "otp") {
+                TextButton(onClick = {
+                    step = "number"
+                    otp = ""
+                    otpError = false
+                    message = null
+                }) {
+                    Text(AppStrings.get(lang, "Change Udyam number"), fontSize = 12.sp, color = colors.textSecondary)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun RoleCard(
     icon: androidx.compose.ui.graphics.vector.ImageVector,

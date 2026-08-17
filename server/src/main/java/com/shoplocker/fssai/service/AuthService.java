@@ -6,12 +6,16 @@ import com.shoplocker.fssai.dto.GoogleRegisterRequest;
 import com.shoplocker.fssai.dto.LoginRequest;
 import com.shoplocker.fssai.dto.ManagerCodeLoginRequest;
 import com.shoplocker.fssai.dto.MsmeAuthResponse;
+import com.shoplocker.fssai.dto.MsmeOtpRequest;
+import com.shoplocker.fssai.dto.MsmeOtpResponse;
+import com.shoplocker.fssai.dto.MsmeOtpVerifyRequest;
 import com.shoplocker.fssai.dto.MsmeParsedData;
 import com.shoplocker.fssai.dto.RegisterRequest;
 import com.shoplocker.fssai.dto.RegisterWithMsmeRequest;
 import com.shoplocker.fssai.dto.UdyamVerifyRequest;
 import com.shoplocker.fssai.dto.UdyamVerifyResponse;
 import com.shoplocker.fssai.service.UdyamVerificationService;
+import com.shoplocker.fssai.service.OtpService;
 import com.shoplocker.fssai.entity.*;
 import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
@@ -73,6 +77,7 @@ public class AuthService {
     private final RequiredDocumentService requiredDocumentService;
     private final GoogleOAuthService googleOAuthService;
     private final LoginAttemptService loginAttemptService;
+    private final OtpService otpService;
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
@@ -82,7 +87,8 @@ public class AuthService {
                        DocumentRepository documentRepository,
                        RequiredDocumentService requiredDocumentService,
                        GoogleOAuthService googleOAuthService,
-                       LoginAttemptService loginAttemptService) {
+                       LoginAttemptService loginAttemptService,
+                       OtpService otpService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -92,6 +98,7 @@ public class AuthService {
         this.requiredDocumentService = requiredDocumentService;
         this.googleOAuthService = googleOAuthService;
         this.loginAttemptService = loginAttemptService;
+        this.otpService = otpService;
     }
 
     @Transactional
@@ -681,6 +688,84 @@ public class AuthService {
         String token = jwtService.generateToken(user);
         log.info("Biometric login successful: userId={} email={}", userId, email);
         return AuthResponse.from(user, token);
+    }
+
+    /**
+     * MSME (Udyam) number + OTP login — step 1: request an OTP.
+     *
+     * <p>Resolves the Udyam number to its registered user, then asks
+     * {@link OtpService} to generate + SMS an OTP to the user's registered
+     * mobile. If the Udyam number is unknown, a generic success message is
+     * returned (no SMS sent) to avoid leaking which numbers are registered.</p>
+     */
+    @Transactional
+    public MsmeOtpResponse msmeLoginRequest(MsmeOtpRequest request) {
+        String udyamNumber = request.getMsmeNumber().trim().toUpperCase();
+        User user = resolveMsmeUser(udyamNumber);
+
+        if (user == null) {
+            log.info("MSME login-request: unknown Udyam number {}", udyamNumber);
+            return new MsmeOtpResponse(
+                    null,
+                    "If this Udyam number is registered, an OTP has been sent to its linked mobile number.");
+        }
+
+        String requestId = otpService.requestOtp(udyamNumber, user.getMobileNumber());
+        log.info("MSME login-request: OTP requested for Udyam {} mobile {}", udyamNumber, user.getMobileNumber());
+        return new MsmeOtpResponse(requestId, "OTP sent to your registered mobile number.");
+    }
+
+    /**
+     * MSME (Udyam) number + OTP login — step 2: verify the OTP and issue a JWT.
+     *
+     * <p>On success a fresh JWT is returned (same shape as other logins). Failed
+     * attempts are tracked per Udyam number via {@link LoginAttemptService}.</p>
+     */
+    @Transactional
+    public AuthResponse msmeLoginVerify(MsmeOtpVerifyRequest request) {
+        String udyamNumber = request.getMsmeNumber().trim().toUpperCase();
+        String lockKey = "msme:" + udyamNumber;
+
+        if (loginAttemptService.isLocked(lockKey)) {
+            log.info("MSME login-verify rejected: locked {}", udyamNumber);
+            throw new FssaiException(
+                    "Too many failed attempts. Please try again in 15 minutes.",
+                    FailureCode.TOO_MANY_ATTEMPTS);
+        }
+
+        User user = resolveMsmeUser(udyamNumber);
+        if (user == null) {
+            loginAttemptService.registerFailure(lockKey);
+            throw new FssaiException("Invalid OTP. Please try again.", FailureCode.INVALID_OTP);
+        }
+
+        try {
+            otpService.verifyOtp(user.getMobileNumber(), request.getOtp());
+        } catch (FssaiException e) {
+            loginAttemptService.registerFailure(lockKey);
+            throw e;
+        }
+
+        loginAttemptService.reset(lockKey);
+        String token = jwtService.generateToken(user);
+        log.info("MSME login successful: userId={} udyam={}", user.getId(), udyamNumber);
+        return AuthResponse.from(user, token);
+    }
+
+    /**
+     * Resolves a Udyam (MSME) number to its owning user via the verified
+     * MSME_CERTIFICATE document. Returns {@code null} if the number is not
+     * registered or does not belong to an MSME user.
+     */
+    private User resolveMsmeUser(String udyamNumber) {
+        return documentRepository
+                .findByDocumentNumberAndDocumentType(udyamNumber, DocumentType.MSME_CERTIFICATE)
+                .map(doc -> {
+                    Shop shop = doc.getShop();
+                    User owner = shop == null ? null : shop.getOwner();
+                    return (owner != null && owner.isMsmeUser()) ? owner : null;
+                })
+                .orElse(null);
     }
 
     private static String normalizeEmail(String raw) {

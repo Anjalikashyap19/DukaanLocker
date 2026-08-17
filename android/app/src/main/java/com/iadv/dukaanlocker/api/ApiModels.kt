@@ -205,7 +205,6 @@ data class UdyamVerifyResponse(
 data class RegisterWithMsmeRequest(
     @SerializedName("msmeNumber") val msmeNumber: String,
     @SerializedName("mobileNumber") val mobileNumber: String,
-    @SerializedName("password") val password: String,
     @SerializedName("sessionId") val sessionId: String,
     @SerializedName("captchaText") val captchaText: String
 )
@@ -241,3 +240,19 @@ fun <T> retrofit2.Response<T>.parseErrorMessage(): String {
     }
     return message()
 }
+
+// ── MSME (Udyam) number + OTP login ───────────────────────────────────────
+
+data class MsmeOtpRequest(
+    @SerializedName("msmeNumber") val msmeNumber: String
+)
+
+data class MsmeOtpVerifyRequest(
+    @SerializedName("msmeNumber") val msmeNumber: String,
+    @SerializedName("otp") val otp: String
+)
+
+data class MsmeOtpResponse(
+    @SerializedName("requestId") val requestId: String?,
+    @SerializedName("message") val message: String?
+)

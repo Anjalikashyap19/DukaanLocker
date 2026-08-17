@@ -112,4 +112,12 @@ interface ApiService {
 
     @POST("api/auth/register-msme")
     suspend fun registerWithMsme(@Body request: RegisterWithMsmeRequest): Response<MsmeAuthResponse>
+
+    // ── MSME (Udyam) number + OTP login ─────────────────────────────────────
+
+    @POST("api/auth/msme-login-request")
+    suspend fun msmeLoginRequest(@Body request: MsmeOtpRequest): Response<MsmeOtpResponse>
+
+    @POST("api/auth/msme-login-verify")
+    suspend fun msmeLoginVerify(@Body request: MsmeOtpVerifyRequest): Response<AuthResponse>
 }

@@ -16,4 +16,6 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     Optional<Document> findByShopIdAndDocumentType(Long shopId, DocumentType documentType);
 
     boolean existsByDocumentNumberAndDocumentType(String documentNumber, DocumentType documentType);
+
+    Optional<Document> findByDocumentNumberAndDocumentType(String documentNumber, DocumentType documentType);
 }

@@ -6,6 +6,9 @@ import com.shoplocker.fssai.dto.GoogleRegisterRequest;
 import com.shoplocker.fssai.dto.LoginRequest;
 import com.shoplocker.fssai.dto.ManagerCodeLoginRequest;
 import com.shoplocker.fssai.dto.MsmeAuthResponse;
+import com.shoplocker.fssai.dto.MsmeOtpRequest;
+import com.shoplocker.fssai.dto.MsmeOtpVerifyRequest;
+import com.shoplocker.fssai.dto.MsmeOtpResponse;
 import com.shoplocker.fssai.dto.RegisterRequest;
 import com.shoplocker.fssai.dto.RegisterWithMsmeRequest;
 import com.shoplocker.fssai.service.AuthService;
@@ -136,6 +139,31 @@ public class AuthController {
     public ResponseEntity<AuthResponse> biometricLogin(
             @Valid @RequestBody BiometricLoginRequest request) {
         AuthResponse response = authService.biometricLogin(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+            summary = "MSME login — request OTP",
+            description = "MSME-registered users log in with their Udyam number + OTP (no email/password). " +
+                          "Supplies the Udyam number; the server sends an OTP to the mobile registered at signup."
+    )
+    @SecurityRequirements
+    @PostMapping("/msme-login-request")
+    public ResponseEntity<MsmeOtpResponse> msmeLoginRequest(
+            @Valid @RequestBody MsmeOtpRequest request) {
+        MsmeOtpResponse response = authService.msmeLoginRequest(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+            summary = "MSME login — verify OTP",
+            description = "Verifies the OTP for the given Udyam number and returns a JWT Bearer token on success."
+    )
+    @SecurityRequirements
+    @PostMapping("/msme-login-verify")
+    public ResponseEntity<AuthResponse> msmeLoginVerify(
+            @Valid @RequestBody MsmeOtpVerifyRequest request) {
+        AuthResponse response = authService.msmeLoginVerify(request);
         return ResponseEntity.ok(response);
     }
 }

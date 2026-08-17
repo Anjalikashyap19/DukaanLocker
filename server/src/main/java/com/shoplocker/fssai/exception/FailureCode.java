@@ -55,6 +55,12 @@ public enum FailureCode {
     TOO_MANY_ATTEMPTS          ("too_many_attempts",          HttpStatus.TOO_MANY_REQUESTS),
     /** MSME-registered users may not log in with email+password; use Udyam number + OTP. */
     MSME_LOGIN_NOT_ALLOWED     ("msme_login_not_allowed",     HttpStatus.FORBIDDEN),
+    /** Fast2SMS gateway call failed (network / auth / template rejection). */
+    SMS_FAILURE               ("sms_failure",               HttpStatus.BAD_GATEWAY),
+    /** Submitted OTP did not match the active challenge. */
+    INVALID_OTP              ("invalid_otp",               HttpStatus.UNAUTHORIZED),
+    /** Active OTP challenge expired or was already consumed. */
+    OTP_EXPIRED              ("otp_expired",               HttpStatus.UNAUTHORIZED),
 
     /** Rasterizer itself crashed (native lib failure, OOM, etc.) - NOT for client-bad PDFs.
      *  Corrupted / encrypted / image-only PDFs use UNSUPPORTED_DOCUMENT_FORMAT (400) instead. */
