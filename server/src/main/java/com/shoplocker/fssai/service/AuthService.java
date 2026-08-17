@@ -176,6 +176,16 @@ public class AuthService {
                             FailureCode.INVALID_CREDENTIALS);
                 });
 
+        // MSME-registered users are not permitted to log in with email + password.
+        // They must authenticate via their Udyam number + OTP flow instead.
+        if (user.isMsmeUser()) {
+            log.info("Login rejected: MSME user {} attempted email+password login", email);
+            throw new FssaiException(
+                    "MSME-registered accounts cannot log in with email and password. " +
+                    "Please sign in with your Udyam (MSME) number and OTP.",
+                    FailureCode.MSME_LOGIN_NOT_ALLOWED);
+        }
+
         String token = jwtService.generateToken(user);
         return AuthResponse.from(user, token);
     }
@@ -491,6 +501,7 @@ public class AuthService {
         user.setPassword(passwordEncoder.encode(password));
         user.setRole(Role.ADMIN);
         user.setEnabled(true);
+        user.setMsmeUser(true);
 
         return userRepository.save(user);
     }
@@ -709,6 +720,15 @@ public class AuthService {
             throw new FssaiException(
                     "This account has been disabled. Please contact support.",
                     FailureCode.DISABLED_USER);
+        }
+
+        // MSME-registered users authenticate via Udyam number + OTP, not biometrics.
+        if (user.isMsmeUser()) {
+            log.info("Biometric login rejected: MSME user userId={}", userId);
+            throw new FssaiException(
+                    "MSME-registered accounts cannot use biometric login. " +
+                    "Please sign in with your Udyam (MSME) number and OTP.",
+                    FailureCode.MSME_LOGIN_NOT_ALLOWED);
         }
 
         // Issue fresh JWT token

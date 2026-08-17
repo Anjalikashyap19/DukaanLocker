@@ -53,6 +53,8 @@ public enum FailureCode {
     DISABLED_USER              ("disabled_user",              HttpStatus.FORBIDDEN),
     /** Too many failed attempts (brute-force guard) on a public auth endpoint. */
     TOO_MANY_ATTEMPTS          ("too_many_attempts",          HttpStatus.TOO_MANY_REQUESTS),
+    /** MSME-registered users may not log in with email+password; use Udyam number + OTP. */
+    MSME_LOGIN_NOT_ALLOWED     ("msme_login_not_allowed",     HttpStatus.FORBIDDEN),
 
     /** Rasterizer itself crashed (native lib failure, OOM, etc.) - NOT for client-bad PDFs.
      *  Corrupted / encrypted / image-only PDFs use UNSUPPORTED_DOCUMENT_FORMAT (400) instead. */

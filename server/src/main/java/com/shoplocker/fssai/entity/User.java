@@ -66,6 +66,12 @@ public class User {
     private boolean enabled = true;
 
 
+    // True for users created via MSME (Udyam) registration. These users must
+    // log in with their Udyam number + OTP, never with email + password.
+    @Column(name = "msme_user", nullable = false)
+    private boolean msmeUser = false;
+
+
 
     // Kis admin ne user create kiya
     @ManyToOne(fetch = FetchType.LAZY)
@@ -165,6 +171,15 @@ public class User {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+
+    public boolean isMsmeUser() {
+        return msmeUser;
+    }
+
+    public void setMsmeUser(boolean msmeUser) {
+        this.msmeUser = msmeUser;
     }
 
 
