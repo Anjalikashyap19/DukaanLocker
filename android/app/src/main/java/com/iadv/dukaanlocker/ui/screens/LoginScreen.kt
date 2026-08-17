@@ -908,7 +908,70 @@ private fun RegisterForm(
                 )
             }
 
-           
+            // Password with eye toggle + strength indicator
+            OutlinedTextField(
+                value = password,
+                onValueChange = onPasswordChange,
+                label = { Text(AppStrings.get(lang, "Password"), color = colors.textSecondary) },
+                placeholder = { Text(AppStrings.get(lang, "8+ chars, upper, lower, digit, special"), color = colors.textSecondary.copy(alpha = 0.4f)) },
+                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
+                trailingIcon = {
+                    IconButton(onClick = onTogglePasswordVisible, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                            tint = colors.textSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                },
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                isError = passwordError,
+                supportingText = {
+                    if (passwordError) {
+                        Text(AppStrings.get(lang, "Must be 8+ chars with uppercase, lowercase, digit & special char"), color = Color.Red)
+                    } else if (password.isNotEmpty()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Strength bar
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(4.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                            ) {
+                                repeat(4) { index ->
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight()
+                                            .background(
+                                                if (index < passwordStrength.level) passwordStrength.color
+                                                else colors.border.copy(alpha = 0.4f)
+                                            )
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                AppStrings.get(lang, passwordStrength.label),
+                                fontSize = 11.sp,
+                                color = passwordStrength.color,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
+                    focusedLabelColor = colors.primary, cursorColor = colors.primary
+                ),
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            Spacer(modifier = Modifier.height(2.dp))
 
             // Register Button
             Button(

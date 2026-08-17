@@ -85,9 +85,16 @@ public class JwtService {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + expirationMs);
 
+        // MSME-registered users have no email; use their mobile number as the
+        // token subject so the principal still resolves. Everyone else uses email.
+        String subject = user.getEmailId();
+        if (subject == null || subject.isBlank()) {
+            subject = user.getMobileNumber();
+        }
+
         return Jwts.builder()
                 .claims(claims)
-                .subject(user.getEmailId())
+                .subject(subject)
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(signingKey, Jwts.SIG.HS256)

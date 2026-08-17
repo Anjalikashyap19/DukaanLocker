@@ -430,7 +430,7 @@ public class AuthService {
         }
 
         // ── Step 3: Create User with parsed data ──
-        User savedUser = createMsmeUser(mobile, request.getPassword(), parsedData);
+        User savedUser = createMsmeUser(mobile, parsedData);
         log.info("MSME user created: id={} mobile={} name={}",
                 savedUser.getId(), mobile, savedUser.getUserName());
 
@@ -471,10 +471,12 @@ public class AuthService {
 
     /**
      * Creates a new User account from MSME parsed data.
-     * Uses entrepreneur name as userName, generates a local email.
+     * MSME-registered users authenticate via their Udyam number + OTP, so they
+     * have NO email and NO password — {@code emailId} and {@code password} stay
+     * null. The mobile number is the account's stable identifier.
      * Falls back to enterprise name or generic "MSME Owner" if entrepreneur name is missing.
      */
-    private User createMsmeUser(String mobile, String password, MsmeParsedData parsedData) {
+    private User createMsmeUser(String mobile, MsmeParsedData parsedData) {
         if (userRepository.existsByMobileNumber(mobile)) {
             throw new FssaiException(
                     "An account already exists with this mobile number",
@@ -491,72 +493,16 @@ public class AuthService {
             }
         }
 
-        // Use email from MSME HTML if available, otherwise generate a dummy email
-        String email = generateUniqueMsmeEmail(mobile, parsedData);
-
         User user = new User();
         user.setUserName(userName);
         user.setMobileNumber(mobile);
-        user.setEmailId(email);
-        user.setPassword(passwordEncoder.encode(password));
+        user.setEmailId(null);
+        user.setPassword(null);
         user.setRole(Role.ADMIN);
         user.setEnabled(true);
         user.setMsmeUser(true);
 
         return userRepository.save(user);
-    }
-
-    /**
-     * Generates a unique email for MSME registration.
-     * Priority:
-     *   1. Use email from MSME certificate if available and not already taken
-     *   2. If email exists, try appending mobile number as suffix (e.g., email+9876543210@domain.com)
-     *   3. If still not unique, keep incrementing suffix
-     *   4. Last resort: use msme_{mobile}@dukaanlocker.local
-     */
-    private String generateUniqueMsmeEmail(String mobile, MsmeParsedData parsedData) {
-        // Step 1: Try email from MSME certificate
-        if (parsedData != null && parsedData.getEmailId() != null && !parsedData.getEmailId().isBlank()) {
-            String msmeEmail = parsedData.getEmailId().toLowerCase().trim();
-            
-            if (!userRepository.existsByEmailId(msmeEmail)) {
-                return msmeEmail;
-            }
-            
-            // Email exists, try appending mobile number as local part suffix
-            String emailWithMobile = appendSuffixToEmail(msmeEmail, mobile);
-            if (!userRepository.existsByEmailId(emailWithMobile)) {
-                log.info("MSME email already taken, using variant with mobile suffix: {}", emailWithMobile);
-                return emailWithMobile;
-            }
-            
-            // Still exists, try incrementing numeric suffix
-            for (int i = 1; i <= 10; i++) {
-                String emailWithSuffix = appendSuffixToEmail(msmeEmail, mobile + i);
-                if (!userRepository.existsByEmailId(emailWithSuffix)) {
-                    log.info("MSME email already taken, using variant with suffix {}: {}", i, emailWithSuffix);
-                    return emailWithSuffix;
-                }
-            }
-        }
-        
-        // Step 2: Last resort - use msme_{mobile}@dukaanlocker.local
-        return "msme_" + mobile + "@dukaanlocker.local";
-    }
-
-    /**
-     * Appends a suffix to the local part of an email address.
-     * Example: appendSuffixToEmail("user@example.com", "123") -> "user+123@example.com"
-     */
-    private String appendSuffixToEmail(String email, String suffix) {
-        int atIndex = email.indexOf('@');
-        if (atIndex == -1) {
-            // Invalid email format, just append
-            return email + "+" + suffix;
-        }
-        String localPart = email.substring(0, atIndex);
-        String domain = email.substring(atIndex);
-        return localPart + "+" + suffix + domain;
     }
 
     /**

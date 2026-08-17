@@ -21,14 +21,6 @@ public class RegisterWithMsmeRequest {
     @Pattern(regexp = "^[0-9]{10}$", message = "mobileNumber must be exactly 10 digits")
     private String mobileNumber;
 
-    @NotBlank(message = "password is required")
-    @Size(min = 8, max = 64, message = "password must be at least 8 characters long")
-    @Pattern(
-            regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\\\|,.<>/?]).{8,}$",
-            message = "password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character"
-    )
-    private String password;
-
     @NotBlank(message = "sessionId is required — call /api/udyam/init first")
     private String sessionId;
 
@@ -40,9 +32,6 @@ public class RegisterWithMsmeRequest {
 
     public String getMobileNumber() { return mobileNumber; }
     public void setMobileNumber(String mobileNumber) { this.mobileNumber = mobileNumber; }
-
-    public String getPassword() { return password; }
-    public void setPassword(String password) { this.password = password; }
 
     public String getSessionId() { return sessionId; }
     public void setSessionId(String sessionId) { this.sessionId = sessionId; }

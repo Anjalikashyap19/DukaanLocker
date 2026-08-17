@@ -39,12 +39,21 @@ public class CustomUserDetailsService implements UserDetailsService {
             throw new UsernameNotFoundException("Email is required");
         }
         String normalized = email.trim().toLowerCase();
+        // MSME users carry no email; their principal (token subject) is the
+        // mobile number. Resolve by email first, then fall back to mobile so
+        // both account types load correctly.
         User user = userRepository.findByEmailId(normalized)
+                .or(() -> userRepository.findByMobileNumber(normalized))
                 .orElseThrow(() -> new UsernameNotFoundException(
                         "User not found with email: " + normalized));
 
+        // MSME users have no email; use mobile as the Spring Security username.
+        String principal = user.getEmailId() != null && !user.getEmailId().isBlank()
+                ? user.getEmailId()
+                : user.getMobileNumber();
+
         return org.springframework.security.core.userdetails.User.builder()
-                .username(user.getEmailId())
+                .username(principal)
                 .password(user.getPassword() == null ? "" : user.getPassword())
                 .disabled(!user.isEnabled())
                 .accountLocked(false)
