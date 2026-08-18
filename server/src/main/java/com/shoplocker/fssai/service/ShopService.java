@@ -124,7 +124,13 @@ public class ShopService {
     }
 
     public List<ShopResponse> getMyShops(String userEmail) {
-        User owner = userRepository.findByEmailId(userEmail)
+        // Try case-insensitive lookup: first by normalized (lowercase) emailId,
+        // then by original case, then by mobile — covers all account types
+        // including MSME users whose emailId may be stored in any case.
+        String normalized = userEmail.trim().toLowerCase();
+        User owner = userRepository.findByEmailId(normalized)
+                .or(() -> userRepository.findByEmailId(userEmail.trim()))
+                .or(() -> userRepository.findByMobileNumber(normalized))
                 .orElseThrow(() -> new FssaiException("User not found", FailureCode.USER_NOT_FOUND));
 
         List<Shop> shops = shopRepository.findByOwnerId(owner.getId());

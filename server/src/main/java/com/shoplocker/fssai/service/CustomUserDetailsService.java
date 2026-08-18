@@ -40,9 +40,11 @@ public class CustomUserDetailsService implements UserDetailsService {
         }
         String normalized = email.trim().toLowerCase();
         // MSME users carry no email; their principal (token subject) is the
-        // mobile number. Resolve by email first, then fall back to mobile so
-        // both account types load correctly.
+        // Udyam number stored in emailId. Resolve by email first (try both
+        // lowercase and original-case for backward compat with existing MSME
+        // users whose emailId was stored uppercase), then fall back to mobile.
         User user = userRepository.findByEmailId(normalized)
+                .or(() -> userRepository.findByEmailId(email.trim()))
                 .or(() -> userRepository.findByMobileNumber(normalized))
                 .orElseThrow(() -> new UsernameNotFoundException(
                         "User not found with email: " + normalized));

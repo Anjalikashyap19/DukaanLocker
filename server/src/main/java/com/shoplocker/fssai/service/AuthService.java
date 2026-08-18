@@ -505,9 +505,11 @@ public class AuthService {
         user.setMobileNumber(mobile);
         // Store emailId: use the provided email if available, otherwise fall
         // back to the MSME (Udyam) number so this column is never null.
+        // Always normalize to lowercase so lookups (findByEmailId) work reliably
+        // regardless of database collation.
         String emailToStore = (requestEmailId != null && !requestEmailId.isBlank())
                 ? requestEmailId.trim().toLowerCase()
-                : udyamNumber;
+                : udyamNumber.toLowerCase();
         user.setEmailId(emailToStore);
         user.setPassword(null);
         user.setRole(Role.ADMIN);
