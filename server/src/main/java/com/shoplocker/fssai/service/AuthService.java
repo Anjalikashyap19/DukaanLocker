@@ -437,7 +437,7 @@ public class AuthService {
         }
 
         // ── Step 3: Create User with parsed data ──
-        User savedUser = createMsmeUser(mobile, parsedData);
+        User savedUser = createMsmeUser(mobile, parsedData, udyamNumber, request.getEmailId());
         log.info("MSME user created: id={} mobile={} name={}",
                 savedUser.getId(), mobile, savedUser.getUserName());
 
@@ -483,7 +483,7 @@ public class AuthService {
      * null. The mobile number is the account's stable identifier.
      * Falls back to enterprise name or generic "MSME Owner" if entrepreneur name is missing.
      */
-    private User createMsmeUser(String mobile, MsmeParsedData parsedData) {
+    private User createMsmeUser(String mobile, MsmeParsedData parsedData, String udyamNumber, String requestEmailId) {
         if (userRepository.existsByMobileNumber(mobile)) {
             throw new FssaiException(
                     "An account already exists with this mobile number",
@@ -503,7 +503,12 @@ public class AuthService {
         User user = new User();
         user.setUserName(userName);
         user.setMobileNumber(mobile);
-        user.setEmailId(null);
+        // Store emailId: use the provided email if available, otherwise fall
+        // back to the MSME (Udyam) number so this column is never null.
+        String emailToStore = (requestEmailId != null && !requestEmailId.isBlank())
+                ? requestEmailId.trim().toLowerCase()
+                : udyamNumber;
+        user.setEmailId(emailToStore);
         user.setPassword(null);
         user.setRole(Role.ADMIN);
         user.setEnabled(true);

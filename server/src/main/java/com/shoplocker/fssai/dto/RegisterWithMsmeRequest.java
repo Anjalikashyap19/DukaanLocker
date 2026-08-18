@@ -27,6 +27,13 @@ public class RegisterWithMsmeRequest {
     @NotBlank(message = "captchaText is required")
     private String captchaText;
 
+    /**
+     * Optional email address.  If provided it is stored as the user's emailId.
+     * If omitted (null / blank) the MSME (Udyam) number is stored instead,
+     * so the emailId column is never null for MSME-registered users.
+     */
+    private String emailId;
+
     public String getMsmeNumber() { return msmeNumber; }
     public void setMsmeNumber(String msmeNumber) { this.msmeNumber = msmeNumber; }
 
@@ -38,4 +45,7 @@ public class RegisterWithMsmeRequest {
 
     public String getCaptchaText() { return captchaText; }
     public void setCaptchaText(String captchaText) { this.captchaText = captchaText; }
+
+    public String getEmailId() { return emailId; }
+    public void setEmailId(String emailId) { this.emailId = emailId; }
 }

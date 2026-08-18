@@ -206,7 +206,8 @@ data class RegisterWithMsmeRequest(
     @SerializedName("msmeNumber") val msmeNumber: String,
     @SerializedName("mobileNumber") val mobileNumber: String,
     @SerializedName("sessionId") val sessionId: String,
-    @SerializedName("captchaText") val captchaText: String
+    @SerializedName("captchaText") val captchaText: String,
+    @SerializedName("emailId") val emailId: String? = null
 )
 
 data class MsmeAuthResponse(
