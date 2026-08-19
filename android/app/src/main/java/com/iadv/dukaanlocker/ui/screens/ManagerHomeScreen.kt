@@ -14,7 +14,7 @@ import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Logout
@@ -370,11 +370,11 @@ private fun DocumentItemCard(
                             modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.border).clickable { onView() },
                             contentAlignment = Alignment.Center
                         ) { Icon(Icons.Default.Visibility, contentDescription = null, tint = colors.accent, modifier = Modifier.size(14.dp)) }
-                        // Delete
+                        // Reupload
                         Box(
-                            modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.border).clickable { onDelete() },
+                            modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.secondary.copy(alpha = 0.15f)).clickable { onUpload() },
                             contentAlignment = Alignment.Center
-                        ) { Icon(Icons.Default.Delete, contentDescription = null, tint = Color.Red.copy(alpha = 0.7f), modifier = Modifier.size(14.dp)) }
+                        ) { Icon(Icons.Default.Refresh, contentDescription = "Reupload", tint = colors.secondary, modifier = Modifier.size(14.dp)) }
                     }
                 }
             }

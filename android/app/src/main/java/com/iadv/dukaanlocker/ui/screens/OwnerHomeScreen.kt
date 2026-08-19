@@ -17,7 +17,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Logout
@@ -769,8 +769,8 @@ private fun DocumentCard(
                                 Icon(Icons.Default.Visibility, contentDescription = "View", tint = colors.accent, modifier = Modifier.size(14.dp))
                             }
                         }
-                        IconButton(onClick = onDelete, modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.border)) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                        IconButton(onClick = onUpload, modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.secondary.copy(alpha = 0.15f))) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Reupload", tint = colors.secondary, modifier = Modifier.size(14.dp))
                         }
                     }
                 }
