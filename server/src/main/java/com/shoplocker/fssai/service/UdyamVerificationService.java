@@ -539,54 +539,132 @@ public class UdyamVerificationService {
             String xhtml = "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n" +
                     "<html xmlns=\"http://www.w3.org/1999/xhtml\"><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"/>\n" +
                     "<style>\n" +
-                    "  @page { size: A4 portrait; margin: 7mm 9mm; }\n" +
-                    "  * { box-sizing: border-box; } body { margin:0; font-family: Arial, Helvetica, sans-serif; font-size:6pt; color:#111; }\n" +
-                    "  .certificate { border:1px solid #aaa; padding:2px; } .top { height:45px; position:relative; background:#57528c; color:#fff; text-align:center; padding-top:4px; }\n" +
-                    "  .top:before { content:''; position:absolute; left:33px; top:0; width:120px; height:43px; opacity:.18; background:radial-gradient(circle at 20px 20px, transparent 13px, #b7b4de 14px, transparent 15px) 0 0/33px 30px; }\n" +
-                    "  .emblem { position:absolute; left:9px; top:4px; width:32px; height:31px; font-size:28pt; line-height:31px; }\n" +
-                    "  .top p { margin:0; line-height:1.2; font-size:5pt; } .top .office { margin-top:2px; font-size:4.5pt; }\n" +
-                    "  .udyam { position:absolute; right:7px; top:5px; width:34px; height:30px; font-size:24pt; line-height:30px; }\n" +
-                    "  .title { text-align:center; font-family:'Times New Roman',serif; font-size:10pt; font-weight:bold; padding:4px 0; } .numbers { width:100%; font-family:'Times New Roman',serif; font-weight:bold; font-size:5.3pt; padding:0 4px 3px; } .numbers span { float:right; }\n" +
-                    "  table { width:100%; border-collapse:collapse; } td,th { border:1px solid #aaa; padding:2px 3px; vertical-align:middle; } .noborder td { border:none; padding:3px 4px; }\n" +
-                    "  .label { width:39%; font-family:'Times New Roman',serif; font-weight:bold; font-size:5.8pt; } .value { font-weight:bold; font-size:6.2pt; }\n" +
-                    "  .enterprise-row td { padding-top:4px; padding-bottom:4px; } .enterprise-value { color:#111a4c; font-size:8pt; font-weight:bold; letter-spacing:.25px; }\n" +
-                    "  .small th,.small td { font-size:4.7pt; padding:2px; text-align:center; } .small th { font-family:'Times New Roman',serif; } .small .left { text-align:left; }\n" +
-                    "  .section { background:#008000; color:#fff; text-align:center; font-family:'Times New Roman',serif; font-size:7pt; font-weight:bold; padding:2px; margin:1px 0; }\n" +
-                    "  .address td { font-size:4.8pt; padding:2px; } .address .side { width:39%; text-align:center; font: bold 5.4pt 'Times New Roman',serif; }\n" +
-                    "  .date td { height:20px; } .date .label { text-align:center; font-size:5.1pt; } .date .value { text-align:center; }\n" +
-                    "  .nic th { font: bold 4.8pt 'Times New Roman',serif; } .nic td { font-size:4.4pt; line-height:1.1; padding:3px; }\n" +
-                    "  .deregister td { height:20px; } .deregister .label { text-align:center; font-size:5pt; } .deregister .value { text-align:center; }\n" +
-                    "  .note { font:4.6pt 'Times New Roman',serif; line-height:1.35; padding:4px 5px 0; } .note p { margin:0 0 4px; } .note .bold { font-weight:bold; }\n" +
-                    "  .space { height:2px; }\n" +
+                    "  @page { size: A4 portrait; margin: 12mm 14mm; }\n" +
+                    "  * { box-sizing: border-box; }\n" +
+                    "  body { margin:0; padding:0; font-family: Arial, Helvetica, sans-serif; font-size:9pt; color:#111; line-height:1.3; }\n" +
+                    "  .certificate { border:2px solid #57528c; padding:3px; background:#fff; }\n" +
+                    "\n" +
+                    "  /* ===== HEADER ===== */\n" +
+                    "  .top { position:relative; background:linear-gradient(135deg, #57528c 0%, #6b62a0 50%, #57528c 100%); color:#fff; text-align:center; padding:14px 10px 12px 10px; min-height:80px; }\n" +
+                    "  .emblem { position:absolute; left:12px; top:8px; width:52px; height:52px; border:2px solid rgba(255,255,255,0.4); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:32pt; color:#ffd54f; background:rgba(255,255,255,0.08); }\n" +
+                    "  .top-title { font-size:8pt; font-weight:bold; letter-spacing:3px; margin:0; text-transform:uppercase; }\n" +
+                    "  .top-govt { font-size:11pt; font-weight:bold; margin:2px 0 1px; letter-spacing:1px; text-transform:uppercase; }\n" +
+                    "  .top-ministry { font-size:8.5pt; margin:1px 0; letter-spacing:0.5px; }\n" +
+                    "  .top-office { font-size:7.5pt; margin:3px 0 0; opacity:0.85; font-style:italic; }\n" +
+                    "  .udyam-badge { position:absolute; right:12px; top:8px; width:52px; height:52px; border:2px solid rgba(255,255,255,0.4); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:24pt; color:#ffd54f; background:rgba(255,255,255,0.08); font-weight:bold; }\n" +
+                    "\n" +
+                    "  /* ===== TITLE ===== */\n" +
+                    "  .title { text-align:center; font-family:'Times New Roman',Times,serif; font-size:16pt; font-weight:bold; color:#57528c; padding:8px 0 4px; text-transform:uppercase; letter-spacing:1px; border-bottom:2px solid #57528c; margin-bottom:4px; }\n" +
+                    "  .numbers { width:100%; font-family:'Times New Roman',Times,serif; font-weight:bold; font-size:8.5pt; padding:4px 8px 6px; color:#333; }\n" +
+                    "  .numbers span { float:right; color:#57528c; font-size:9pt; }\n" +
+                    "\n" +
+                    "  /* ===== TABLES ===== */\n" +
+                    "  table { width:100%; border-collapse:collapse; margin-bottom:4px; }\n" +
+                    "  td, th { border:1px solid #bbb; padding:5px 8px; vertical-align:middle; }\n" +
+                    "  .noborder td { border:none; padding:6px 8px; }\n" +
+                    "\n" +
+                    "  /* ===== FIELD ROWS ===== */\n" +
+                    "  .label { width:39%; font-family:'Times New Roman',Times,serif; font-weight:bold; font-size:9pt; color:#333; }\n" +
+                    "  .value { font-weight:bold; font-size:9.5pt; color:#111; }\n" +
+                    "\n" +
+                    "  /* Enterprise Name Row */\n" +
+                    "  .enterprise-row td { padding:8px; }\n" +
+                    "  .enterprise-value { color:#57528c; font-size:14pt; font-weight:bold; letter-spacing:0.5px; }\n" +
+                    "\n" +
+                    "  /* Classification Table */\n" +
+                    "  .small th, .small td { font-size:8pt; padding:4px 6px; text-align:center; }\n" +
+                    "  .small th { font-family:'Times New Roman',Times,serif; background:#f3f0f9; font-weight:bold; }\n" +
+                    "  .small .left { text-align:left; }\n" +
+                    "\n" +
+                    "  /* Green Section Bar */\n" +
+                    "  .section { background:#2e7d32; color:#fff; text-align:center; font-family:'Times New Roman',Times,serif; font-size:10pt; font-weight:bold; padding:4px; margin:6px 0; letter-spacing:0.5px; }\n" +
+                    "\n" +
+                    "  /* Address Table */\n" +
+                    "  .address td { font-size:8.5pt; padding:5px 8px; }\n" +
+                    "  .address .side { width:39%; text-align:center; font:bold 9pt 'Times New Roman',Times,serif; background:#f3f0f9; }\n" +
+                    "\n" +
+                    "  /* Date Table */\n" +
+                    "  .date td { height:30px; }\n" +
+                    "  .date .label { text-align:center; font-size:8.5pt; }\n" +
+                    "  .date .value { text-align:center; font-size:9pt; font-weight:bold; }\n" +
+                    "\n" +
+                    "  /* NIC Table */\n" +
+                    "  .nic th { font:bold 8pt 'Times New Roman',Times,serif; background:#f3f0f9; padding:5px 6px; }\n" +
+                    "  .nic td { font-size:8pt; line-height:1.2; padding:5px 6px; }\n" +
+                    "\n" +
+                    "  /* Deregister Row */\n" +
+                    "  .deregister td { height:30px; }\n" +
+                    "  .deregister .label { text-align:center; font-size:8pt; }\n" +
+                    "  .deregister .value { text-align:center; font-size:8.5pt; }\n" +
+                    "\n" +
+                    "  /* Notes */\n" +
+                    "  .note { font:8pt 'Times New Roman',Times,serif; line-height:1.4; padding:8px 10px 0; background:#fafafa; border:1px solid #e0e0e0; margin-top:6px; }\n" +
+                    "  .note p { margin:0 0 5px; }\n" +
+                    "  .note .bold { font-weight:bold; }\n" +
+                    "\n" +
+                    "  .space { height:4px; }\n" +
                     "</style></head><body><div class=\"certificate\">\n" +
-                    "  <div class=\"top\"><div class=\"emblem\">\u2638</div><p>UDYAM REGISTRATION</p><p>Government of India</p><p>Ministry of Micro, Small and Medium Enterprises</p><p class=\"office\">Office of Development Commissioner (MSME)</p><div class=\"udyam\">\u25A3</div></div>\n" +
-                    "  <div class=\"title\">UDYAM REGISTRATION CERTIFICATE</div><div class=\"numbers\">UDYAM REGISTRATION NUMBER <span>" + escapeXml(udyamNumber) + "</span></div>\n" +
-                    "  <table class=\"noborder enterprise-row\"><tr><td class=\"label\">NAME OF ENTERPRISE</td><td class=\"enterprise-value\">" + escapeXml(!enterpriseName.isEmpty() ? enterpriseName : "") + "</td></tr></table>\n" +
-                    "  <table class=\"small\"><tr><th>TYPE OF ENTERPRISE *</th><th>Micro</th><th>Small</th><th>Medium</th><th>CLASSIFICATION DATE</th></tr><tr><td></td><td>" + (enterpriseType.toLowerCase().contains("micro") ? enterpriseType : "-") + "</td><td>" + (enterpriseType.toLowerCase().contains("small") ? enterpriseType : "-") + "</td><td>" + (enterpriseType.toLowerCase().contains("medium") ? enterpriseType : "-") + "</td><td>" + escapeXml(!dateOfRegistration.isEmpty() ? dateOfRegistration : "-") + "</td></tr></table>\n" +
-                    "  <table class=\"noborder\"><tr><td class=\"label\">MAJOR ACTIVITY</td><td class=\"value\">" + (nicCodeRows.length() > 0 ? "Services / Manufacturing" : "") + "</td></tr></table><div class=\"section\">" + (nicCodeRows.length() > 0 ? "ACTIVITY DETAILS" : "SERVICES") + "</div>\n" +
+                    "  <div class=\"top\">\n" +
+                    "    <div class=\"emblem\">\u2638</div>\n" +
+                    "    <p class=\"top-title\">UDYAM REGISTRATION</p>\n" +
+                    "    <p class=\"top-govt\">Government of India</p>\n" +
+                    "    <p class=\"top-ministry\">Ministry of Micro, Small &amp; Medium Enterprises</p>\n" +
+                    "    <p class=\"top-office\">Office of Development Commissioner (MSME)</p>\n" +
+                    "    <div class=\"udyam-badge\">U</div>\n" +
+                    "  </div>\n" +
+                    "\n" +
+                    "  <div class=\"title\">UDYAM REGISTRATION CERTIFICATE</div>\n" +
+                    "  <div class=\"numbers\">UDYAM REGISTRATION NUMBER <span>" + escapeXml(udyamNumber) + "</span></div>\n" +
+                    "\n" +
+                    "  <table class=\"noborder enterprise-row\">\n" +
+                    "    <tr><td class=\"label\">NAME OF ENTERPRISE</td><td class=\"enterprise-value\">" + escapeXml(!enterpriseName.isEmpty() ? enterpriseName : "-") + "</td></tr>\n" +
+                    "  </table>\n" +
+                    "\n" +
+                    "  <table class=\"small\">\n" +
+                    "    <tr><th>TYPE OF ENTERPRISE *</th><th>Micro</th><th>Small</th><th>Medium</th><th>CLASSIFICATION DATE</th></tr>\n" +
+                    "    <tr><td></td><td>" + (enterpriseType.toLowerCase().contains("micro") ? "\u2713" : "-") + "</td><td>" + (enterpriseType.toLowerCase().contains("small") ? "\u2713" : "-") + "</td><td>" + (enterpriseType.toLowerCase().contains("medium") ? "\u2713" : "-") + "</td><td>" + escapeXml(!dateOfRegistration.isEmpty() ? dateOfRegistration : "-") + "</td></tr>\n" +
+                    "  </table>\n" +
+                    "\n" +
+                    "  <table class=\"noborder\"><tr><td class=\"label\">MAJOR ACTIVITY</td><td class=\"value\">" + (nicCodeRows.length() > 0 ? "Services / Manufacturing" : "-") + "</td></tr></table>\n" +
+                    "  <div class=\"section\">" + (nicCodeRows.length() > 0 ? "ACTIVITY DETAILS" : "SERVICES") + "</div>\n" +
+                    "\n" +
                     "  <table class=\"noborder\"><tr><td class=\"label\">SOCIAL CATEGORY OF ENTREPRENEUR</td><td class=\"value\">GENERAL</td></tr></table>\n" +
                     (nicCodeRows.length() > 0 ?
-                    "  <table class=\"small\"><tr><th class=\"left\">NAME OF UNIT(S)</th><th>S.No.</th><th>Name of Unit(s)</th></tr><tr><td></td><td>1</td><td>" + escapeXml(!enterpriseName.isEmpty() ? enterpriseName : "Enterprise") + "</td></tr></table>\n"
+                    "  <table class=\"small\"><tr><th class=\"left\">NAME OF UNIT(S)</th><th>S.No.</th><th>Name of Unit(s)</th></tr><tr><td></td><td>1</td><td style=\"text-align:left;\">" + escapeXml(!enterpriseName.isEmpty() ? enterpriseName : "Enterprise") + "</td></tr></table>\n"
                     : "") +
                     "  <div class=\"space\"></div>\n" +
-                    "  <table class=\"address\"><tr><td class=\"side\" rowspan=\"4\">OFFICIAL ADDRESS OF ENTERPRISE</td><td>Flat/Door/Block No.</td><td>" + escapeXml(!address.isEmpty() ? address : "-") + "</td></tr>\n" +
-                    "  <tr><td>Village/Town</td><td>" + escapeXml(!city.isEmpty() ? city : "-") + "</td></tr>\n" +
-                    "  <tr><td>Road/Street/Lane</td><td>" + escapeXml(!district.isEmpty() ? district : "-") + "</td></tr>\n" +
-                    "  <tr><td>State</td><td>" + escapeXml(!state.isEmpty() ? state : "-") + "</td></tr></table>\n" +
+                    "\n" +
+                    "  <table class=\"address\">\n" +
+                    "    <tr><td class=\"side\" rowspan=\"4\">OFFICIAL ADDRESS OF ENTERPRISE</td><td>Flat/Door/Block No.</td><td>" + escapeXml(!address.isEmpty() ? address : "-") + "</td></tr>\n" +
+                    "    <tr><td>Village/Town</td><td>" + escapeXml(!city.isEmpty() ? city : "-") + "</td></tr>\n" +
+                    "    <tr><td>Road/Street/Lane</td><td>" + escapeXml(!district.isEmpty() ? district : "-") + "</td></tr>\n" +
+                    "    <tr><td>State</td><td>" + escapeXml(!state.isEmpty() ? state : "-") + "</td></tr>\n" +
+                    "  </table>\n" +
                     "  <div class=\"space\"></div>\n" +
-                    "  <table class=\"date\"><tr><td class=\"label\">DATE OF INCORPORATION / REGISTRATION OF ENTERPRISE</td><td class=\"value\">" + escapeXml(!dateOfRegistration.isEmpty() ? dateOfRegistration : "-") + "</td></tr>\n" +
-                    "  <tr><td class=\"label\">DATE OF COMMENCEMENT OF PRODUCTION / BUSINESS</td><td class=\"value\">" + escapeXml(!dateOfRegistration.isEmpty() ? dateOfRegistration : "-") + "</td></tr></table>\n" +
+                    "\n" +
+                    "  <table class=\"date\">\n" +
+                    "    <tr><td class=\"label\">DATE OF INCORPORATION / REGISTRATION OF ENTERPRISE</td><td class=\"value\">" + escapeXml(!dateOfRegistration.isEmpty() ? dateOfRegistration : "-") + "</td></tr>\n" +
+                    "    <tr><td class=\"label\">DATE OF COMMENCEMENT OF PRODUCTION / BUSINESS</td><td class=\"value\">" + escapeXml(!dateOfRegistration.isEmpty() ? dateOfRegistration : "-") + "</td></tr>\n" +
+                    "  </table>\n" +
                     "  <div class=\"space\"></div>\n" +
-                    "  <table class=\"nic\"><tr><th style=\"width:9%;\">S.No.</th><th>NIC 2 Digit</th><th>NIC 4 Digit</th><th>NIC 5 Digit</th><th>Activity</th></tr>\n" +
+                    "\n" +
+                    "  <table class=\"nic\">\n" +
+                    "    <tr><th style=\"width:8%;\">S.No.</th><th>NIC 2 Digit</th><th>NIC 4 Digit</th><th>NIC 5 Digit</th><th>Activity</th></tr>\n" +
                     nicRowsHtml +
-                    "  </table><div class=\"space\"></div>\n" +
+                    "  </table>\n" +
+                    "  <div class=\"space\"></div>\n" +
+                    "\n" +
                     "  <table class=\"deregister\"><tr><td class=\"label\">DATE OF UDYAM REGISTRATION DEREGISTRATION</td><td class=\"value\">--/--/----</td></tr></table>\n" +
-                    "  <div class=\"note\"><p>1. In case of proprietorship, the registration will be in the name of proprietor. In case of partnership concern, the registration will be issued as per the provisions of Partnership Act, 1932.</p>\n" +
-                    "  <p>2. The enterprise shall furnish the information online and self-declaration on the Udyam Registration portal. This certificate is based on the details furnished by the enterprise.</p>\n" +
-                    "  <p>For any assistance, you may contact:</p>\n" +
-                    "  <p>1. District Industry Centre: Check with your local DIC office</p>\n" +
-                    "  <p>2. MSME-DFO: Check with your regional MSME office</p></div>\n" +
-                    "  <div style=\"font-size:4pt; color:#999; text-align:right; padding:2px 5px;\">Generated by DukaanLocker on " + printDate + "</div>\n" +
+                    "\n" +
+                    "  <div class=\"note\">\n" +
+                    "    <p>1. In case of proprietorship, the registration will be in the name of proprietor. In case of partnership concern, the registration will be issued as per the provisions of Partnership Act, 1932.</p>\n" +
+                    "    <p>2. The enterprise shall furnish the information online and self-declaration on the Udyam Registration portal. This certificate is based on the details furnished by the enterprise.</p>\n" +
+                    "    <p><span class=\"bold\">For any assistance, you may contact:</span></p>\n" +
+                    "    <p>1. District Industry Centre: Check with your local DIC office</p>\n" +
+                    "    <p>2. MSME-DFO: Check with your regional MSME office</p>\n" +
+                    "  </div>\n" +
+                    "\n" +
+                    "  <div style=\"font-size:7pt; color:#888; text-align:right; padding:6px 10px 2px; border-top:1px solid #ddd; margin-top:6px;\">Generated by DukaanLocker on " + printDate + "</div>\n" +
                     "</div></body></html>";
 
             // Render to PDF
