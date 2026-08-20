@@ -76,7 +76,7 @@ fun DukaanLockerApp(
     var managerShopAssignments by remember { mutableStateOf<Map<Long, List<String>>>(emptyMap()) }
 
     // ── Navigation state ──
-    var currentScreen by remember { mutableStateOf("splash") }
+    var currentScreen by remember { mutableStateOf("onboarding") }
     var editShopTarget by remember { mutableStateOf<ShopResponse?>(null) }
     var selectedBottomTab by remember { mutableStateOf("home") }
 
@@ -444,13 +444,6 @@ fun DukaanLockerApp(
                             .fillMaxWidth()
                     ) {
                     when (currentScreen) {
-                        "splash" -> {
-                            SplashScreen(
-                                isDarkTheme = isDarkTheme,
-                                onSplashDone = { currentScreen = "onboarding" }
-                            )
-                        }
-
                         "onboarding" -> {
                             MainScreen(
                                 isDarkTheme = isDarkTheme,

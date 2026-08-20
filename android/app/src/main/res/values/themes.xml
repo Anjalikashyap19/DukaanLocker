@@ -2,4 +2,10 @@
 <resources>
 
     <style name="Theme.DukaanLocker" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.DukaanLocker.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#FFFFFF</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.DukaanLocker</item>
+    </style>
 </resources>

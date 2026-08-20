@@ -11,9 +11,12 @@ import org.springframework.web.client.RestClient;
  *
  * <p>Credentials are read from environment variables ({@code FAST2SMS_API_KEY},
  * {@code FAST2SMS_SENDER_ID}, {@code FAST2SMS_TEMPLATE_ID}) so they are never
- * hardcoded. The DLT-approved sender id and template id are required for OTP
- * SMS to reach arbitrary Indian mobile numbers (trial accounts only deliver to
- * the account owner's own number).</p>
+ * hardcoded. The DLT-approved sender id and OTP template id are required for
+ * OTP SMS to reach arbitrary Indian mobile numbers (trial accounts only
+ * deliver to the account owner's own number).</p>
+ *
+ * <p>Messages are sent through the dedicated OTP endpoint
+ * {@code POST /dev/otp/send} rather than the legacy bulkV2 OTP route.</p>
  */
 @Configuration
 public class Fast2SmsConfig {
@@ -24,13 +27,16 @@ public class Fast2SmsConfig {
     @Value("${fast2sms.sender-id:${FAST2SMS_SENDER_ID:}}")
     private String senderId;
 
-    @Value("${fast2sms.route:otp}")
-    private String route;
-
     @Value("${fast2sms.template-id:${FAST2SMS_TEMPLATE_ID:}}")
     private String templateId;
 
-    @Value("${fast2sms.base-url:https://www.fast2sms.com/dev/bulkV2}")
+    @Value("${fast2sms.otp-expiry-minutes:5}")
+    private int otpExpiryMinutes;
+
+    @Value("${fast2sms.otp-length:6}")
+    private int otpLength;
+
+    @Value("${fast2sms.base-url:https://www.fast2sms.com}")
     private String baseUrl;
 
     @Bean
@@ -42,7 +48,8 @@ public class Fast2SmsConfig {
 
     public String getApiKey() { return apiKey; }
     public String getSenderId() { return senderId; }
-    public String getRoute() { return route; }
     public String getTemplateId() { return templateId; }
+    public int getOtpExpiryMinutes() { return otpExpiryMinutes; }
+    public int getOtpLength() { return otpLength; }
     public String getBaseUrl() { return baseUrl; }
 }

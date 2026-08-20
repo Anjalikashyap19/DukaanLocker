@@ -29,6 +29,18 @@ This document lists all required environment variables for deploying DukaanLocke
 | `OLA_MAPS_BASE_URL` | Ola Maps API base URL | `https://api.olamaps.io` | `https://api.olamaps.io` |
 | `SERVER_PORT` | Application port | `8081` | `8081` |
 
+### SMS (Fast2SMS — OTP delivery for MSME login)
+
+These power `POST /dev/otp/send`. Before they work, the Fast2SMS account must
+have: KYC completed, a wallet top-up of at least ₹100, and a DLT-approved sender
+ID + OTP template. Trial accounts only deliver to the account owner's number.
+
+| Variable | Description | Example | Default |
+|----------|-------------|---------|---------|
+| `FAST2SMS_API_KEY` | Fast2SMS Authorization key (Dev API section) | `your-api-key` | None |
+| `FAST2SMS_SENDER_ID` | DLT-approved 3-6 letter sender ID | `FSTSMS` | None |
+| `FAST2SMS_TEMPLATE_ID` | DLT-approved OTP template ID (`otp_id`) | `your-template-id` | None |
+
 ## AWS Services Configuration
 
 ### Amazon S3

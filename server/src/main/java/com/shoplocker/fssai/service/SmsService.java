@@ -1,32 +1,35 @@
 package com.shoplocker.fssai.service;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shoplocker.fssai.config.Fast2SmsConfig;
 import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.MediaType;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
- * Sends SMS via the Fast2SMS gateway (https://www.fast2sms.com/dev/bulkV2).
+ * Sends OTP SMS via the Fast2SMS dedicated OTP endpoint
+ * ({@code POST https://www.fast2sms.com/dev/otp/send}).
  *
- * <p>Used for OTP delivery in the MSME login flow. The OTP route requires a
- * DLT-approved sender id + template — the template must contain a placeholder
- * that Fast2SMS substitutes via {@code variables_values}.</p>
+ * <p>Used for OTP delivery in the MSME login flow. Unlike the legacy
+ * {@code /dev/bulkV2?route=otp} form endpoint, this API takes a JSON body with
+ * the DLT-approved OTP template id ({@code otp_id}), lets us pass our own OTP
+ * value, and returns a {@code status_code} that pinpoints the failure reason
+ * (KYC not done, wallet not topped up, template not approved, spam gate,
+ * etc.) so the cause is never swallowed.</p>
  *
- * <p>If no API key is configured (local dev), the send is skipped (logged) so
- * the rest of the flow stays exercisable; it does NOT throw, to avoid hard
- * failures when SMS is not provisioned.</p>
+ * <p>If the API key or template id is not configured (local dev), the send is
+ * skipped (logged) so the rest of the flow stays exercisable; it does NOT
+ * throw, to avoid hard failures when SMS is not provisioned.</p>
  */
 @Service
 public class SmsService {
@@ -48,36 +51,54 @@ public class SmsService {
             log.warn("Fast2SMS API key not configured — SKIPPING OTP SMS to {} (dev mode)", mask(mobile));
             return;
         }
+        if (config.getTemplateId() == null || config.getTemplateId().isBlank()) {
+            log.warn("Fast2SMS OTP template id not configured — SKIPPING OTP SMS to {} (dev mode)", mask(mobile));
+            return;
+        }
 
-        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("route", config.getRoute());
-        form.add("sender_id", config.getSenderId());
-        form.add("template_id", config.getTemplateId());
-        form.add("variables_values", otp);
-        form.add("numbers", mobile);
-        form.add("language", "english");
-        form.add("flash", "0");
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("mobile", mobile);
+        body.put("otp_id", config.getTemplateId());
+        body.put("otp_expiry", config.getOtpExpiryMinutes());
+        body.put("otp_length", config.getOtpLength());
+        body.put("otp", otp);
 
         try {
-            String body = restClient.post()
-                    .header("authorization", config.getApiKey())
-                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                    .body(form)
-                    .retrieve()
-                    .body(String.class);
+            String jsonBody = objectMapper.writeValueAsString(body);
 
-            Fast2SmsResponse response = objectMapper.readValue(body, Fast2SmsResponse.class);
-            if (!Boolean.TRUE.equals(response.returnValue)) {
-                log.error("Fast2SMS OTP send rejected: {}", body);
+            // Use exchange() instead of retrieve() so 4xx/5xx bodies (which carry
+            // the real Fast2SMS status_code) are read instead of thrown away.
+            String rawResponse = restClient.post()
+                    .uri("/dev/otp/send")
+                    .header("authorization", config.getApiKey())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(jsonBody)
+                    .exchange((request, response) -> {
+                        byte[] bytes = response.getBody().readAllBytes();
+                        return new String(bytes, StandardCharsets.UTF_8);
+                    });
+
+            log.info("Fast2SMS /dev/otp/send response for {}: {}", mask(mobile), rawResponse);
+
+            JsonNode node = (rawResponse == null || rawResponse.isBlank())
+                    ? null : objectMapper.readTree(rawResponse);
+
+            if (node == null || !node.path("return").asBoolean(false)) {
+                int statusCode = node != null ? node.path("status_code").asInt(0) : 0;
+                String f2sMessage = node != null ? node.path("message").asText("") : "";
+                log.error("Fast2SMS OTP send rejected: status_code={} message={}", statusCode, f2sMessage);
                 throw new FssaiException(
-                        "We couldn't send the OTP right now. Please try again.",
+                        "We couldn't send the OTP right now. Fast2SMS error " + statusCode
+                                + (f2sMessage.isBlank() ? "." : ": " + f2sMessage + "."),
                         FailureCode.SMS_FAILURE);
             }
-            log.info("Fast2SMS OTP sent to {}", mask(mobile));
+
+            log.info("Fast2SMS OTP sent to {} (request_id={})",
+                    mask(mobile), node.path("request_id").asText(""));
         } catch (FssaiException e) {
             throw e;
         } catch (Exception e) {
-            log.error("Fast2SMS OTP send error: {}", e.getMessage());
+            log.error("Fast2SMS OTP send error: {}", e.getMessage(), e);
             throw new FssaiException(
                     "We couldn't send the OTP right now. Please try again.",
                     FailureCode.SMS_FAILURE);
@@ -87,20 +108,5 @@ public class SmsService {
     private static String mask(String mobile) {
         if (mobile == null || mobile.length() < 4) return "****";
         return "*******" + mobile.substring(mobile.length() - 3);
-    }
-
-    /** Fast2SMS JSON envelope (only the fields we read). */
-    public static class Fast2SmsResponse {
-        @JsonProperty("return")
-        public Boolean returnValue;
-
-        @JsonProperty("request_id")
-        public String requestId;
-
-        @JsonProperty("message")
-        public java.util.List<String> message;
-
-        @JsonProperty("error")
-        public java.util.List<String> error;
     }
 }

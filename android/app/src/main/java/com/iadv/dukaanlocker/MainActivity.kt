@@ -14,6 +14,7 @@ import com.iadv.dukaanlocker.api.GoogleSignInHelper
 import com.iadv.dukaanlocker.api.ApiClient
 import com.iadv.dukaanlocker.api.GoogleRegisterRequest
 import com.iadv.dukaanlocker.api.parseErrorMessage
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -94,6 +95,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         applyLanguage()
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         

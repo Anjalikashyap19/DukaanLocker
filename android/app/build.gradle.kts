@@ -68,6 +68,9 @@ dependencies {
     
     // Biometric Authentication
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
+
+    // Splash Screen (system splash for Android 12+ and unified splash on older versions)
+    implementation(libs.androidx.core.splashscreen)
     
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
