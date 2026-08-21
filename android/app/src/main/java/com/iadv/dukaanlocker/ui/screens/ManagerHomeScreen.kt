@@ -364,17 +364,38 @@ private fun DocumentItemCard(
                         Text("REG: ${doc.regNumber}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
                         Text("Exp: ${doc.expiryDate}", fontSize = 10.sp, color = colors.textSecondary)
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        // View
-                        Box(
-                            modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.border).clickable { onView() },
-                            contentAlignment = Alignment.Center
-                        ) { Icon(Icons.Default.Visibility, contentDescription = null, tint = colors.accent, modifier = Modifier.size(14.dp)) }
-                        // Reupload
-                        Box(
-                            modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.secondary.copy(alpha = 0.15f)).clickable { onUpload() },
-                            contentAlignment = Alignment.Center
-                        ) { Icon(Icons.Default.Refresh, contentDescription = "Reupload", tint = colors.secondary, modifier = Modifier.size(14.dp)) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = onView,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = colors.primary.copy(alpha = 0.1f),
+                                contentColor = colors.primary
+                            ),
+                            border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("View", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = onUpload,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = colors.secondary.copy(alpha = 0.1f),
+                                contentColor = colors.secondary
+                            ),
+                            border = BorderStroke(1.dp, colors.secondary.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Re-upload", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
