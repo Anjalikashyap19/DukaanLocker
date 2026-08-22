@@ -226,6 +226,7 @@ fun LoginScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.background)
+            .imePadding()
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -757,15 +758,14 @@ private fun RegisterForm(
 ) {
     Card(
         modifier = Modifier
-            .fillMaxWidth()
-            .fillMaxHeight(),
+            .fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = colors.cardBg),
         border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.6f)),
         shape = RoundedCornerShape(20.dp)
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)

@@ -274,28 +274,30 @@ fun MainScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // ── Categories grid (3 columns, square cards) ──
-            categories.chunked(3).forEachIndexed { rowIdx, row ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    row.forEachIndexed { colIdx, cat ->
-                        val globalIdx = rowIdx * 3 + colIdx
-                        CategorySquareCard(
-                            name = AppStrings.get(lang, cat),
-                            icon = catIcons.getOrElse(globalIdx) { Icons.Default.Business },
-                            accent = catColors.getOrElse(globalIdx) { colors.primary },
-                            colors = colors,
-                            modifier = Modifier.weight(1f)
-                        )
+            // ── Categories list (2 columns, flexible height) ──
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                categories.chunked(2).forEach { row ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        row.forEachIndexed { colIdx, cat ->
+                            val globalIdx = categories.indexOf(cat)
+                            CategoryListCard(
+                                name = AppStrings.get(lang, cat),
+                                icon = catIcons.getOrElse(globalIdx) { Icons.Default.Business },
+                                accent = catColors.getOrElse(globalIdx) { colors.primary },
+                                colors = colors,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (row.size == 1) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
                     }
-                    repeat(3 - row.size) {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                }
-                if (rowIdx < categories.chunked(3).size - 1) {
-                    Spacer(modifier = Modifier.height(10.dp))
                 }
             }
 
@@ -503,7 +505,7 @@ private fun DocumentsCarousel(lang: String, colors: AppColors) {
 }
 
 @Composable
-private fun CategorySquareCard(
+private fun CategoryListCard(
     name: String,
     icon: ImageVector,
     accent: Color,
@@ -511,22 +513,21 @@ private fun CategorySquareCard(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier.aspectRatio(1f),
+        modifier = modifier,
         shape = RoundedCornerShape(14.dp),
         color = colors.cardBg,
         tonalElevation = 0.dp,
         shadowElevation = 1.dp
     ) {
-        Column(
+        Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(36.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(accent.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
@@ -538,16 +539,13 @@ private fun CategorySquareCard(
                     tint = accent
                 )
             }
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.width(10.dp))
             Text(
                 text = name,
-                fontSize = 10.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = colors.textPrimary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                lineHeight = 12.sp
+                lineHeight = 16.sp
             )
         }
     }

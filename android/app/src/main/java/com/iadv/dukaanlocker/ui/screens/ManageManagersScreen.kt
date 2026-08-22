@@ -199,7 +199,7 @@ private fun ManagerCard(
                     ) {
                         Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("${biz.name} • ${biz.category}", fontSize = 13.sp, color = Color.White.copy(alpha = 0.8f))
+                        Text("${biz.name} • ${biz.category}", fontSize = 13.sp, color = colors.textPrimary)
                     }
                 }
             }
