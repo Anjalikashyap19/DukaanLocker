@@ -1,0 +1,23 @@
+services:
+  localstack:
+    image: localstack/localstack:latest
+    container_name: dukaanlocker-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3,textract
+      - DEBUG=0
+      # Textract requires a LocalStack Pro key. Get a free key at
+      # https://localstack.cloud and uncomment the line below to enable OCR locally.
+      # - LICENSE_KEY=your-pro-key
+    volumes:
+      - "./localstack/init:/etc/localstack/init"
+      - "localstack-data:/var/lib/localstack"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  localstack-data:

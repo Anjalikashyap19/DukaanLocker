@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.StoreMallDirectory
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -48,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.iadv.dukaanlocker.*
+import com.iadv.dukaanlocker.api.ShopResponse
 import com.iadv.dukaanlocker.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -1106,5 +1109,322 @@ private fun CertificateField(label: String, value: String, isHighlight: Boolean 
             color = textColor, fontFamily = if (isHighlight) FontFamily.Monospace else FontFamily.Default)
         Spacer(modifier = Modifier.height(2.dp))
         HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f), thickness = 0.5.dp)
+    }
+}
+
+// ── Docs Screen (bottom-nav "Docs" tab) ───────────────────────────────────────
+@Composable
+fun DocsScreen(
+    documents: List<DocumentItem>,
+    onFetchDoc: (DocumentItem) -> Unit,
+    onUploadDoc: (DocumentItem) -> Unit,
+    onViewDoc: (DocumentItem) -> Unit,
+    businesses: List<ShopResponse> = emptyList()
+) {
+    val colors = LocalAppColors.current
+    val shopNameById = businesses.associate { it.id.toString() to it.shopName }
+    val grouped = documents.groupBy { it.type }
+    val orderedTypes = grouped.keys.sortedBy { grouped[it]?.first()?.name ?: it }
+
+    Column(modifier = Modifier.fillMaxSize().background(colors.background)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = colors.background,
+            shadowElevation = 4.dp
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+                Text(
+                    "Documents",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textPrimary
+                )
+                Text(
+                    if (documents.isEmpty()) "No documents yet"
+                    else "${documents.size} document${if (documents.size == 1) "" else "s"} across ${businesses.size} business${if (businesses.size == 1) "" else "es"}",
+                    fontSize = 12.sp,
+                    color = colors.textSecondary
+                )
+            }
+        }
+
+        if (documents.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.Description,
+                        contentDescription = null,
+                        tint = colors.textSecondary.copy(alpha = 0.3f),
+                        modifier = Modifier.size(96.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("No Documents", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary)
+                    Text("Upload or auto-fetch documents from a business", fontSize = 14.sp, color = colors.textSecondary.copy(alpha = 0.6f))
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(orderedTypes) { type ->
+                    val docs = grouped[type] ?: emptyList()
+                    DocTypeSection(
+                        title = docs.first().name,
+                        count = docs.size,
+                        docs = docs,
+                        shopNameById = shopNameById,
+                        onFetchDoc = onFetchDoc,
+                        onUploadDoc = onUploadDoc,
+                        onViewDoc = onViewDoc
+                    )
+                }
+                item { Spacer(modifier = Modifier.height(72.dp)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DocTypeSection(
+    title: String,
+    count: Int,
+    docs: List<DocumentItem>,
+    shopNameById: Map<String, String>,
+    onFetchDoc: (DocumentItem) -> Unit,
+    onUploadDoc: (DocumentItem) -> Unit,
+    onViewDoc: (DocumentItem) -> Unit
+) {
+    val colors = LocalAppColors.current
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBg),
+        border = BorderStroke(1.dp, colors.border),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Description, contentDescription = null, tint = colors.primary, modifier = Modifier.size(22.dp))
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                    Text(
+                        "$count document${if (count == 1) "" else "s"}",
+                        fontSize = 12.sp,
+                        color = colors.textSecondary
+                    )
+                }
+                Icon(
+                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = colors.textSecondary
+                )
+            }
+
+            if (expanded) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    docs.forEach { doc ->
+                        Column {
+                            val shopName = shopNameById[doc.businessId]
+                            if (!shopName.isNullOrBlank()) {
+                                Text(
+                                    shopName,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = colors.secondary,
+                                    modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+                                )
+                            }
+                            DocumentCard(
+                                doc = doc,
+                                onFetch = { onFetchDoc(doc) },
+                                onUpload = { onUploadDoc(doc) },
+                                onView = { onViewDoc(doc) },
+                                onDelete = { }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+    }
+}
+
+// ── Settings Screen (bottom-nav "Settings" tab) ───────────────────────────────
+@Composable
+fun SettingsScreen(
+    isDarkTheme: Boolean,
+    onToggleTheme: () -> Unit,
+    user: UserAccount,
+    onLogout: () -> Unit,
+    businesses: List<ShopResponse> = emptyList()
+) {
+    val colors = LocalAppColors.current
+    Column(modifier = Modifier.fillMaxSize().background(colors.background)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = colors.background,
+            shadowElevation = 4.dp
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+                Text("Settings", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                Text("Account & preferences", fontSize = 12.sp, color = colors.textSecondary)
+            }
+        }
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                if (businesses.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            "Businesses you manage",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.primary,
+                            letterSpacing = 1.sp
+                        )
+                        businesses.forEach { shop ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = colors.cardBg),
+                                border = BorderStroke(1.dp, colors.border),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .clip(CircleShape)
+                                                .background(colors.primary.copy(alpha = 0.2f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary, modifier = Modifier.size(24.dp))
+                                        }
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column {
+                                            Text(shop.shopName.ifBlank { "Business" }, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                                            Text(user.role, fontSize = 12.sp, color = colors.primary, fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    HorizontalDivider(color = colors.border)
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("Owner: ${shop.ownerName}", fontSize = 14.sp, color = colors.textSecondary)
+                                    Text("Mobile: +91 ${shop.mobile}", fontSize = 14.sp, color = colors.textSecondary)
+                                    val businessAddress = listOfNotNull(shop.address, shop.city, shop.state, shop.pincode)
+                                        .filter { it.isNotBlank() }
+                                        .joinToString(", ")
+                                    if (businessAddress.isNotBlank()) {
+                                        Text("Address: $businessAddress", fontSize = 14.sp, color = colors.textSecondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBg),
+                    border = BorderStroke(1.dp, colors.border),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(colors.primary.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary, modifier = Modifier.size(24.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(user.name.ifBlank { "User" }, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                                Text(user.role, fontSize = 12.sp, color = colors.primary, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider(color = colors.border)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Mobile: +91 ${user.mobile}", fontSize = 14.sp, color = colors.textSecondary)
+                        if (user.email.isNotBlank()) {
+                            Text("Email: ${user.email}", fontSize = 14.sp, color = colors.textSecondary)
+                        }
+                    }
+                }
+                }
+            }
+
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBg),
+                    border = BorderStroke(1.dp, colors.border),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                        TextButton(
+                            onClick = onToggleTheme,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                    contentDescription = "Toggle theme",
+                                    modifier = Modifier.size(20.dp),
+                                    tint = colors.primary
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    if (isDarkTheme) "Switch to Light Theme" else "Switch to Dark Theme",
+                                    color = colors.primary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                        HorizontalDivider(color = colors.border)
+                        TextButton(
+                            onClick = onLogout,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Logout, contentDescription = null, tint = Color.Red, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text("Logout & Clear Session", color = Color.Red, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(24.dp)) }
+        }
     }
 }

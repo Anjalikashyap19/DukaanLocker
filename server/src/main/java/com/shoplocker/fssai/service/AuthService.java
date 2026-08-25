@@ -1,6 +1,8 @@
 package com.shoplocker.fssai.service;
 
 import com.shoplocker.fssai.dto.AuthResponse;
+import java.util.UUID;
+import java.util.regex.Pattern;
 import com.shoplocker.fssai.dto.BiometricLoginRequest;
 import com.shoplocker.fssai.dto.GoogleRegisterRequest;
 import com.shoplocker.fssai.dto.LoginRequest;
@@ -503,20 +505,57 @@ public class AuthService {
         User user = new User();
         user.setUserName(userName);
         user.setMobileNumber(mobile);
-        // Store emailId: use the provided email if available, otherwise fall
-        // back to the MSME (Udyam) number so this column is never null.
-        // Always normalize to lowercase so lookups (findByEmailId) work reliably
-        // regardless of database collation.
-        String emailToStore = (requestEmailId != null && !requestEmailId.isBlank())
-                ? requestEmailId.trim().toLowerCase()
-                : udyamNumber.toLowerCase();
-        user.setEmailId(emailToStore);
+        // Resolve emailId WITHOUT ever storing the Udyam number (leaking the MSME
+        // number through API responses is a security risk). Preference:
+        // client-supplied email -> certificate-parsed email -> opaque unique dummy.
+        // The column stays non-null via the generated dummy; login/resolution uses
+        // the MSME_CERTIFICATE document, never emailId.
+        user.setEmailId(resolveMsmeEmail(requestEmailId, parsedData));
         user.setPassword(null);
         user.setRole(Role.ADMIN);
         user.setEnabled(true);
         user.setMsmeUser(true);
 
         return userRepository.save(user);
+    }
+
+    // Opaque, non-revealing dummy email domain. Must never equal a real address
+    // and must stay distinct from any Udyam number.
+    private static final String DUMMY_EMAIL_DOMAIN = "dukaanlocker.com";
+    private static final Pattern EMAIL_PATTERN = Pattern.compile(
+            "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b");
+
+    /**
+     * Determines the emailId for an MSME user.
+     * Order: client-supplied email (most trusted) -> email parsed from the
+     * government certificate -> an opaque, unique dummy. The Udyam number is
+     * NEVER used, to avoid leaking the MSME number through API responses.
+     */
+    private String resolveMsmeEmail(String requestEmailId, MsmeParsedData parsedData) {
+        if (isValidEmail(requestEmailId)) {
+            return requestEmailId.trim().toLowerCase();
+        }
+        if (parsedData != null && isValidEmail(parsedData.getEmailId())) {
+            return parsedData.getEmailId().trim().toLowerCase();
+        }
+        return generateDummyEmail();
+    }
+
+    private boolean isValidEmail(String email) {
+        return email != null && !email.isBlank() && EMAIL_PATTERN.matcher(email).find();
+    }
+
+    /**
+     * Generates a unique opaque dummy email (e.g. msme-<uuid>@dukaanlocker.com)
+     * so the non-null emailId constraint is satisfied without exposing PII or
+     * the Udyam number. Retries until a free address is found.
+     */
+    private String generateDummyEmail() {
+        String email;
+        do {
+            email = "msme-" + UUID.randomUUID().toString().replace("-", "") + "@" + DUMMY_EMAIL_DOMAIN;
+        } while (userRepository.findByEmailId(email).isPresent());
+        return email;
     }
 
     /**

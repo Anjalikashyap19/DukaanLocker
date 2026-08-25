@@ -48,17 +48,18 @@ sealed class BottomNavItem(
 fun BottomNavBar(
     currentRoute: String,
     onNavigate: (String) -> Unit,
-    isDarkTheme: Boolean = true
+    isDarkTheme: Boolean = true,
+    showTeam: Boolean = true
 ) {
     val colors = LocalAppColors.current
 
-    val items = listOf(
-        BottomNavItem.Home,
-        BottomNavItem.Business,
-        BottomNavItem.Docs,
-        BottomNavItem.Team,
-        BottomNavItem.Settings
-    )
+    val items = buildList {
+        add(BottomNavItem.Home)
+        add(BottomNavItem.Business)
+        add(BottomNavItem.Docs)
+        if (showTeam) add(BottomNavItem.Team)
+        add(BottomNavItem.Settings)
+    }
 
     // ── Floating pill-shaped nav bar: ~94% width, compact height ──────────
     Box(

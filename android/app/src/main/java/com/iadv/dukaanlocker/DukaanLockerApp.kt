@@ -230,6 +230,42 @@ fun DukaanLockerApp(
         branchName = shop.branchName ?: ""
     )
 
+    // ── Helper: Map API documents to UI DocumentItem list ──
+    fun toDocumentItems(docs: List<DocumentResponse>): List<DocumentItem> = docs.map { doc ->
+        DocumentItem(
+            id = doc.id.toString(),
+            businessId = doc.shopId.toString(),
+            type = doc.documentType,
+            name = when (doc.documentType) {
+                "MSME_CERTIFICATE" -> "MSME Certificate"
+                "GST" -> "GST Registration"
+                "PAN" -> "PAN Card"
+                "FSSAI_FOOD_LICENSE" -> "FSSAI Food License"
+                "TRADE_LICENSE" -> "Trade License"
+                "SHOP_ESTABLISHMENT" -> "Shop & Establishment"
+                "PROFESSIONAL_TAX" -> "Professional Tax"
+                "TRADEMARK" -> "Trademark"
+                "PROPERTY_TAX" -> "Property Tax"
+                "IEC" -> "Import Export Code"
+                "POLLUTION_CONTROL" -> "Pollution Control"
+                "FIRE_SAFETY" -> "Fire Safety"
+                "LABOUR_LICENSE" -> "Labour License"
+                "SHOP_INSURANCE" -> "Shop Insurance"
+                "DRUG_LICENSE" -> "Drug License"
+                else -> doc.documentType.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }
+            },
+            status = when (doc.status) {
+                "UPLOADED", "VALID" -> "UPLOADED"
+                "NOT_UPLOADED" -> "MISSING"
+                else -> doc.status
+            },
+            regNumber = doc.documentNumber ?: "",
+            expiryDate = doc.expiryDate ?: "",
+            issueDate = doc.issueDate ?: "",
+            fileUrl = doc.fileUrl
+        )
+    }
+
     // ── Helper: Open a document using secure streaming flow ──
     // Navigates to DocumentViewerScreen which uses one-time view tokens
     // to securely stream documents from S3 without exposing URLs.
@@ -256,6 +292,7 @@ fun DukaanLockerApp(
     // ── Navigate to home screen ──
     fun navigateToHome() {
         currentScreen = if (currentUserRole == "MANAGER") "manager_home" else "owner_home"
+        selectedBottomTab = "home"
         scope.launch {
             loadShops()
             if (currentUserRole == "ADMIN") {
@@ -443,6 +480,121 @@ fun DukaanLockerApp(
                             .weight(1f)
                             .fillMaxWidth()
                     ) {
+                    // ── Bottom-nav tab content (driven by selectedBottomTab) ──
+                    val handleLogout: () -> Unit = {
+                        ApiClient.clearAuth(context)
+                        isLoggedIn = false
+                        authToken = null
+                        currentUserId = -1
+                        currentUserName = ""
+                        currentUserEmail = ""
+                        currentUserRole = ""
+                        currentUserManagerCode = ""
+                        navigateToLogin()
+                        Toast.makeText(context, "Logged out", Toast.LENGTH_SHORT).show()
+                    }
+
+                    val docsTabContent: @Composable () -> Unit = {
+                        DocsScreen(
+                            documents = toDocumentItems(shopDocuments),
+                            onFetchDoc = { doc -> fetchTargetDoc = doc; showFetchDialog = true },
+                            onUploadDoc = { doc -> pendingUploadDoc = doc; uploadLauncher.launch("*/*") },
+                            onViewDoc = { doc -> openDocument(doc) },
+                            businesses = shops
+                        )
+                    }
+
+                    val settingsTabContent: @Composable () -> Unit = {
+                        SettingsScreen(
+                            isDarkTheme = isDarkTheme,
+                            onToggleTheme = onToggleTheme,
+                            user = UserAccount(
+                                mobile = ApiClient.getUserMobile(context),
+                                name = currentUserName,
+                                email = currentUserEmail,
+                                role = currentUserRole
+                            ),
+                            onLogout = handleLogout,
+                            businesses = if (currentUserRole == "MANAGER") shops else emptyList()
+                        )
+                    }
+
+                    val manageManagersContent: @Composable () -> Unit = {
+                        ManageManagersScreen(
+                            managers = managers.map { mgr ->
+                                ManagerAccess(
+                                    code = mgr.managerCode ?: mgr.id.toString(),
+                                    managerName = mgr.userName,
+                                    id = mgr.id.toString(),
+                                    assignedBusinessIds = managerShopAssignments[mgr.id] ?: emptyList()
+                                )
+                            },
+                            businesses = shops.map { shop ->
+                                BusinessProfile(
+                                    id = shop.id.toString(),
+                                    name = shop.shopName,
+                                    ownerName = shop.ownerName,
+                                    category = shop.category,
+                                    scale = shop.scale,
+                                    state = shop.state,
+                                    city = shop.city,
+                                    branchName = shop.branchName ?: ""
+                                )
+                            },
+                            managerShopAssignments = managerShopAssignments.mapKeys { it.key.toString() }.mapValues { it.value },
+                            onAddManager = { name, bizList ->
+                                scope.launch {
+                                    isLoading = true
+                                    try {
+                                        val timestamp = System.currentTimeMillis() % 10000000L
+                                        val uniqueMobile = "9${timestamp.toString().padStart(9, '0')}"
+                                        val uniqueSuffix = (1000..9999).random()
+                                        val emailPrefix = name.lowercase().replace(" ", ".")
+                                        val uniqueEmail = "${emailPrefix}${uniqueSuffix}@dukaanlocker.com"
+                                        val response = api.createManager(CreateManagerRequest(
+                                            userName = name,
+                                            mobileNumber = uniqueMobile,
+                                            emailId = uniqueEmail
+                                        ))
+                                        if (response.isSuccessful) {
+                                            val newMgr = response.body()!!
+                                            for (bizId in bizList) {
+                                                val shopId = bizId.toLongOrNull()
+                                                if (shopId != null) {
+                                                    api.assignShopToManager(newMgr.id, shopId)
+                                                }
+                                            }
+                                            loadManagers()
+                                            Toast.makeText(context, "Manager '$name' created!\nCode: ${newMgr.managerCode}", Toast.LENGTH_LONG).show()
+                                        } else {
+                                            Toast.makeText(context, "Failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
+                                        }
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                                    }
+                                    isLoading = false
+                                }
+                            },
+                            onDeleteManager = { code ->
+                                scope.launch {
+                                    val managerId = code.toLongOrNull()
+                                    if (managerId != null) {
+                                        for (shop in shops) {
+                                            try {
+                                                api.deactivateAssignment(managerId, shop.id)
+                                            } catch (e: Exception) {
+                                                android.util.Log.e("DukaanLocker", "Failed to deactivate assignment for manager $managerId", e)
+                                            }
+                                        }
+                                        loadManagers()
+                                        Toast.makeText(context, "Manager access revoked", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            onBack = { selectedBottomTab = "business" }
+                        )
+                    }
+
                     when (currentScreen) {
                         "onboarding" -> {
                             MainScreen(
@@ -829,6 +981,13 @@ fun DukaanLockerApp(
                         }
 
                         "owner_home" -> {
+                            if (selectedBottomTab == "docs") {
+                                docsTabContent()
+                            } else if (selectedBottomTab == "settings") {
+                                settingsTabContent()
+                            } else if (selectedBottomTab == "team") {
+                                manageManagersContent()
+                            } else {
                             OwnerHomeScreen(
                                 isDarkTheme = isDarkTheme,
                                 onToggleTheme = onToggleTheme,
@@ -953,7 +1112,7 @@ fun DukaanLockerApp(
                                     currentScreen = "add_business"
                                 },
                                 onManageManagers = {
-                                    currentScreen = "manage_managers"
+                                    selectedBottomTab = "team"
                                 },
                                 onFetchDoc = { doc ->
                                     fetchTargetDoc = doc
@@ -984,90 +1143,18 @@ fun DukaanLockerApp(
                                     Toast.makeText(context, "Logged out", Toast.LENGTH_SHORT).show()
                                 }
                             )
+                            }
                         }
 
-                        "manage_managers" -> {
-                            ManageManagersScreen(
-                                managers = managers.map { mgr ->
-                                    ManagerAccess(
-                                        code = mgr.managerCode ?: mgr.id.toString(),
-                                        managerName = mgr.userName,
-                                        id = mgr.id.toString(),
-                                        assignedBusinessIds = managerShopAssignments[mgr.id] ?: emptyList()
-                                    )
-                                },
-                                businesses = shops.map { shop ->
-                                    BusinessProfile(
-                                        id = shop.id.toString(),
-                                        name = shop.shopName,
-                                        ownerName = shop.ownerName,
-                                        category = shop.category,
-                                        scale = shop.scale,
-                                        state = shop.state,
-                                        city = shop.city,
-                                        branchName = shop.branchName ?: ""
-                                    )
-                                },
-                                managerShopAssignments = managerShopAssignments.mapKeys { it.key.toString() }.mapValues { it.value },
-                                onAddManager = { name, bizList ->
-                                    scope.launch {
-                                        isLoading = true
-                                        try {
-                                            // Create manager - backend auto-generates unique code
-                                            // Generate unique mobile and email to avoid conflicts
-                                            val timestamp = System.currentTimeMillis() % 10000000L
-                                            val uniqueMobile = "9${timestamp.toString().padStart(9, '0')}"
-                                            val uniqueSuffix = (1000..9999).random()
-                                            val emailPrefix = name.lowercase().replace(" ", ".")
-                                            val uniqueEmail = "${emailPrefix}${uniqueSuffix}@dukaanlocker.com"
-                                            val response = api.createManager(CreateManagerRequest(
-                                                userName = name,
-                                                mobileNumber = uniqueMobile,
-                                                emailId = uniqueEmail
-                                            ))
-                                            if (response.isSuccessful) {
-                                                val newMgr = response.body()!!
-                                                // Assign shops
-                                                for (bizId in bizList) {
-                                                    val shopId = bizId.toLongOrNull()
-                                                    if (shopId != null) {
-                                                        api.assignShopToManager(newMgr.id, shopId)
-                                                    }
-                                                }
-                                                loadManagers()
-                                                Toast.makeText(context, "Manager '$name' created!\nCode: ${newMgr.managerCode}", Toast.LENGTH_LONG).show()
-                                            } else {
-                                                Toast.makeText(context, "Failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
-                                            }
-                                        } catch (e: Exception) {
-                                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
-                                        }
-                                        isLoading = false
-                                    }
-                                },
-                                onDeleteManager = { code ->
-                                    scope.launch {
-                                        val managerId = code.toLongOrNull()
-                                        if (managerId != null) {
-                                            // Deactivate all shop assignments
-                                            for (shop in shops) {
-                                                try {
-                                                    api.deactivateAssignment(managerId, shop.id)
-                                                } catch (e: Exception) {
-                                                    // Log error for debugging
-                                                    android.util.Log.e("DukaanLocker", "Failed to deactivate assignment for manager $managerId", e)
-                                                }
-                                            }
-                                            loadManagers()
-                                            Toast.makeText(context, "Manager access revoked", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                },
-                                onBack = { currentScreen = "owner_home" }
-                            )
-                        }
 
                         "manager_home" -> {
+                            if (selectedBottomTab == "docs") {
+                                docsTabContent()
+                            } else if (selectedBottomTab == "settings") {
+                                settingsTabContent()
+                            } else if (selectedBottomTab == "team") {
+                                manageManagersContent()
+                            } else {
                             ManagerHomeScreen(
                                 isDarkTheme = isDarkTheme,
                                 onToggleTheme = onToggleTheme,
@@ -1149,6 +1236,7 @@ fun DukaanLockerApp(
                                     currentScreen = "login"
                                 }
                             )
+                            }
                         }
                     }
 
@@ -1292,17 +1380,9 @@ fun DukaanLockerApp(
                 if (isLoggedIn && currentScreen in listOf("owner_home", "manager_home")) {
                     BottomNavBar(
                         currentRoute = selectedBottomTab,
-                        onNavigate = { route ->
-                            selectedBottomTab = route
-                            when (route) {
-                                "home" -> { /* already on home */ }
-                                "business" -> { /* show business list */ }
-                                "docs" -> { /* navigate to docs view */ }
-                                "team" -> { currentScreen = "manage_managers" }
-                                "settings" -> { /* open settings */ }
-                            }
-                        },
-                        isDarkTheme = isDarkTheme
+                        onNavigate = { route -> selectedBottomTab = route },
+                        isDarkTheme = isDarkTheme,
+                        showTeam = currentUserRole != "MANAGER"
                     )
                 }
             }
