@@ -532,13 +532,22 @@ public class AuthService {
      * NEVER used, to avoid leaking the MSME number through API responses.
      */
     private String resolveMsmeEmail(String requestEmailId, MsmeParsedData parsedData) {
-        if (isValidEmail(requestEmailId)) {
+        // A real email is only used if it is actually free. Reusing an already
+        // registered email would trip the unique constraint and surface as a 500.
+        // MSME users never log in by email (they use Udyam number + OTP), so
+        // silently falling back to an opaque dummy is safe and avoids that crash.
+        if (isValidEmail(requestEmailId) && !emailExists(requestEmailId)) {
             return requestEmailId.trim().toLowerCase();
         }
-        if (parsedData != null && isValidEmail(parsedData.getEmailId())) {
+        if (parsedData != null && isValidEmail(parsedData.getEmailId())
+                && !emailExists(parsedData.getEmailId())) {
             return parsedData.getEmailId().trim().toLowerCase();
         }
         return generateDummyEmail();
+    }
+
+    private boolean emailExists(String email) {
+        return userRepository.findByEmailId(email.trim().toLowerCase()).isPresent();
     }
 
     private boolean isValidEmail(String email) {
@@ -642,11 +651,15 @@ public class AuthService {
             Document doc = new Document(shop, type);
 
             if (type == DocumentType.MSME_CERTIFICATE) {
-                // MSME certificate is uploaded with the PDF from S3
+                // MSME certificate is verified against the government portal. The PDF
+                // may be absent if PDF generation/S3 upload degraded gracefully — in
+                // that case the document is still VERIFIED, just without a file URL.
                 doc.setStatus(DocumentStatus.UPLOADED);
                 doc.setDocumentNumber(udyamNumber);
-                doc.setFileUrl(pdfUrl);
-                doc.setFileName("Udyam_Certificate_" + udyamNumber + ".pdf");
+                if (pdfUrl != null && !pdfUrl.isBlank()) {
+                    doc.setFileUrl(pdfUrl);
+                    doc.setFileName("Udyam_Certificate_" + udyamNumber + ".pdf");
+                }
                 doc.setIssueDate(now);
             } else {
                 // Other documents are pending upload

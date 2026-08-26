@@ -345,13 +345,25 @@ public class UdyamVerificationService {
                                 "Please try again with a fresh CAPTCHA.");
             }
 
-            // ── Convert HTML to PDF ──
-            byte[] pdfBytes = convertHtmlToPdf(printHtml, request.getUdyamNumber());
+            // ── Convert HTML to PDF + upload to S3 ──
+            // This step runs ONLY after the government portal has already confirmed
+            // the Udyam number is valid. A failure here (PDF rendering, S3 outage,
+            // missing fonts) must NOT abort an otherwise-successful verification —
+            // that previously surfaced as a bare 500 (pdf_processing_error). Instead
+            // we degrade gracefully: the registration still succeeds and we store the
+            // verified certificate HTML so the PDF can be regenerated later.
+            String pdfUrl = null;
+            try {
+                byte[] pdfBytes = convertHtmlToPdf(printHtml, request.getUdyamNumber());
 
-            // ── Upload PDF to S3 ──
-            String fileKey = "msme/verify/" + request.getUdyamNumber().toLowerCase()
-                    .replace(" ", "_") + "/udyam_certificate.pdf";
-            String pdfUrl = s3Service.uploadFile(pdfBytes, ContentType.APPLICATION_PDF.getMimeType(), fileKey);
+                String fileKey = "msme/verify/" + request.getUdyamNumber().toLowerCase()
+                        .replace(" ", "_") + "/udyam_certificate.pdf";
+                pdfUrl = s3Service.uploadFile(pdfBytes, ContentType.APPLICATION_PDF.getMimeType(), fileKey);
+            } catch (Exception e) {
+                log.error("Udyam number {} was verified but PDF generation/S3 upload failed. " +
+                        "Continuing registration without the certificate PDF; the HTML is retained " +
+                        "for later regeneration.", request.getUdyamNumber(), e);
+            }
 
             return UdyamVerifyResponse.ok(pdfUrl, printHtml, request.getUdyamNumber());
 
