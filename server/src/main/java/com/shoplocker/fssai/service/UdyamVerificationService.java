@@ -331,6 +331,13 @@ public class UdyamVerificationService {
 
             log.info("Udyam print page HTML length={}", printHtml.length());
 
+            // Guard against an absurdly large response (could OOM Jsoup/PDF render).
+            if (printHtml.length() > 2_000_000) {
+                return UdyamVerifyResponse.error(
+                        "The certificate returned by the government portal was unexpectedly large. " +
+                                "Please try again in a few minutes.");
+            }
+
             if (printHtml.length() < 200) {
                 return UdyamVerifyResponse.error(
                         "Could not retrieve the MSME certificate from the government portal. " +
@@ -369,11 +376,15 @@ public class UdyamVerificationService {
 
         } catch (FssaiException e) {
             throw e;
-        } catch (Exception e) {
-            log.error("Failed to verify Udyam number", e);
+        } catch (Throwable t) {
+            // Catch Throwable (not just Exception) so JVM Errors such as
+            // OutOfMemoryError from a very large certificate HTML / native
+            // PDF renderer crash are surfaced as a controlled 502 instead of
+            // escaping to the container as an unhandled 500.
+            log.error("Failed to verify Udyam number", t);
             throw new FssaiException(
                     "We couldn't complete the Udyam verification right now. Please try again in a few minutes.",
-                    FailureCode.TEXTRACT_FAILURE, e);
+                    FailureCode.TEXTRACT_FAILURE, t);
         }
     }
 

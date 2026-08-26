@@ -28,6 +28,9 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
@@ -80,6 +83,17 @@ public class AuthService {
     private final GoogleOAuthService googleOAuthService;
     private final LoginAttemptService loginAttemptService;
     private final OtpService otpService;
+
+    /**
+     * Self-reference (via the Spring proxy) so the DB-creation phase can run
+     * inside its own transaction even though {@link #registerWithMsme} must stay
+     * non-transactional (it makes long external HTTP/S3 calls). Without this,
+     * a direct {@code this.persistMsmeAccount(...)} call would bypass the
+     * transactional proxy and offer no atomicity.
+     */
+    @Lazy
+    @Autowired
+    private AuthService self;
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
@@ -438,17 +452,25 @@ public class AuthService {
             }
         }
 
-        // ── Step 3: Create User with parsed data ──
-        User savedUser = createMsmeUser(mobile, parsedData, udyamNumber, request.getEmailId());
+        // ── Steps 3-5: Create User, Shop and required documents atomically ──
+        // Runs in its own transaction (via self-proxy) so a failure rolls back
+        // completely instead of leaving orphaned rows, and so a constraint
+        // violation becomes a clean 409 instead of an unhandled 500.
+        MsmePersistResult persisted;
+        try {
+            persisted = self.persistMsmeAccount(
+                    mobile, parsedData, udyamNumber, request.getEmailId(), verifyResult.getPdfUrl());
+        } catch (DataIntegrityViolationException e) {
+            log.warn("MSME registration rolled back due to a data constraint (likely a duplicate email from a concurrent registration): {}", e.getMessage());
+            throw new FssaiException(
+                    "This account or its details are already registered. Please log in, or use a different email address.",
+                    FailureCode.DUPLICATE_MSME, e);
+        }
+        User savedUser = persisted.user();
+        Shop savedShop = persisted.shop();
         log.info("MSME user created: id={} mobile={} name={}",
                 savedUser.getId(), mobile, savedUser.getUserName());
-
-        // ── Step 4: Create Shop with parsed data ──
-        Shop savedShop = createMsmeShop(savedUser, parsedData, udyamNumber);
         log.info("MSME shop created: id={} name={}", savedShop.getId(), savedShop.getShopName());
-
-        // ── Step 5: Create required documents and attach MSME certificate ──
-        createRequiredDocuments(savedShop, verifyResult.getPdfUrl(), udyamNumber);
         log.info("Required documents created for shop {}", savedShop.getId());
 
         // ── Step 6: Generate JWT token ──
@@ -476,6 +498,38 @@ public class AuthService {
         msmeAuth.setShopAddress(savedShop.getAddress());
 
         return msmeAuth;
+    }
+
+    /**
+     * Result holder for {@link #persistMsmeAccount} — the persisted user and shop.
+     */
+    private record MsmePersistResult(User user, Shop shop) {}
+
+    /**
+     * Atomically persists the MSME user, shop and required documents in a single
+     * transaction. Invoked via the self-proxy ({@code self.persistMsmeAccount})
+     * so the {@code @Transactional} advice actually applies.
+     *
+     * <p>Running this as one transaction means any failure rolls back fully
+     * instead of leaving orphaned rows (user without shop, shop without docs).
+     * It also makes the Udyam number's registration durable only on success, so
+     * a later duplicate attempt is cleanly rejected at the pre-portal check
+     * rather than re-hitting the government portal or crashing with a 500.</p>
+     *
+     * @throws DataIntegrityViolationException if a uniqueness constraint is hit
+     *         (e.g. concurrent registration with the same parsed email). Callers
+     *         translate this into a clean 409.
+     */
+    @Transactional
+    public MsmePersistResult persistMsmeAccount(String mobile,
+                                                MsmeParsedData parsedData,
+                                                String udyamNumber,
+                                                String requestEmailId,
+                                                String pdfUrl) {
+        User savedUser = createMsmeUser(mobile, parsedData, udyamNumber, requestEmailId);
+        Shop savedShop = createMsmeShop(savedUser, parsedData, udyamNumber);
+        createRequiredDocuments(savedShop, pdfUrl, udyamNumber);
+        return new MsmePersistResult(savedUser, savedShop);
     }
 
     /**
