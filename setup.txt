@@ -1,3 +1,0 @@
-template id = 1277178764246130415
-sender id =IADVDL
-api key = HS0fza2yNb6rvxdThtX5V4PugLc7iwJ1eZKplDAWmR3qICsUMn6T38cQ2M1UagCNbnAhi9EqOItfeZHW

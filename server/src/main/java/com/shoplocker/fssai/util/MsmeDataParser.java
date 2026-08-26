@@ -252,29 +252,38 @@ public final class MsmeDataParser {
      * a label cell followed by a value cell.
      */
     private static void parseTableFields(Document doc, MsmeParsedData data) {
-        // Try table rows first (most common structure)
+        // 1) Table rows (primary, most reliable)
         Elements rows = doc.select("tr");
         for (Element row : rows) {
-            Elements cells = row.select("td");
+            Elements cells = row.select("td, th");
+            String label;
+            String value;
             if (cells.size() >= 2) {
-                String label = cells.get(0).text().trim().toLowerCase();
-                String value = cells.get(1).text().trim();
-                matchField(label, value, data);
+                label = cells.get(0).text().trim();
+                value = cells.get(1).text().trim();
+                if (value.isEmpty()) {
+                    String[] kv = splitLabelValue(label);
+                    if (kv != null) { label = kv[0]; value = kv[1]; }
+                }
+            } else if (cells.size() == 1) {
+                String[] kv = splitLabelValue(cells.get(0).text().trim());
+                if (kv == null) continue;
+                label = kv[0];
+                value = kv[1];
+            } else {
+                continue;
             }
+            if (value.isEmpty()) continue;
+            matchField(label.toLowerCase(), value, data);
         }
 
-        // Also try div-based layouts (some portal versions use divs)
-        Elements allElements = doc.select("div, span, p");
-        for (Element el : allElements) {
-            String text = el.text().trim();
-            if (text.contains(":")) {
-                String[] parts = text.split(":", 2);
-                if (parts.length == 2) {
-                    String label = parts[0].trim().toLowerCase();
-                    String value = parts[1].trim();
-                    matchField(label, value, data);
-                }
-            }
+        // 2) Leaf block elements as a supplement (only fills still-empty fields)
+        Elements leaves = doc.select("div, span, p, li");
+        for (Element el : leaves) {
+            if (!el.children().isEmpty()) continue; // ignore elements with nested markup
+            String[] kv = splitLabelValue(el.text().trim());
+            if (kv == null) continue;
+            matchField(kv[0].toLowerCase(), kv[1], data);
         }
     }
 
@@ -283,6 +292,20 @@ public final class MsmeDataParser {
      */
     private static void matchField(String label, String value, MsmeParsedData data) {
         if (value == null || value.isBlank()) return;
+
+        // Address building blocks are accumulated (deduped) regardless of order.
+        if (label.contains("flat") || label.contains("door") || label.contains("block no")
+                || label.contains("road") || label.contains("street") || label.contains("lane")
+                || label.contains("premises") || label.contains("building")) {
+            String existing = data.getAddress() != null ? data.getAddress() : "";
+            if (existing.toLowerCase().indexOf(value.toLowerCase()) < 0) {
+                data.setAddress((existing + " " + value).trim());
+            }
+            return;
+        }
+
+        // Don't overwrite a field that already has a value (first good match wins).
+        if (isFieldSet(data, label)) return;
 
         // Udyam Registration Number
         if (label.contains("udyam registration number") || label.contains("udyam no")
@@ -344,24 +367,7 @@ public final class MsmeDataParser {
                 || label.contains("nic code") || label.contains("activity type")
                 || label.contains("nic 2 digit") || label.contains("nic 4 digit")
                 || label.contains("nic 5 digit") || label.contains("activity")) {
-            // If the value contains a NIC code pattern, extract the description
-            Matcher nicMatcher = NIC_5DIGIT_PATTERN.matcher(value);
-            if (nicMatcher.find()) {
-                // Use the full NIC description
-                data.setMajorActivity(value);
-            } else {
-                nicMatcher = NIC_4DIGIT_PATTERN.matcher(value);
-                if (nicMatcher.find()) {
-                    data.setMajorActivity(value);
-                } else {
-                    nicMatcher = NIC_2DIGIT_PATTERN.matcher(value);
-                    if (nicMatcher.find()) {
-                        data.setMajorActivity(value);
-                    } else {
-                        data.setMajorActivity(value);
-                    }
-                }
-            }
+            data.setMajorActivity(value);
         }
         // Enterprise Type (Micro/Small/Medium)
         else if (label.contains("type of enterprise") || label.contains("enterprise type")
@@ -371,19 +377,6 @@ public final class MsmeDataParser {
         // Type of Organization
         else if (label.contains("type of organization") || label.contains("organization type")) {
             data.setTypeOfOrganization(value);
-        }
-        // Address components
-        else if (label.contains("flat") || label.contains("door") || label.contains("block no")) {
-            String existing = data.getAddress() != null ? data.getAddress() : "";
-            data.setAddress((existing + " " + value).trim());
-        }
-        else if (label.contains("road") || label.contains("street") || label.contains("lane")) {
-            String existing = data.getAddress() != null ? data.getAddress() : "";
-            data.setAddress((existing + " " + value).trim());
-        }
-        else if (label.contains("premises") || label.contains("building")) {
-            String existing = data.getAddress() != null ? data.getAddress() : "";
-            data.setAddress((existing + " " + value).trim());
         }
     }
 
@@ -423,5 +416,63 @@ public final class MsmeDataParser {
             sb.append(data.getPincode());
         }
         return sb.length() > 0 ? sb.toString().trim() : null;
+    }
+
+    /**
+     * Splits a "Label : Value" (or "Label - Value") string into its two parts.
+     * Returns {@code null} when there is no usable separator / value.
+     */
+    public static String[] splitLabelValue(String text) {
+        if (text == null) return null;
+        String t = text.trim();
+        if (t.length() < 3) return null;
+        int idx = t.indexOf(':');
+        if (idx <= 0) idx = t.indexOf('\u2013'); // en dash
+        if (idx <= 0) idx = t.indexOf('\u2014'); // em dash
+        if (idx <= 0) {
+            Matcher m = LEAF_SEP.matcher(t); // " - " with surrounding spaces
+            if (m.find()) idx = m.start() + 1;
+        }
+        if (idx <= 0 || idx >= t.length() - 1) return null;
+        String label = t.substring(0, idx).trim();
+        String value = t.substring(idx + 1).trim();
+        if (label.isEmpty() || value.isEmpty()) return null;
+        return new String[]{label, value};
+    }
+
+    private static final Pattern LEAF_SEP = Pattern.compile("\\s-\\s");
+
+    private static boolean isFieldSet(MsmeParsedData data, String label) {
+        if (label.contains("udyam registration number") || label.contains("udyam no")
+                || label.contains("registration number"))
+            return data.getUdyamNumber() != null && !data.getUdyamNumber().isBlank();
+        if (label.contains("name of enterprise") || label.contains("enterprise name")
+                || label.contains("name of business"))
+            return data.getEnterpriseName() != null && !data.getEnterpriseName().isBlank();
+        if (label.contains("name of entrepreneur") || label.contains("entrepreneur name")
+                || label.contains("owner name") || label.contains("proprietor name")
+                || label.contains("authorized signatory"))
+            return data.getEntrepreneurName() != null && !data.getEntrepreneurName().isBlank();
+        if (label.contains("mobile") || label.contains("phone"))
+            return data.getMobileNumber() != null && !data.getMobileNumber().isBlank();
+        if (label.contains("email"))
+            return data.getEmailId() != null && !data.getEmailId().isBlank();
+        if (label.contains("state"))
+            return data.getState() != null && !data.getState().isBlank();
+        if (label.contains("district"))
+            return data.getDistrict() != null && !data.getDistrict().isBlank();
+        if (label.contains("city") || label.contains("village/town") || label.contains("city/town/block"))
+            return data.getCity() != null && !data.getCity().isBlank();
+        if (label.contains("pin") || label.contains("pincode") || label.contains("postal"))
+            return data.getPincode() != null && !data.getPincode().isBlank();
+        if (label.contains("major activity") || label.contains("business activity")
+                || label.contains("nic") || label.contains("activity"))
+            return data.getMajorActivity() != null && !data.getMajorActivity().isBlank();
+        if (label.contains("type of enterprise") || label.contains("enterprise type")
+                || label.contains("msme type") || label.contains("classification"))
+            return data.getEnterpriseType() != null && !data.getEnterpriseType().isBlank();
+        if (label.contains("type of organization") || label.contains("organization type"))
+            return data.getTypeOfOrganization() != null && !data.getTypeOfOrganization().isBlank();
+        return false;
     }
 }

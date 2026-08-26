@@ -1,5 +1,6 @@
 package com.shoplocker.fssai.service;
 
+import com.shoplocker.fssai.config.Fast2SmsConfig;
 import com.shoplocker.fssai.entity.OtpChallenge;
 import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.LocalDateTime;
 
 /**
@@ -19,11 +21,20 @@ import java.time.LocalDateTime;
  *
  * <p>OTP lifecycle:</p>
  * <ul>
- *   <li>Request: any prior challenge for the mobile/purpose is deleted, a fresh
- *       OTP is generated, hashed (BCrypt) and stored, then delivered via SMS.</li>
+ *   <li>Request: a resend cooldown is enforced (one OTP per window) to prevent
+ *       OTP bombing / SMS cost abuse; any prior challenge for the mobile/purpose
+ *       is deleted, a fresh OTP is generated, hashed (BCrypt) and stored, then
+ *       delivered via SMS.</li>
  *   <li>Verify: checks expiry, attempt ceiling, and hash match; on success the
- *       challenge is marked consumed (single-use).</li>
+ *       challenge is marked consumed (single-use). Verification is bound to the
+ *       Udyam number as well as the mobile, so an OTP issued for one MSME account
+ *       cannot be used to log into a different account that happens to share a
+ *       mobile number.</li>
  * </ul>
+ *
+ * <p>OTP length and expiry are the single source of truth from
+ * {@link Fast2SmsConfig} so the gateway's accepted window and the server's
+ * stored window can never diverge.</p>
  */
 @Service
 public class OtpService {
@@ -34,27 +45,40 @@ public class OtpService {
     private final OtpChallengeRepository otpRepository;
     private final SmsService smsService;
     private final PasswordEncoder passwordEncoder;
-
-    @Value("${otp.length:6}")
-    private int otpLength;
-
-    @Value("${otp.expiry-seconds:300}")
-    private int expirySeconds;
+    private final Fast2SmsConfig fast2SmsConfig;
 
     @Value("${otp.max-attempts:5}")
     private int maxAttempts;
 
+    @Value("${otp.resend-cooldown-seconds:30}")
+    private int resendCooldownSeconds;
+
     public OtpService(OtpChallengeRepository otpRepository,
                       SmsService smsService,
-                      PasswordEncoder passwordEncoder) {
+                      PasswordEncoder passwordEncoder,
+                      Fast2SmsConfig fast2SmsConfig) {
         this.otpRepository = otpRepository;
         this.smsService = smsService;
         this.passwordEncoder = passwordEncoder;
+        this.fast2SmsConfig = fast2SmsConfig;
     }
 
     /** Creates a fresh OTP for the mobile and delivers it via SMS. Returns the challenge id. */
     @Transactional
     public String requestOtp(String msmeNumber, String mobile) {
+        // Resend cooldown: throttle OTP generation to one per resendCooldownSeconds
+        // to prevent OTP bombing / SMS cost abuse.
+        otpRepository.findTopByMobileAndPurposeOrderByCreatedAtDesc(mobile, OtpChallenge.PURPOSE_MSME_LOGIN)
+                .ifPresent(recent -> {
+                    long ageSeconds = Duration.between(recent.getCreatedAt(), LocalDateTime.now()).getSeconds();
+                    if (ageSeconds < resendCooldownSeconds) {
+                        throw new FssaiException(
+                                "Please wait " + (resendCooldownSeconds - ageSeconds) +
+                                        " seconds before requesting a new OTP.",
+                                FailureCode.TOO_MANY_ATTEMPTS);
+                    }
+                });
+
         otpRepository.deleteByMobileAndPurpose(mobile, OtpChallenge.PURPOSE_MSME_LOGIN);
 
         String otp = generateOtp();
@@ -63,7 +87,7 @@ public class OtpService {
         challenge.setMobile(mobile);
         challenge.setOtpHash(passwordEncoder.encode(otp));
         challenge.setPurpose(OtpChallenge.PURPOSE_MSME_LOGIN);
-        challenge.setExpiresAt(LocalDateTime.now().plusSeconds(expirySeconds));
+        challenge.setExpiresAt(LocalDateTime.now().plusMinutes(fast2SmsConfig.getOtpExpiryMinutes()));
         challenge.setAttempts(0);
         challenge.setVerified(false);
         OtpChallenge saved = otpRepository.save(challenge);
@@ -73,13 +97,15 @@ public class OtpService {
     }
 
     /**
-     * Verifies the OTP for the given mobile. Throws on missing/expired/used/wrong
-     * OTP or when the attempt ceiling is hit. On success the challenge is consumed.
+     * Verifies the OTP for the given mobile + Udyam number. Throws on
+     * missing/expired/used/wrong OTP or when the attempt ceiling is hit. On
+     * success the challenge is consumed.
      */
     @Transactional
-    public void verifyOtp(String mobile, String otp) {
+    public void verifyOtp(String mobile, String msmeNumber, String otp) {
         OtpChallenge challenge = otpRepository
-                .findTopByMobileAndPurposeOrderByCreatedAtDesc(mobile, OtpChallenge.PURPOSE_MSME_LOGIN)
+                .findTopByMobileAndMsmeNumberAndPurposeOrderByCreatedAtDesc(
+                        mobile, msmeNumber, OtpChallenge.PURPOSE_MSME_LOGIN)
                 .orElseThrow(() -> new FssaiException(
                         "Invalid or expired OTP. Please request a new one.",
                         FailureCode.INVALID_OTP));
@@ -116,12 +142,13 @@ public class OtpService {
         // Consume the challenge (single-use).
         challenge.setVerified(true);
         otpRepository.save(challenge);
-        log.info("OTP verified for mobile {}", mobile);
+        log.info("OTP verified for mobile {} udyam {}", mobile, msmeNumber);
     }
 
     private String generateOtp() {
-        int bound = (int) Math.pow(10, otpLength);
+        int length = fast2SmsConfig.getOtpLength();
+        int bound = (int) Math.pow(10, length);
         int value = RANDOM.nextInt(bound);
-        return String.format("%0" + otpLength + "d", value);
+        return String.format("%0" + length + "d", value);
     }
 }

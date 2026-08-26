@@ -853,7 +853,7 @@ public class AuthService {
         }
 
         try {
-            otpService.verifyOtp(user.getMobileNumber(), request.getOtp());
+            otpService.verifyOtp(user.getMobileNumber(), udyamNumber, request.getOtp());
         } catch (FssaiException e) {
             loginAttemptService.registerFailure(lockKey);
             throw e;

@@ -31,6 +31,9 @@ import java.util.regex.Pattern;
 @Service
 public class DocumentValidationService {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private TextractService textractService;
+
     // ─── Minimum confidence threshold ───────────────────────────────────────
     private static final int MIN_EXTRACTED_TEXT_LENGTH = 100;
 
@@ -658,5 +661,17 @@ public class DocumentValidationService {
                 "12-digit Aadhaar Number",
                 AADHAAR_PATTERN,
                 "12-digit number (e.g., 123456789012)");
+    }
+
+    /**
+     * Runs OCR (AWS Textract) on the already-loaded PDF bytes and then the
+     * per-type content validation. This centralises the same validation the
+     * per-type {@code *DocumentService} upload pipelines perform, so the unified
+     * re-upload endpoint ({@code ShopController}) holds documents to the same
+     * compliance bar instead of accepting unvalidated PDFs.
+     */
+    public void validateContentWithOcr(DocumentType docType, byte[] fileBytes, String fileName) {
+        String extractedText = textractService.extractText(fileBytes, fileName);
+        validate(docType, extractedText, fileName);
     }
 }

@@ -139,6 +139,11 @@ public class ShopController {
         // Validate magic bytes
         documentValidationService.assertPdfMagicBytes(fileBytes, docType.name());
 
+        // OCR + content validation — align re-upload with the per-type /docs
+        // upload pipeline so a re-uploaded file is verified to be the correct
+        // document type and not a mismatch (e.g. a PAN uploaded as GST).
+        documentValidationService.validateContentWithOcr(docType, fileBytes, file.getOriginalFilename());
+
         // Upload to S3
         String fileKey = "documents/shop_" + shopId + "/" + docType.name().toLowerCase() + "/" + file.getOriginalFilename();
         String fileUrl = s3Service.uploadFile(fileBytes, file.getContentType(), fileKey);

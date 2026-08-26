@@ -52,17 +52,22 @@ public class S3Service {
     }
 
     /**
-     * Uploads file bytes to S3 under an unpredictable object key and returns the URL.
+     * Uploads file bytes to S3 under an unpredictable object key and returns the key.
      *
      * <p>The caller-provided {@code fileKey} is a stable logical prefix (e.g.
      * {@code pan/shop_1/pan_card.pdf}). A random token is inserted before the
      * extension so the stored key cannot be enumerated by guessing sibling
      * shop/document IDs — even if the bucket were misconfigured as public-read.</p>
      *
+     * <p><b>Security:</b> this method returns only the opaque object key, never a
+     * publicly-accessible URL. Document retrieval must go through the authenticated,
+     * one-time-token {@code DocumentStreamController} (which calls
+     * {@link #getObject(String)}), so the bucket can stay private.</p>
+     *
      * @param fileBytes    The file content as byte array
      * @param contentType  MIME type of the file (e.g., "application/pdf")
      * @param fileKey      S3 object key prefix (path in the bucket)
-     * @return The S3 object URL
+     * @return The S3 object key (callers must persist this, not a URL)
      */
     public String uploadFile(byte[] fileBytes, String contentType, String fileKey) {
         if (fileBytes == null || fileBytes.length == 0) {
@@ -80,7 +85,7 @@ public class S3Service {
                     .contentType(contentType)
                     .build();
             s3Client.putObject(putObjectRequest, RequestBody.fromBytes(fileBytes));
-            return "https://" + bucketName + ".s3.amazonaws.com/" + randomKey;
+            return randomKey;
 
         } catch (Exception e) {
             throw new FssaiException(
@@ -165,30 +170,35 @@ public class S3Service {
     }
 
     /**
-     * Extracts the S3 object key from a full S3 URL.
-     * Example: "https://bucket.s3.amazonaws.com/pan/shop_1/pan_card.pdf" -> "pan/shop_1/pan_card.pdf"
+     * Extracts the S3 object key from a full S3 URL, or returns the input as-is
+     * when it is already a bare object key.
      *
-     * @param fileUrl  Full S3 URL
-     * @return Extracted object key
+     * <p>Example URL: {@code "https://bucket.s3.amazonaws.com/pan/shop_1/pan_card.pdf"}
+     * -&gt; {@code "pan/shop_1/pan_card.pdf"}. A bare key such as
+     * {@code "pan/shop_1/pan_card.pdf"} is returned unchanged.</p>
+     *
+     * @param fileUrl  Full S3 URL or an already-extracted object key
+     * @return The S3 object key
      */
     public String extractObjectKeyFromFileUrl(String fileUrl) {
         if (fileUrl == null || fileUrl.isEmpty()) {
             return null;
         }
-        
+
         // Pattern: https://bucket.s3.amazonaws.com/key
         String prefix = "https://" + bucketName + ".s3.amazonaws.com/";
         if (fileUrl.startsWith(prefix)) {
             return fileUrl.substring(prefix.length());
         }
-        
+
         // Fallback: try to extract key after bucket domain
         String genericPrefix = ".s3.amazonaws.com/";
         int idx = fileUrl.indexOf(genericPrefix);
         if (idx > 0) {
             return fileUrl.substring(idx + genericPrefix.length());
         }
-        
-        return null;
+
+        // Already a bare object key (URL prefix stripped at upload time) — return as-is.
+        return fileUrl;
     }
 }

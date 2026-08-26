@@ -11,5 +11,8 @@ public interface OtpChallengeRepository extends JpaRepository<OtpChallenge, Long
 
     Optional<OtpChallenge> findTopByMobileAndPurposeOrderByCreatedAtDesc(String mobile, String purpose);
 
+    Optional<OtpChallenge> findTopByMobileAndMsmeNumberAndPurposeOrderByCreatedAtDesc(
+            String mobile, String msmeNumber, String purpose);
+
     void deleteByMobileAndPurpose(String mobile, String purpose);
 }

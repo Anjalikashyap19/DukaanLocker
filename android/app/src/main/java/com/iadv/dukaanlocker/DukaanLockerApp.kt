@@ -146,10 +146,13 @@ fun DukaanLockerApp(
                     val filePart = MultipartBody.Part.createFormData("file", fileName, requestBody)
                     val shopId = doc.businessId.toLongOrNull() ?: return@launch
                     val urlDocType = doc.type.lowercase().replace("_", "-")
-                    val response = api.uploadDocumentViaDocs(
+                    val response = api.uploadDocument(
                         shopId = shopId,
                         documentType = urlDocType,
-                        file = filePart
+                        file = filePart,
+                        documentNumber = null,
+                        issueDate = null,
+                        expiryDate = null
                     )
                     if (response.isSuccessful) {
                         Toast.makeText(context, "${doc.name} uploaded!", Toast.LENGTH_SHORT).show()

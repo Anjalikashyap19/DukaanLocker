@@ -48,11 +48,11 @@ public class SmsService {
     /** Sends an OTP SMS to the given mobile. Throws {@link FailureCode#SMS_FAILURE} on gateway rejection. */
     public void sendOtp(String mobile, String otp) {
         if (config.getApiKey() == null || config.getApiKey().isBlank()) {
-            log.warn("Fast2SMS API key not configured — SKIPPING OTP SMS to {} (dev mode)", mask(mobile));
+            log.warn("Fast2SMS API key not configured — DEV MODE: OTP for {} is {}", mask(mobile), otp);
             return;
         }
         if (config.getTemplateId() == null || config.getTemplateId().isBlank()) {
-            log.warn("Fast2SMS OTP template id not configured — SKIPPING OTP SMS to {} (dev mode)", mask(mobile));
+            log.warn("Fast2SMS OTP template id not configured — DEV MODE: OTP for {} is {}", mask(mobile), otp);
             return;
         }
 

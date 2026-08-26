@@ -30,6 +30,7 @@ import com.shoplocker.fssai.dto.UdyamVerifyRequest;
 import com.shoplocker.fssai.dto.UdyamVerifyResponse;
 import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
+import com.shoplocker.fssai.util.MsmeDataParser;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -460,51 +461,77 @@ public class UdyamVerificationService {
                     org.jsoup.select.Elements rows = table.select("tr");
                     for (org.jsoup.nodes.Element row : rows) {
                         org.jsoup.select.Elements cells = row.select("td, th");
+                        String label;
+                        String value;
                         if (cells.size() >= 2) {
-                            String label = cells.get(0).text().trim().toLowerCase();
-                            String value = cells.get(1).text().trim();
-                            if (!value.isEmpty()) {
-                                // Extract specific fields for structured layout
-                                if (label.contains("name of enterprise") || label.contains("enterprise name")) {
-                                    enterpriseName = value;
-                                } else if (label.contains("name of entrepreneur") || label.contains("entrepreneur name")
-                                        || label.contains("owner name") || label.contains("proprietor name")) {
-                                    entrepreneurName = value;
-                                } else if (label.contains("type of enterprise") || label.contains("enterprise type")) {
-                                    enterpriseType = value;
-                                } else if (label.contains("mobile") || label.contains("phone")) {
-                                    mobile = value;
-                                } else if (label.contains("email")) {
-                                    email = value;
-                                } else if (label.contains("state")) {
-                                    state = value;
-                                } else if (label.contains("district")) {
-                                    district = value;
-                                } else if (label.contains("city") || label.contains("town")) {
-                                    city = value;
-                                } else if (label.contains("pin")) {
-                                    pincode = value;
-                                } else if (label.contains("date of registration") || label.contains("registration date")) {
-                                    dateOfRegistration = value;
-                                } else if (label.contains("pan") && value.length() == 10) {
-                                    pan = value;
-                                } else if (label.contains("investment") || label.contains("plant and machinery")) {
-                                    investment = value;
-                                } else if (label.contains("turnover")) {
-                                    turnover = value;
-                                }
-
-                                // Skip NIC code rows from main table (we handle them separately)
-                                if (label.contains("nic")) continue;
-
-                                // Add to fields table for display
-                                certFields.append("<tr><td class=\"field-label\">")
-                                        .append(escapeXml(cells.get(0).text().trim()))
-                                        .append("</td><td class=\"field-value\">")
-                                        .append(escapeXml(value))
-                                        .append("</td></tr>\n");
+                            label = cells.get(0).text().trim();
+                            value = cells.get(1).text().trim();
+                            if (value.isEmpty()) {
+                                String[] kv = MsmeDataParser.splitLabelValue(label);
+                                if (kv != null) { label = kv[0]; value = kv[1]; }
                             }
+                        } else if (cells.size() == 1) {
+                            String[] kv = MsmeDataParser.splitLabelValue(cells.get(0).text().trim());
+                            if (kv == null) continue;
+                            label = kv[0];
+                            value = kv[1];
+                        } else {
+                            continue;
                         }
+                        if (value.isEmpty()) continue;
+
+                        String labelLc = label.toLowerCase();
+
+                        // Capture the Udyam number itself if missing
+                        if ((udyamNumber == null || udyamNumber.isEmpty()) && (labelLc.contains("udyam registration number")
+                                || labelLc.contains("udyam no") || labelLc.contains("registration number"))
+                                && value.toUpperCase().startsWith("UDYAM")) {
+                            udyamNumber = value.toUpperCase().trim();
+                        }
+
+                        // Extract specific fields for structured layout (first good match wins)
+                        if (enterpriseName.isEmpty() && (labelLc.contains("name of enterprise") || labelLc.contains("enterprise name"))) {
+                            enterpriseName = value;
+                        } else if (entrepreneurName.isEmpty() && (labelLc.contains("name of entrepreneur") || labelLc.contains("entrepreneur name")
+                                || labelLc.contains("owner name") || labelLc.contains("proprietor name"))) {
+                            entrepreneurName = value;
+                        } else if (enterpriseType.isEmpty() && (labelLc.contains("type of enterprise") || labelLc.contains("enterprise type"))) {
+                            enterpriseType = value;
+                        } else if (mobile.isEmpty() && (labelLc.contains("mobile") || labelLc.contains("phone"))) {
+                            mobile = value;
+                        } else if (email.isEmpty() && labelLc.contains("email")) {
+                            email = value;
+                        } else if (state.isEmpty() && labelLc.contains("state")) {
+                            state = value;
+                        } else if (district.isEmpty() && labelLc.contains("district")) {
+                            district = value;
+                        } else if (city.isEmpty() && (labelLc.contains("city") || labelLc.contains("town"))) {
+                            city = value;
+                        } else if (pincode.isEmpty() && labelLc.contains("pin")) {
+                            pincode = value;
+                        } else if (dateOfRegistration.isEmpty() && (labelLc.contains("date of registration") || labelLc.contains("registration date"))) {
+                            dateOfRegistration = value;
+                        } else if (pan.isEmpty() && labelLc.contains("pan") && value.length() == 10) {
+                            pan = value;
+                        } else if (investment.isEmpty() && (labelLc.contains("investment") || labelLc.contains("plant and machinery"))) {
+                            investment = value;
+                        } else if (turnover.isEmpty() && labelLc.contains("turnover")) {
+                            turnover = value;
+                        } else if (address.isEmpty() && (labelLc.contains("flat") || labelLc.contains("door") || labelLc.contains("block no")
+                                || labelLc.contains("road") || labelLc.contains("street") || labelLc.contains("lane")
+                                || labelLc.contains("premises") || labelLc.contains("building") || labelLc.contains("address"))) {
+                            address = value;
+                        }
+
+                        // Skip NIC code rows from main table (we handle them separately)
+                        if (labelLc.contains("nic")) continue;
+
+                        // Add to fields table for display
+                        certFields.append("<tr><td class=\"field-label\">")
+                                .append(escapeXml(label))
+                                .append("</td><td class=\"field-value\">")
+                                .append(escapeXml(value))
+                                .append("</td></tr>\n");
                     }
                 }
                 // NIC codes table
