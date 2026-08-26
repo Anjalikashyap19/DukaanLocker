@@ -73,7 +73,11 @@ public class UdyamVerificationService {
     private static final String BASE_URL = "https://www.udyamregistration.gov.in";
     private static final String VERIFY_PAGE = BASE_URL + "/Udyam_Verify.aspx";
     private static final String CAPTCHA_URL_PREFIX = BASE_URL + "/Captcha/CaptchaControl.aspx?id=";
-    private static final String PRINT_PAGE = BASE_URL + "/PrintUdyamApplication.aspx";
+    // The certificate print page lives under /Udyam_User/ and REQUIRES the Udyam
+    // number as a "udyam" query parameter. Requesting it without the parameter
+    // returns an empty print-form shell, which is why certificates came back
+    // with blank fields (labels present, no values).
+    private static final String PRINT_PAGE = BASE_URL + "/Udyam_User/Udyam_PrintApplication.aspx";
     private static final long SESSION_TTL_MS = 5 * 60 * 1000; // 5 minutes
     private static final int MAX_SESSIONS = 1000; // prevent memory exhaustion
 
@@ -317,9 +321,13 @@ public class UdyamVerificationService {
                         "Your verification session has expired. Please go back and load a new CAPTCHA.");
             }
 
-            // ── STEP 4: Fetch print page ──
-            HttpGet printRequest = new HttpGet(PRINT_PAGE);
+            // ── STEP 4: Fetch print page (must include the Udyam number) ──
+            // Without "?udyam=..." the portal returns an empty shell with no data.
+            String printUrl = PRINT_PAGE + "?udyam=" +
+                    URLEncoder.encode(request.getUdyamNumber(), StandardCharsets.UTF_8);
+            HttpGet printRequest = new HttpGet(printUrl);
             addBrowserHeaders(printRequest);
+            printRequest.setHeader("Referer", VERIFY_PAGE);
             printRequest.setHeader("Upgrade-Insecure-Requests", "1");
 
             String printHtml = client.execute(printRequest, response -> {
