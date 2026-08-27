@@ -62,6 +62,9 @@ public class SmsService {
         body.put("otp_expiry", config.getOtpExpiryMinutes());
         body.put("otp_length", config.getOtpLength());
         body.put("otp", otp);
+        if (config.getSenderId() != null && !config.getSenderId().isBlank()) {
+            body.put("sender_id", config.getSenderId());
+        }
 
         try {
             String jsonBody = objectMapper.writeValueAsString(body);

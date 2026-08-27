@@ -823,9 +823,12 @@ public class AuthService {
                     "If this Udyam number is registered, an OTP has been sent to its linked mobile number.");
         }
 
-        String requestId = otpService.requestOtp(udyamNumber, user.getMobileNumber());
+        OtpService.OtpRequestResult result = otpService.requestOtp(udyamNumber, user.getMobileNumber());
         log.info("MSME login-request: OTP requested for Udyam {} mobile {}", udyamNumber, user.getMobileNumber());
-        return new MsmeOtpResponse(requestId, "OTP sent to your registered mobile number.");
+        String message = result.devOtp() != null
+                ? "DEV MODE — your OTP is " + result.devOtp()
+                : "OTP sent to your registered mobile number.";
+        return new MsmeOtpResponse(result.requestId(), message);
     }
 
     /**

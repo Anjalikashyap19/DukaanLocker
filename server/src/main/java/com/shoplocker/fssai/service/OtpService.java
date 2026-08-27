@@ -63,9 +63,11 @@ public class OtpService {
         this.fast2SmsConfig = fast2SmsConfig;
     }
 
-    /** Creates a fresh OTP for the mobile and delivers it via SMS. Returns the challenge id. */
+    /** Creates a fresh OTP for the mobile and delivers it via SMS. Returns the challenge id
+     *  and, when running in dev mode (Fast2SMS key/template unconfigured), the plaintext OTP
+     *  so the login flow stays completable without a real SMS gateway. */
     @Transactional
-    public String requestOtp(String msmeNumber, String mobile) {
+    public OtpRequestResult requestOtp(String msmeNumber, String mobile) {
         // Resend cooldown: throttle OTP generation to one per resendCooldownSeconds
         // to prevent OTP bombing / SMS cost abuse.
         otpRepository.findTopByMobileAndPurposeOrderByCreatedAtDesc(mobile, OtpChallenge.PURPOSE_MSME_LOGIN)
@@ -93,7 +95,13 @@ public class OtpService {
         OtpChallenge saved = otpRepository.save(challenge);
 
         smsService.sendOtp(mobile, otp);
-        return saved.getId().toString();
+        return new OtpRequestResult(saved.getId().toString(), isDevMode() ? otp : null);
+    }
+
+    private boolean isDevMode() {
+        String key = fast2SmsConfig.getApiKey();
+        String tpl = fast2SmsConfig.getTemplateId();
+        return (key == null || key.isBlank()) || (tpl == null || tpl.isBlank());
     }
 
     /**
@@ -151,4 +159,7 @@ public class OtpService {
         int value = RANDOM.nextInt(bound);
         return String.format("%0" + length + "d", value);
     }
+
+    /** Result of {@link #requestOtp}: challenge id plus the plaintext OTP when in dev mode. */
+    public record OtpRequestResult(String requestId, String devOtp) {}
 }
