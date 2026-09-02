@@ -19,6 +19,7 @@ data class AppColors(
     val warning: Color,
     val textPrimary: Color,
     val textOnPrimary: Color,
+    val error: Color,
 )
 
 val DarkAppColors = AppColors(
@@ -33,6 +34,7 @@ val DarkAppColors = AppColors(
     warning = Color(0xFFF59E0B),
     textPrimary = Color.White,
     textOnPrimary = Color.White,
+    error = Color(0xFFEF4444),
 )
 
 val LightAppColors = AppColors(
@@ -47,6 +49,7 @@ val LightAppColors = AppColors(
     warning = Color(0xFFF59E0B),
     textPrimary = Color(0xFF1E293B),
     textOnPrimary = Color.White,
+    error = Color(0xFFEF4444),
 )
 
 val LocalAppColors = staticCompositionLocalOf { DarkAppColors }

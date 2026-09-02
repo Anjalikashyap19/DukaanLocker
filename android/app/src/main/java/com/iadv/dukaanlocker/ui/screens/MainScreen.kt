@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -127,7 +128,7 @@ fun MainScreen(
         )
     }
 
-    val navColor = Color(0xFF2563EB)
+    val navColor = colors.primary
 
     Column(
         modifier = Modifier
@@ -149,7 +150,7 @@ fun MainScreen(
                     text = "DukaanLocker",
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = colors.textOnPrimary,
                     letterSpacing = 1.sp
                 )
 
@@ -157,12 +158,12 @@ fun MainScreen(
 
                 // Right: search icon + language switcher
                 IconButton(onClick = {}, modifier = Modifier.size(40.dp)) {
-                    Icon(
-                        Icons.Default.Search,
-                        contentDescription = AppStrings.get(lang, "Search"),
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
+                Icon(
+                    Icons.Default.Search,
+                    contentDescription = AppStrings.get(lang, "Search"),
+                    tint = colors.textOnPrimary,
+                    modifier = Modifier.size(24.dp)
+                )
                 }
 
                 Box {
@@ -170,33 +171,33 @@ fun MainScreen(
                         expanded = langExpanded,
                         onExpandedChange = { langExpanded = it }
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .menuAnchor()
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(Color.White.copy(alpha = 0.15f))
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.Translate,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                                tint = Color.White
-                            )
+            Row(
+                modifier = Modifier
+                    .menuAnchor()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(colors.textOnPrimary.copy(alpha = 0.15f))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Translate,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = colors.textOnPrimary
+                )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = selectedLang.native,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color.White
-                            )
-                            Icon(
-                                Icons.Default.ArrowDropDown,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = Color.White.copy(alpha = 0.8f)
-                            )
+                Text(
+                    text = selectedLang.native,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.textOnPrimary
+                )
+                Icon(
+                    Icons.Default.ArrowDropDown,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = colors.textOnPrimary.copy(alpha = 0.8f)
+                )
                         }
                         ExposedDropdownMenu(
                             expanded = langExpanded,
@@ -358,6 +359,7 @@ fun MainScreen(
 // ── Auto-sliding flat feature banner carousel (DigiLocker style) ──
 @Composable
 private fun FeatureSlider(lang: String) {
+    val colors = LocalAppColors.current
     val pagerState = rememberPagerState(pageCount = { featureBanners.size })
     val scope = rememberCoroutineScope()
 
@@ -395,13 +397,13 @@ private fun FeatureSlider(lang: String) {
                             text = AppStrings.get(lang, banner.title),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = colors.textOnPrimary
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = AppStrings.get(lang, banner.desc),
                             fontSize = 12.sp,
-                            color = Color.White.copy(alpha = 0.9f),
+                            color = colors.textOnPrimary.copy(alpha = 0.9f),
                             lineHeight = 16.sp,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
@@ -412,14 +414,14 @@ private fun FeatureSlider(lang: String) {
                         modifier = Modifier
                             .size(72.dp)
                             .clip(RoundedCornerShape(20.dp))
-                            .background(Color.White.copy(alpha = 0.15f)),
+                            .background(colors.textOnPrimary.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             banner.icon,
                             contentDescription = null,
                             modifier = Modifier.size(36.dp),
-                            tint = Color.White
+                            tint = colors.textOnPrimary
                         )
                     }
                 }
@@ -439,8 +441,8 @@ private fun FeatureSlider(lang: String) {
                         .size(if (index == pagerState.currentPage) 8.dp else 6.dp)
                         .clip(CircleShape)
                         .background(
-                            if (index == pagerState.currentPage) colorsActive()
-                            else colorsActive().copy(alpha = 0.3f)
+                            if (index == pagerState.currentPage) colorsActive(colors)
+                            else colorsActive(colors).copy(alpha = 0.3f)
                         )
                 )
             }
@@ -448,7 +450,7 @@ private fun FeatureSlider(lang: String) {
     }
 }
 
-private fun colorsActive(): Color = Color(0xFF2563EB)
+private fun colorsActive(colors: AppColors): Color = colors.primary
 
 // ── Documents carousel (circular) ──
 @Composable

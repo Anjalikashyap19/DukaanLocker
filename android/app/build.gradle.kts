@@ -19,11 +19,20 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
+
     buildTypes {
         debug {
+            buildConfigField("String", "BASE_URL", "\"https://api.dukaanlocker.com/\"")
+            buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"733563364874-v71tsg3phavb9b12oiu7vjhjnjtv8qg1.apps.googleusercontent.com\"")
             isMinifyEnabled = false
         }
         release {
+            buildConfigField("String", "BASE_URL", "\"https://api.dukaanlocker.com/\"")
+            buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"733563364874-v71tsg3phavb9b12oiu7vjhjnjtv8qg1.apps.googleusercontent.com\"")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -51,10 +60,6 @@ android {
     kotlin {
         jvmToolchain(21)
     }
-    buildFeatures {
-        compose = true
-        buildConfig = true
-    }
 }
 
 dependencies {
@@ -81,6 +86,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.firebase.crashlytics.buildtools)
 
     // Networking
     implementation(libs.retrofit)
@@ -94,6 +100,11 @@ dependencies {
 
     // Encrypted storage for auth tokens
     implementation(libs.androidx.security.crypto)
+
+    // ViewModel + Navigation
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.navigation.compose)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

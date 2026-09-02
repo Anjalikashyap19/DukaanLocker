@@ -13,12 +13,16 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.res.ResourcesCompat
 import com.iadv.dukaanlocker.R
+import com.iadv.dukaanlocker.ui.strings.AppStrings
+import com.iadv.dukaanlocker.ui.strings.LocalAppLanguage
 
 @Composable
 fun LauncherLogo(
     modifier: Modifier = Modifier,
-    contentDescription: String? = "DukaanLocker Logo"
+    contentDescription: String? = null
 ) {
+    val lang = LocalAppLanguage.current
+    val resolvedDescription = contentDescription ?: AppStrings.get(lang, "DukaanLocker Logo")
     val context = LocalContext.current
     val bitmap = remember {
         val density = context.resources.displayMetrics.density
@@ -32,7 +36,7 @@ fun LauncherLogo(
     }
     Image(
         bitmap = bitmap,
-        contentDescription = contentDescription,
+        contentDescription = resolvedDescription,
         modifier = modifier.clip(CircleShape),
         contentScale = ContentScale.Fit
     )

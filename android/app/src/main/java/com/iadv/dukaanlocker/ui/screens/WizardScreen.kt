@@ -34,6 +34,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.iadv.dukaanlocker.WizardAnswers
+import com.iadv.dukaanlocker.ui.strings.AppStrings
+import com.iadv.dukaanlocker.ui.strings.LocalAppLanguage
 import com.iadv.dukaanlocker.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -66,6 +68,7 @@ fun WizardScreen(
     onBackToLogin: () -> Unit = {}
 ) {
     val colors = LocalAppColors.current
+    val lang = LocalAppLanguage.current
     var businessCount by remember { mutableStateOf("ONE") }
     var crossCategory by remember { mutableStateOf(false) }
     var multipleBranches by remember { mutableStateOf(false) }
@@ -107,7 +110,7 @@ fun WizardScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "ABOUT YOUR BUSINESS",
+                     text = AppStrings.get(lang, "ABOUT YOUR BUSINESS"),
                     fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary, letterSpacing = 1.sp
                 )
                 Text(
@@ -199,17 +202,17 @@ fun WizardScreen(
                 TextButton(onClick = onBackToLogin) {
                     Icon(Icons.Default.ArrowBack, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Back to Login", color = colors.textSecondary)
+                Text(AppStrings.get(lang, "Back to Login"), color = colors.textSecondary)
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 TextButton(onClick = onSkip) {
-                    Text("Skip", color = colors.textSecondary.copy(alpha = 0.5f))
+                    Text(AppStrings.get(lang, "Skip"), color = colors.textSecondary.copy(alpha = 0.5f))
                 }
             } else {
                 TextButton(onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) } }) {
                     Icon(Icons.Default.ArrowBack, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Back", color = colors.textSecondary)
+                    Text(AppStrings.get(lang, "Back"), color = colors.textSecondary)
                 }
             }
 
@@ -225,13 +228,7 @@ fun WizardScreen(
                                 multipleBranches = multipleBranches,
                                 operationScope = operationScope,
                                 digitalReadiness = digitalReadiness,
-                                totalBusinesses = if (businessCount == "ONE") 1
-                                else {
-                                    var count = 2
-                                    if (crossCategory) count += 1
-                                    if (multipleBranches) count += 1
-                                    count
-                                }
+                                totalBusinesses = if (businessCount == "ONE") 1 else 2
                             )
                         )
                     }
@@ -240,8 +237,7 @@ fun WizardScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = colors.background)
             ) {
                 Text(
-                    if (pagerState.currentPage < questions.size - 1) "Next →"
-                    else "Complete Setup",
+                     AppStrings.get(lang, if (pagerState.currentPage < questions.size - 1) "Next →" else "Complete Setup"),
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -273,12 +269,12 @@ private fun BusinessCountQuestion(
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = "How many businesses do you own?",
+            text = AppStrings.get(LocalAppLanguage.current, "How many businesses do you own?"),
             fontSize = 24.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary, textAlign = TextAlign.Center
         )
 
         Text(
-            text = "Tell us about your business portfolio",
+            text = AppStrings.get(LocalAppLanguage.current, "Tell us about your business portfolio"),
             fontSize = 14.sp, color = colors.textSecondary, textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 8.dp, bottom = 32.dp)
         )
@@ -289,16 +285,16 @@ private fun BusinessCountQuestion(
         ) {
             SelectionCard(
                 modifier = Modifier.weight(1f),
-                title = "One Business",
-                subtitle = "I own a single shop",
+                title = AppStrings.get(LocalAppLanguage.current, "One Business"),
+                subtitle = AppStrings.get(LocalAppLanguage.current, "I own a single shop"),
                 icon = Icons.Default.Home,
                 isSelected = selected == "ONE",
                 onClick = { onSelect("ONE") }
             )
             SelectionCard(
                 modifier = Modifier.weight(1f),
-                title = "Multiple",
-                subtitle = "I own multiple shops",
+                title = AppStrings.get(LocalAppLanguage.current, "Multiple"),
+                subtitle = AppStrings.get(LocalAppLanguage.current, "I own multiple shops"),
                 icon = Icons.Default.StoreMallDirectory,
                 isSelected = selected == "MULTIPLE",
                 onClick = { onSelect("MULTIPLE") }
@@ -331,11 +327,11 @@ private fun YesNoQuestion(
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             SelectionCard(
-                modifier = Modifier.weight(1f), title = "Yes", subtitle = "This applies to me",
+                modifier = Modifier.weight(1f), title = AppStrings.get(LocalAppLanguage.current, "Yes"), subtitle = AppStrings.get(LocalAppLanguage.current, "This applies to me"),
                 icon = Icons.Default.CheckCircle, isSelected = selected, onClick = { onSelect(true) }
             )
             SelectionCard(
-                modifier = Modifier.weight(1f), title = "No", subtitle = "This doesn't apply",
+                modifier = Modifier.weight(1f), title = AppStrings.get(LocalAppLanguage.current, "No"), subtitle = AppStrings.get(LocalAppLanguage.current, "This doesn't apply"),
                 icon = Icons.Default.Cancel, isSelected = !selected, onClick = { onSelect(false) }
             )
         }
@@ -358,14 +354,14 @@ private fun OperationScopeQuestion(
     ) {
         Icon(imageVector = Icons.Default.Public, contentDescription = null, tint = colors.primary, modifier = Modifier.size(56.dp))
         Spacer(modifier = Modifier.height(24.dp))
-        Text("Operation scope", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, textAlign = TextAlign.Center)
-        Text("Where do you operate your business?", fontSize = 14.sp, color = colors.textSecondary, textAlign = TextAlign.Center,
+        Text(AppStrings.get(LocalAppLanguage.current, "Operation scope"), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, textAlign = TextAlign.Center)
+        Text(AppStrings.get(LocalAppLanguage.current, "Where do you operate your business?"), fontSize = 14.sp, color = colors.textSecondary, textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 8.dp, bottom = 32.dp))
 
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            ScopeOption("CITY", "Within a City", "Local operations in one city", Icons.Default.LocationCity, selected, onSelect)
-            ScopeOption("STATE", "Within a State", "Operations across a state", Icons.Default.Map, selected, onSelect)
-            ScopeOption("NATIONAL", "Pan India / National", "Operations across multiple states", Icons.Default.Public, selected, onSelect)
+            ScopeOption("CITY", AppStrings.get(LocalAppLanguage.current, "Within a City"), AppStrings.get(LocalAppLanguage.current, "Local operations in one city"), Icons.Default.LocationCity, selected, onSelect)
+            ScopeOption("STATE", AppStrings.get(LocalAppLanguage.current, "Within a State"), AppStrings.get(LocalAppLanguage.current, "Operations across a state"), Icons.Default.Map, selected, onSelect)
+            ScopeOption("NATIONAL", AppStrings.get(LocalAppLanguage.current, "Pan India / National"), AppStrings.get(LocalAppLanguage.current, "Operations across multiple states"), Icons.Default.Public, selected, onSelect)
         }
     }
 }
@@ -412,15 +408,15 @@ private fun BusinessPresenceQuestion(
     ) {
         Icon(Icons.Default.DevicesOther, contentDescription = null, tint = colors.primary, modifier = Modifier.size(56.dp))
         Spacer(modifier = Modifier.height(24.dp))
-        Text("Business presence", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, textAlign = TextAlign.Center)
-        Text("How are your operations spread across locations?", fontSize = 14.sp, color = colors.textSecondary, textAlign = TextAlign.Center,
+        Text(AppStrings.get(LocalAppLanguage.current, "Business presence"), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, textAlign = TextAlign.Center)
+        Text(AppStrings.get(LocalAppLanguage.current, "How are your operations spread across locations?"), fontSize = 14.sp, color = colors.textSecondary, textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 8.dp, bottom = 32.dp))
 
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            ScopeOption("PHYSICAL", "Single Physical Store", "One brick & mortar location", Icons.Default.Store, selected, onSelect)
-            ScopeOption("SCATTERED", "Multiple Locations", "Multiple physical branches", Icons.Default.Business, selected, onSelect)
-            ScopeOption("DIGITAL", "Digital / Online Only", "Online store or digital presence", Icons.Default.Computer, selected, onSelect)
-            ScopeOption("BOTH", "Both Physical & Digital", "Physical store plus online presence", Icons.Default.DevicesOther, selected, onSelect)
+            ScopeOption("PHYSICAL", AppStrings.get(LocalAppLanguage.current, "Single Physical Store"), AppStrings.get(LocalAppLanguage.current, "One brick & mortar location"), Icons.Default.Store, selected, onSelect)
+            ScopeOption("SCATTERED", AppStrings.get(LocalAppLanguage.current, "Multiple Locations"), AppStrings.get(LocalAppLanguage.current, "Multiple physical branches"), Icons.Default.Business, selected, onSelect)
+            ScopeOption("DIGITAL", AppStrings.get(LocalAppLanguage.current, "Digital / Online Only"), AppStrings.get(LocalAppLanguage.current, "Online store or digital presence"), Icons.Default.Computer, selected, onSelect)
+            ScopeOption("BOTH", AppStrings.get(LocalAppLanguage.current, "Both Physical & Digital"), AppStrings.get(LocalAppLanguage.current, "Physical store plus online presence"), Icons.Default.DevicesOther, selected, onSelect)
         }
     }
 }

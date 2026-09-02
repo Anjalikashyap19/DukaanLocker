@@ -6,8 +6,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.iadv.dukaanlocker.ui.components.SkeletonBusinessCard
+import com.iadv.dukaanlocker.ui.components.ShimmerEffect
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Business
@@ -35,6 +39,8 @@ import com.iadv.dukaanlocker.DocumentItem
 import com.iadv.dukaanlocker.ManagerAccess
 import com.iadv.dukaanlocker.UserAccount
 import com.iadv.dukaanlocker.docDescription
+import com.iadv.dukaanlocker.ui.strings.AppStrings
+import com.iadv.dukaanlocker.ui.strings.LocalAppLanguage
 import com.iadv.dukaanlocker.ui.theme.*
 
 @Composable
@@ -49,10 +55,12 @@ fun ManagerHomeScreen(
     onDeleteDoc: (DocumentItem) -> Unit,
     onLogout: () -> Unit,
     isDarkTheme: Boolean = true,
-    onToggleTheme: () -> Unit = {}
+    onToggleTheme: () -> Unit = {},
+    isLoadingShops: Boolean = false
 ) {
     val colors = LocalAppColors.current
-    val assignedBusinesses = businesses.filter { it.id in managerAccess.assignedBusinessIds }
+    val lang = LocalAppLanguage.current
+    val assignedBusinesses = if (!isLoadingShops) businesses.filter { it.id in managerAccess.assignedBusinessIds } else emptyList()
     var selectedBusinessId by remember { mutableStateOf<String?>(null) }
     var showLogoutDialog by remember { mutableStateOf(false) }
 
@@ -63,10 +71,10 @@ fun ManagerHomeScreen(
             containerColor = colors.cardBg,
             shape = RoundedCornerShape(16.dp),
             title = {
-                Text("Logout", fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                Text(AppStrings.get(lang, "Logout"), fontWeight = FontWeight.Bold, color = colors.textPrimary)
             },
             text = {
-                Text("Are you sure you want to logout?", color = colors.textSecondary, fontSize = 14.sp)
+                Text(AppStrings.get(lang, "Are you sure you want to logout?"), color = colors.textSecondary, fontSize = 14.sp)
             },
             confirmButton = {
                 Button(
@@ -74,15 +82,15 @@ fun ManagerHomeScreen(
                         showLogoutDialog = false
                         onLogout()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.error),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Logout", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text(AppStrings.get(lang, "Logout"), color = colors.textOnPrimary, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showLogoutDialog = false }) {
-                    Text("Cancel", color = colors.primary)
+                        Text(AppStrings.get(lang, "Cancel"), color = colors.primary)
                 }
             }
         )
@@ -93,7 +101,26 @@ fun ManagerHomeScreen(
             .fillMaxSize()
             .background(colors.background)
     ) {
-        // Header
+        if (isLoadingShops) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    ShimmerEffect(
+                        modifier = Modifier
+                            .fillMaxWidth(0.6f)
+                            .height(12.dp),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+                }
+                items(3) {
+                    SkeletonBusinessCard()
+                }
+            }
+        } else {
+            // Header
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = colors.background,
@@ -118,16 +145,16 @@ fun ManagerHomeScreen(
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text("Welcome, ${user.name}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                        Text("${AppStrings.get(lang, "Welcome,")} ${user.name}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
                         Text(
-                            "${assignedBusinesses.size} ${if (assignedBusinesses.size == 1) "Business" else "Businesses"} • Manager",
+                            "${assignedBusinesses.size} ${if (assignedBusinesses.size == 1) AppStrings.get(lang, "Business") else AppStrings.get(lang, "Businesses")} • ${AppStrings.get(lang, "Manager")}",
                             fontSize = 12.sp, color = colors.textSecondary
                         )
-                        Text("Code: ${managerAccess.code}", fontSize = 11.sp, color = colors.primary)
+                        Text("${AppStrings.get(lang, "Code:")} ${managerAccess.code}", fontSize = 11.sp, color = colors.primary)
                     }
                 }
                 IconButton(onClick = { showLogoutDialog = true }) {
-                    Icon(Icons.Default.Logout, contentDescription = "Logout", tint = colors.textSecondary)
+                    Icon(Icons.Default.Logout, contentDescription = AppStrings.get(lang, "Logout"), tint = colors.textSecondary)
                 }
             }
         }
@@ -139,8 +166,8 @@ fun ManagerHomeScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.Business, contentDescription = null, tint = colors.textSecondary.copy(alpha = 0.3f), modifier = Modifier.size(80.dp))
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text("No Assigned Businesses", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary)
-                        Text("Contact the owner for access", fontSize = 13.sp, color = colors.textSecondary.copy(alpha = 0.6f))
+                        Text(AppStrings.get(lang, "No Assigned Businesses"), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary)
+                        Text(AppStrings.get(lang, "Contact the owner for access"), fontSize = 13.sp, color = colors.textSecondary.copy(alpha = 0.6f))
                     }
                 }
             } else {
@@ -152,7 +179,7 @@ fun ManagerHomeScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     item {
-                        Text("ASSIGNED BUSINESSES", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary, letterSpacing = 1.sp)
+                        Text(AppStrings.get(lang, "ASSIGNED BUSINESSES"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary, letterSpacing = 1.sp)
                     }
 
                     items(assignedBusinesses) { business ->
@@ -186,7 +213,7 @@ fun ManagerHomeScreen(
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(business.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                                    Text("${business.category} • $secured/$total docs secured", fontSize = 12.sp, color = colors.textSecondary)
+                                    Text("${business.category} • $secured/$total ${AppStrings.get(lang, "docs secured")}", fontSize = 12.sp, color = colors.textSecondary)
                                 }
                                 Icon(Icons.Default.ChevronRight, contentDescription = null, tint = colors.textSecondary)
                             }
@@ -210,6 +237,7 @@ fun ManagerHomeScreen(
                 )
             }
         }
+        }
     }
 }
 
@@ -224,6 +252,7 @@ private fun ManagerBusinessDetailView(
     onDelete: (DocumentItem) -> Unit
 ) {
     val colors = LocalAppColors.current
+    val lang = LocalAppLanguage.current
     val secured = documents.count { it.status != "MISSING" }
     val total = documents.size
 
@@ -236,7 +265,7 @@ private fun ManagerBusinessDetailView(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = colors.textPrimary)
+                     Icon(Icons.Default.ArrowBack, contentDescription = AppStrings.get(lang, "Back"), tint = colors.textPrimary)
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(business.name, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
@@ -248,7 +277,7 @@ private fun ManagerBusinessDetailView(
         }
 
         Text(
-            "REQUIRED DOCUMENTS",
+            AppStrings.get(lang, "REQUIRED DOCUMENTS"),
             fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary, letterSpacing = 1.sp,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
         )
@@ -259,8 +288,7 @@ private fun ManagerBusinessDetailView(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             items(documents) { doc ->
-                // Reuse the DocumentCard from OwnerHomeScreen's internal composable
-                DocumentItemCard(
+                DocumentCard(
                     doc = doc,
                     onFetch = { onFetch(doc) },
                     onUpload = { onUpload(doc) },
@@ -273,111 +301,3 @@ private fun ManagerBusinessDetailView(
     }
 }
 
-// Re-exported DocumentCard for Manager view (simplified)
-@Composable
-private fun DocumentItemCard(
-    doc: DocumentItem,
-    onFetch: () -> Unit,
-    onUpload: () -> Unit,
-    onView: () -> Unit,
-    onDelete: () -> Unit
-) {
-    val colors = LocalAppColors.current
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = doc.status != "MISSING") { onView() },
-        colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(
-            1.dp,
-            when (doc.status) {
-                "FETCHED" -> colors.success.copy(alpha = 0.4f)
-                "UPLOADED" -> colors.secondary.copy(alpha = 0.4f)
-                else -> colors.border
-            }
-        )
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(doc.name, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                    Text(docDescription(doc.type), fontSize = 11.sp, color = colors.textSecondary)
-                }
-                // Status badge
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(
-                            when (doc.status) {
-                                "FETCHED" -> colors.success.copy(alpha = 0.15f)
-                                "UPLOADED" -> colors.secondary.copy(alpha = 0.15f)
-                                else -> Color.Red.copy(alpha = 0.15f)
-                            }
-                        )
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        when (doc.status) { "FETCHED" -> "FETCHED"; "UPLOADED" -> "UPLOADED"; else -> "REQUIRED" },
-                        fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                        color = when (doc.status) { "FETCHED" -> colors.success; "UPLOADED" -> colors.secondary; else -> Color.Red }
-                    )
-                }
-            }
-
-            if (doc.status == "MISSING") {
-                Spacer(modifier = Modifier.height(10.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = onFetch,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary.copy(alpha = 0.1f), contentColor = colors.primary),
-                        border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.5f)),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(vertical = 6.dp)
-                    ) {
-                        Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Auto-Fetch", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Button(
-                        onClick = onUpload,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = colors.secondary.copy(alpha = 0.1f), contentColor = colors.secondary),
-                        border = BorderStroke(1.dp, colors.secondary.copy(alpha = 0.5f)),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(vertical = 6.dp)
-                    ) {
-                        Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Upload", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            } else {
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Column {
-                        Text("REG: ${doc.regNumber}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                        Text("Exp: ${doc.expiryDate}", fontSize = 10.sp, color = colors.textSecondary)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        // View
-                        Box(
-                            modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.border).clickable { onView() },
-                            contentAlignment = Alignment.Center
-                        ) { Icon(Icons.Default.Visibility, contentDescription = null, tint = colors.accent, modifier = Modifier.size(14.dp)) }
-                        // Reupload
-                        Box(
-                            modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.secondary.copy(alpha = 0.15f)).clickable { onUpload() },
-                            contentAlignment = Alignment.Center
-                        ) { Icon(Icons.Default.Refresh, contentDescription = "Reupload", tint = colors.secondary, modifier = Modifier.size(14.dp)) }
-                    }
-                }
-            }
-        }
-    }
-}

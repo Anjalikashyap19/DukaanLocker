@@ -1,23 +1,19 @@
 package com.iadv.dukaanlocker.ui.screens
 
-import android.widget.Toast
-import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.iadv.dukaanlocker.ui.components.SkeletonBusinessCard
+import com.iadv.dukaanlocker.ui.components.ShimmerEffect
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Business
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Logout
@@ -29,33 +25,20 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.StoreMallDirectory
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import com.iadv.dukaanlocker.*
-import com.iadv.dukaanlocker.api.ShopResponse
+import com.iadv.dukaanlocker.ui.strings.AppStrings
+import com.iadv.dukaanlocker.ui.strings.LocalAppLanguage
 import com.iadv.dukaanlocker.ui.theme.*
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.*
 
 @Composable
 fun OwnerHomeScreen(
@@ -79,103 +62,134 @@ fun OwnerHomeScreen(
     isBiometricAvailable: Boolean = false,
     onAuthenticateForBiometric: (() -> Unit)? = null,
     showAddBusiness: Boolean = true,
-    showManageManagers: Boolean = true
+    showManageManagers: Boolean = true,
+    isLoadingShops: Boolean = false,
+    isLoadingDocuments: Boolean = false
 ) {
     val colors = LocalAppColors.current
-    val scope = rememberCoroutineScope()
+    val lang = LocalAppLanguage.current
     var selectedBusinessId by remember { mutableStateOf<String?>(null) }
+
     var showSettings by remember { mutableStateOf(false) }
     var biometricLoginEnabled by remember { mutableStateOf(isBiometricLoginEnabled) }
+    LaunchedEffect(isBiometricLoginEnabled) {
+        biometricLoginEnabled = isBiometricLoginEnabled
+    }
 
-    // Filter documents for selected business
     val businessDocs = if (selectedBusinessId != null)
         documents.filter { it.businessId == selectedBusinessId }
     else emptyList()
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.background)
     ) {
-        // Header
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = colors.background,
-            shadowElevation = 4.dp
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
         ) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(colors.primary.copy(alpha = 0.2f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary, modifier = Modifier.size(24.dp))
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text("Welcome, ${user.name}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                            Text(
-                                if (businesses.size == 1) "1 Business • Owner"
-                                else "${businesses.size} Businesses • Owner",
-                                fontSize = 12.sp, color = colors.textSecondary
-                            )
-                        }
-                    }
-                    IconButton(onClick = { showSettings = true }) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = colors.textSecondary)
-                    }
-                }
-            }
-        }
-
-        if (businesses.isEmpty()) {
-            // Empty state
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+            // Header
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = colors.background,
+                shadowElevation = 4.dp
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.StoreMallDirectory, contentDescription = null, tint = colors.textSecondary.copy(alpha = 0.3f), modifier = Modifier.size(96.dp))
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("No Businesses Added", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary)
-                    Text("Tap + to add your first business", fontSize = 14.sp, color = colors.textSecondary.copy(alpha = 0.6f))
-                }
-            }
-        } else if (selectedBusinessId == null) {
-            // Business List View
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp),
-                contentPadding = PaddingValues(vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                item {
+                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("YOUR BUSINESSES", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary, letterSpacing = 1.sp)
-                        if (showManageManagers) {
-                            TextButton(onClick = onManageManagers) {
-                                Icon(Icons.Default.People, contentDescription = null, modifier = Modifier.size(16.dp), tint = colors.primary)
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Managers", color = colors.primary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(colors.primary.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary, modifier = Modifier.size(24.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                 Text("${AppStrings.get(lang, "Welcome,")} ${user.name}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                                 Text(
+                                     if (businesses.size == 1) "1 ${AppStrings.get(lang, "Business")} • ${AppStrings.get(lang, "Owner")}"
+                                     else "${businesses.size} ${AppStrings.get(lang, "Businesses")} • ${AppStrings.get(lang, "Owner")}",
+                                     fontSize = 12.sp, color = colors.textSecondary
+                                 )
+                            }
+                        }
+                        IconButton(onClick = { showSettings = true }) {
+                             Icon(Icons.Default.Settings, contentDescription = AppStrings.get(lang, "Settings"), tint = colors.textSecondary)
+                        }
+                    }
+                }
+            }
+
+            if (isLoadingShops) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    contentPadding = PaddingValues(vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item {
+                        ShimmerEffect(
+                            modifier = Modifier
+                                .fillMaxWidth(0.5f)
+                                .height(12.dp),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                    }
+                    items(3) {
+                        SkeletonBusinessCard()
+                    }
+                    item { Spacer(modifier = Modifier.height(72.dp)) }
+                }
+            } else if (businesses.isEmpty()) {
+                // Empty state
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.StoreMallDirectory, contentDescription = null, tint = colors.textSecondary.copy(alpha = 0.3f), modifier = Modifier.size(96.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+                         Text(AppStrings.get(lang, "No Businesses Added"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary)
+                         Text(AppStrings.get(lang, "Tap + to add your first business"), fontSize = 14.sp, color = colors.textSecondary.copy(alpha = 0.6f))
+                    }
+                }
+            } else if (selectedBusinessId == null) {
+                // Business List View
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    contentPadding = PaddingValues(vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                             Text(AppStrings.get(lang, "YOUR BUSINESSES"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary, letterSpacing = 1.sp)
+                            if (showManageManagers) {
+                                TextButton(onClick = onManageManagers) {
+                                    Icon(Icons.Default.People, contentDescription = null, modifier = Modifier.size(16.dp), tint = colors.primary)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                     Text(AppStrings.get(lang, "Managers"), color = colors.primary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                }
                             }
                         }
                     }
-                }
 
-                        items(businesses) { business ->                        BusinessCard(
+                    items(businesses) { business ->
+                        BusinessCard(
                             business = business,
                             documents = documents.filter { it.businessId == business.id },
                             managers = managers,
@@ -185,163 +199,149 @@ fun OwnerHomeScreen(
                             },
                             onEdit = { onEditBusiness(business) }
                         )
-                }
+                    }
 
-                item {
-                    Spacer(modifier = Modifier.height(72.dp)) // FAB padding
+                    item {
+                        Spacer(modifier = Modifier.height(72.dp))
+                    }
                 }
-            }
-        } else {
-            // Business Detail / Document Management View
-            val selectedBusiness = businesses.find { it.id == selectedBusinessId }
-            if (selectedBusiness != null) {
-                BusinessDetailView(
-                    business = selectedBusiness,
-                    documents = businessDocs,
-                    onBack = { selectedBusinessId = null },
-                    onEdit = { onEditBusiness(selectedBusiness) },
-                    onFetch = onFetchDoc,
-                    onUpload = onUploadDoc,
-                    onView = onViewDoc,
-                    onDelete = onDeleteDoc
-                )
+            } else {
+                // Business Detail / Document Management View
+                val selectedBusiness = businesses.find { it.id == selectedBusinessId }
+                if (selectedBusiness != null) {
+                    BusinessDetailView(
+                        business = selectedBusiness,
+                        documents = businessDocs,
+                        onBack = { selectedBusinessId = null },
+                        onEdit = { onEditBusiness(selectedBusiness) },
+                        onFetch = onFetchDoc,
+                        onUpload = onUploadDoc,
+                        onView = onViewDoc,
+                        onDelete = onDeleteDoc
+                    )
+                }
             }
         }
-    }
 
-    // Settings Dialog
-    if (showSettings) {
-        AlertDialog(
-            onDismissRequest = { showSettings = false },
-            containerColor = colors.cardBg,
-            shape = RoundedCornerShape(20.dp),
-            title = {
-                Text("Settings", fontWeight = FontWeight.Bold, color = colors.textPrimary)
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Account: ${user.name}", color = colors.textSecondary, fontSize = 14.sp)
-                    Text("Mobile: +91 ${user.mobile}", color = colors.textSecondary, fontSize = 14.sp)
-                    Text("Role: ${user.role}", color = colors.primary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    HorizontalDivider(color = colors.border)
-                    
-                    // Theme Toggle
-                    TextButton(onClick = {
-                        showSettings = false
-                        onToggleTheme()
-                    }) {
-                        Icon(
-                            if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
-                            contentDescription = "Toggle theme", modifier = Modifier.size(18.dp),
-                            tint = colors.primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            if (isDarkTheme) "Switch to Light Theme" else "Switch to Dark Theme",
-                            color = colors.primary, fontWeight = FontWeight.Bold
-                        )
-                    }
-                    
-                    // Biometric Login Toggle (only if biometric is available)
-                    if (isBiometricAvailable && onBiometricLoginToggle != null) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    val newValue = !biometricLoginEnabled
-                                    if (newValue) {
-                                        // Require authentication before enabling
-                                        onAuthenticateForBiometric?.invoke()
-                                    } else {
-                                        // Disable directly (no auth needed)
-                                        biometricLoginEnabled = false
-                                        onBiometricLoginToggle(false)
-                                    }
-                                }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.Lock,
-                                    contentDescription = "Biometric Login",
-                                    modifier = Modifier.size(18.dp),
-                                    tint = colors.primary
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Text(
-                                        "Biometric Login",
-                                        color = colors.primary,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp
-                                    )
-                                    Text(
-                                        if (biometricLoginEnabled) "Auto-login with fingerprint enabled" else "Enable fingerprint auto-login",
-                                        color = colors.textSecondary,
-                                        fontSize = 11.sp
-                                    )
-                                }
-                            }
-                            Switch(
-                                checked = biometricLoginEnabled,
-                                onCheckedChange = { newValue ->
-                                    if (newValue) {
-                                        // Require authentication before enabling
-                                        onAuthenticateForBiometric?.invoke()
-                                    } else {
-                                        // Disable directly (no auth needed)
-                                        biometricLoginEnabled = false
-                                        onBiometricLoginToggle(false)
-                                    }
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedTrackColor = colors.primary,
-                                    checkedThumbColor = Color.White
-                                )
+        // Settings Dialog
+        if (showSettings) {
+            AlertDialog(
+                onDismissRequest = { showSettings = false },
+                containerColor = colors.cardBg,
+                shape = RoundedCornerShape(20.dp),
+                title = {
+                     Text(AppStrings.get(lang, "Settings"), fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                         Text("${AppStrings.get(lang, "Account:")} ${user.name}", color = colors.textSecondary, fontSize = 14.sp)
+                         Text("${AppStrings.get(lang, "Mobile:")} +91 ${user.mobile}", color = colors.textSecondary, fontSize = 14.sp)
+                         Text("${AppStrings.get(lang, "Role:")} ${user.role}", color = colors.primary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        HorizontalDivider(color = colors.border)
+
+                        // Theme Toggle
+                        TextButton(onClick = {
+                            showSettings = false
+                            onToggleTheme()
+                        }) {
+                            Icon(
+                                if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                 contentDescription = AppStrings.get(lang, "Toggle theme"), modifier = Modifier.size(18.dp),
+                                tint = colors.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                 if (isDarkTheme) AppStrings.get(lang, "Switch to Light Theme") else AppStrings.get(lang, "Switch to Dark Theme"),
+                                color = colors.primary, fontWeight = FontWeight.Bold
                             )
                         }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    HorizontalDivider(color = colors.border)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    // Logout Button
-                    TextButton(onClick = {
-                        showSettings = false
-                        onLogout()
-                    }) {
-                        Icon(Icons.Default.Logout, contentDescription = null, tint = Color.Red, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Logout & Clear Session", color = Color.Red, fontWeight = FontWeight.Bold)
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showSettings = false }) {
-                    Text("Close", color = colors.primary)
-                }
-            }
-        )
-    }
 
-    // FAB for adding businesses (only for owners)
-    if (selectedBusinessId == null && showAddBusiness) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.BottomEnd
-        ) {
+                        // Biometric Login Toggle (only if biometric is available)
+                        if (isBiometricAvailable && onBiometricLoginToggle != null) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Lock,
+                                         contentDescription = AppStrings.get(lang, "Biometric Login"),
+                                        modifier = Modifier.size(18.dp),
+                                        tint = colors.primary
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                             AppStrings.get(lang, "Biometric Login"),
+                                            color = colors.primary,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp
+                                        )
+                                        Text(
+                                             if (biometricLoginEnabled) AppStrings.get(lang, "Auto-login with fingerprint enabled") else AppStrings.get(lang, "Enable fingerprint auto-login"),
+                                            color = colors.textSecondary,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+                                Switch(
+                                    checked = biometricLoginEnabled,
+                                    onCheckedChange = { newValue ->
+                                        if (newValue) {
+                                            onAuthenticateForBiometric?.invoke()
+                                        } else {
+                                            biometricLoginEnabled = false
+                                            onBiometricLoginToggle(false)
+                                        }
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedTrackColor = colors.primary,
+                                        checkedThumbColor = Color.White
+                                    )
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        HorizontalDivider(color = colors.border)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Logout Button
+                        TextButton(onClick = {
+                            showSettings = false
+                            onLogout()
+                        }) {
+                            Icon(Icons.Default.Logout, contentDescription = null, tint = Color.Red, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                             Text(AppStrings.get(lang, "Logout & Clear Session"), color = Color.Red, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showSettings = false }) {
+                        Text(AppStrings.get(lang, "Close"), color = colors.primary)
+                    }
+                }
+            )
+        }
+
+        // FAB for adding businesses (only for owners)
+        if (selectedBusinessId == null && showAddBusiness) {
             FloatingActionButton(
                 onClick = onAddBusiness,
-                modifier = Modifier.padding(20.dp),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(20.dp)
+                    .navigationBarsPadding(),
                 containerColor = colors.primary,
                 contentColor = colors.background,
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Business", modifier = Modifier.size(28.dp))
+                             Icon(Icons.Default.Add, contentDescription = AppStrings.get(lang, "Add Business"), modifier = Modifier.size(28.dp))
             }
         }
     }
@@ -357,9 +357,10 @@ private fun BusinessCard(
     onEdit: () -> Unit
 ) {
     val colors = LocalAppColors.current
+    val lang = LocalAppLanguage.current
     val secured = documents.count { it.status != "MISSING" }
-    val total = documents.size.coerceAtLeast(1)
-    val progress = secured.toFloat() / total.toFloat()
+    val total = documents.size
+    val progress = if (total > 0) secured.toFloat() / total.toFloat() else 0f
     val bizManagers = managers.filter { business.id in it.assignedBusinessIds }
 
     Card(
@@ -399,11 +400,11 @@ private fun BusinessCard(
                     }
                 }
                 IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit", tint = colors.textSecondary, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Edit, contentDescription = AppStrings.get(lang, "Edit"), tint = colors.textSecondary, modifier = Modifier.size(16.dp))
                 }
             }
 
-            // ── Row 2: Owner + City, State + Branch (compact) ──
+            // ── Row 2: Owner + City, State + Branch ──
             Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier.padding(start = 52.dp),
@@ -431,7 +432,7 @@ private fun BusinessCard(
                 }
             }
 
-            // ── Row 3: Managers (if any) ──
+            // ── Row 3: Managers ──
             if (bizManagers.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(
@@ -478,7 +479,7 @@ private fun BusinessCard(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        if (progress == 1f) "All documents secured" else "$secured of $total completed",
+                        if (progress == 1f) AppStrings.get(lang, "All documents secured") else if (total == 0) AppStrings.get(lang, "No documents") else "$secured ${AppStrings.get(lang, "of")} $total ${AppStrings.get(lang, "completed")}",
                         fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary
                     )
                 }
@@ -517,6 +518,7 @@ private fun BusinessDetailView(
     onDelete: (DocumentItem) -> Unit
 ) {
     val colors = LocalAppColors.current
+    val lang = LocalAppLanguage.current
     val secured = documents.count { it.status != "MISSING" }
     val total = documents.size
     val progress = if (total > 0) secured.toFloat() / total.toFloat() else 0f
@@ -534,7 +536,7 @@ private fun BusinessDetailView(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = colors.textPrimary)
+                        Icon(Icons.Default.ArrowBack, contentDescription = AppStrings.get(lang, "Back"), tint = colors.textPrimary)
                     }
                     Spacer(modifier = Modifier.width(4.dp))
                     Column(modifier = Modifier.weight(1f)) {
@@ -542,7 +544,7 @@ private fun BusinessDetailView(
                         Text("${business.category} • ${business.scale} • ${business.state}", fontSize = 12.sp, color = colors.textSecondary)
                     }
                     IconButton(onClick = onEdit) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit", tint = colors.primary)
+                        Icon(Icons.Default.Edit, contentDescription = AppStrings.get(lang, "Edit"), tint = colors.primary)
                     }
                 }
             }
@@ -565,10 +567,10 @@ private fun BusinessDetailView(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
-                    Text("DOCUMENT COMPLIANCE", fontSize = 11.sp, color = colors.textSecondary, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Text(AppStrings.get(lang, "DOCUMENT COMPLIANCE"), fontSize = 11.sp, color = colors.textSecondary, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                     Text(
-                        if (progress == 1f) "ALL DOCUMENTS SECURED ✓"
-                        else "$secured of $total documents completed",
+                        if (progress == 1f) AppStrings.get(lang, "ALL DOCUMENTS SECURED ✓")
+                        else "$secured ${AppStrings.get(lang, "of")} $total ${AppStrings.get(lang, "documents completed")}",
                         fontSize = 16.sp, fontWeight = FontWeight.Bold,
                         color = if (progress == 1f) colors.success else colors.accent
                     )
@@ -600,7 +602,7 @@ private fun BusinessDetailView(
 
         // Required Documents Section
         Text(
-            text = "REQUIRED DOCUMENTS",
+            text = AppStrings.get(lang, "REQUIRED DOCUMENTS"),
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             color = colors.textSecondary,
@@ -623,808 +625,6 @@ private fun BusinessDetailView(
                 )
             }
             item { Spacer(modifier = Modifier.height(16.dp)) }
-        }
-    }
-}
-
-// ── Document Card ────────────────────────────────────────────────────────────
-@Composable
-private fun DocumentCard(
-    doc: DocumentItem,
-    onFetch: () -> Unit,
-    onUpload: () -> Unit,
-    onView: () -> Unit,
-    onDelete: () -> Unit
-) {
-    val colors = LocalAppColors.current
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = doc.status != "MISSING") { onView() },
-        colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(
-            1.dp,
-            when (doc.status) {
-                "FETCHED" -> colors.success.copy(alpha = 0.4f)
-                "UPLOADED" -> colors.secondary.copy(alpha = 0.4f)
-                else -> colors.border
-            }
-        )
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(doc.name, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                    Text(
-                        docDescription(doc.type),
-                        fontSize = 11.sp, color = colors.textSecondary,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                }
-
-                // Status Badge
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(
-                            when (doc.status) {
-                                "FETCHED" -> colors.success.copy(alpha = 0.15f)
-                                "UPLOADED" -> colors.secondary.copy(alpha = 0.15f)
-                                else -> Color.Red.copy(alpha = 0.15f)
-                            }
-                        )
-                        .border(
-                            1.dp,
-                            when (doc.status) {
-                                "FETCHED" -> colors.success.copy(alpha = 0.5f)
-                                "UPLOADED" -> colors.secondary.copy(alpha = 0.5f)
-                                else -> Color.Red.copy(alpha = 0.5f)
-                            },
-                            RoundedCornerShape(6.dp)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        when (doc.status) {
-                            "FETCHED" -> "FETCHED"
-                            "UPLOADED" -> "UPLOADED"
-                            else -> "REQUIRED"
-                        },
-                        fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                        color = when (doc.status) {
-                            "FETCHED" -> colors.success
-                            "UPLOADED" -> colors.secondary
-                            else -> Color.Red
-                        }
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            if (doc.status == "MISSING") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = onFetch,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = colors.primary.copy(alpha = 0.1f),
-                            contentColor = colors.primary
-                        ),
-                        border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.5f)),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(vertical = 6.dp)
-                    ) {
-                        Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Auto-Fetch", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-
-                    Button(
-                        onClick = onUpload,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = colors.secondary.copy(alpha = 0.1f),
-                            contentColor = colors.secondary
-                        ),
-                        border = BorderStroke(1.dp, colors.secondary.copy(alpha = 0.5f)),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(vertical = 6.dp)
-                    ) {
-                        Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Upload", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        if (doc.regNumber.isNotBlank()) {
-                            Text("REG: ${doc.regNumber}", fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = colors.textPrimary)
-                        }
-                        if (doc.expiryDate.isNotBlank()) {
-                            Text("Exp: ${doc.expiryDate}", fontSize = 10.sp, color = colors.textSecondary)
-                        }
-                        if (doc.status == "UPLOADED" && !doc.fileUrl.isNullOrBlank()) {
-                            Text("✓ Certificate uploaded", fontSize = 10.sp, color = colors.success, fontWeight = FontWeight.Medium)
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        // Show preview button if fileUrl is available
-                        if (!doc.fileUrl.isNullOrBlank()) {
-                            IconButton(onClick = onView, modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.success.copy(alpha = 0.15f))) {
-                                Icon(Icons.Default.Visibility, contentDescription = "Preview Certificate", tint = colors.success, modifier = Modifier.size(14.dp))
-                            }
-                        } else {
-                            IconButton(onClick = onView, modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.border)) {
-                                Icon(Icons.Default.Visibility, contentDescription = "View", tint = colors.accent, modifier = Modifier.size(14.dp))
-                            }
-                        }
-                        IconButton(onClick = onUpload, modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.secondary.copy(alpha = 0.15f))) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Reupload", tint = colors.secondary, modifier = Modifier.size(14.dp))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ── Dialog: Fetch Document ───────────────────────────────────────────────────
-@Composable
-fun FetchDocumentDialog(
-    doc: DocumentItem,
-    shopName: String,
-    onDismiss: () -> Unit,
-    onSuccess: (regNum: String, issue: String, expiry: String) -> Unit
-) {
-    val colors = LocalAppColors.current
-    var regInput by remember { mutableStateOf("") }
-    var isFetching by remember { mutableStateOf(false) }
-    var fetchProgress by remember { mutableStateOf(0f) }
-    var currentStepText by remember { mutableStateOf("Connecting to National Database...") }
-
-    val labelText = docFetchLabel(doc.type)
-
-    LaunchedEffect(isFetching) {
-        if (isFetching) {
-            val steps = listOf(
-                0.2f to "Connecting to National Portal Gateway...",
-                0.5f to "Verifying digital credentials against database...",
-                0.8f to "Fetching official e-Certificate...",
-                1.0f to "Encrypting and locking in Dukaan Vault..."
-            )
-            for ((progress, text) in steps) {
-                delay(1000)
-                fetchProgress = progress
-                currentStepText = text
-            }
-            delay(800)
-            val formatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-            val today = Date()
-            val expiryCal = Calendar.getInstance().apply { add(Calendar.YEAR, 5) }
-            onSuccess(regInput.uppercase(), formatter.format(today), formatter.format(expiryCal.time))
-        }
-    }
-
-    Dialog(onDismissRequest = { if (!isFetching) onDismiss() }) {
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-            border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.5f)),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                if (!isFetching) {
-                    Icon(Icons.Default.CloudDownload, contentDescription = null, tint = colors.primary, modifier = Modifier.size(48.dp))
-                    Text("Auto-Fetch Official Doc", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                    Text("Securely fetch your ${doc.name} from government databases.", fontSize = 12.sp, color = colors.textSecondary, textAlign = TextAlign.Center)
-
-                    OutlinedTextField(
-                        value = regInput,
-                        onValueChange = { regInput = it },
-                        label = { Text(labelText) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border),
-                        shape = RoundedCornerShape(10.dp)
-                    )
-
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancel", color = colors.textPrimary) }
-                        Button(
-                            onClick = { if (regInput.isNotBlank()) isFetching = true },
-                            enabled = regInput.isNotBlank(),
-                            modifier = Modifier.weight(1.5f),
-                            colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = colors.background)
-                        ) { Text("Confirm Fetch", fontWeight = FontWeight.Bold) }
-                    }
-                } else {
-                    CircularProgressIndicator(progress = { fetchProgress }, modifier = Modifier.size(64.dp), color = colors.primary, trackColor = colors.border, strokeWidth = 6.dp)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("VERIFYING CREDENTIALS", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = colors.accent, letterSpacing = 1.sp)
-                    Text(currentStepText, fontSize = 12.sp, color = colors.textSecondary, textAlign = TextAlign.Center)
-                }
-            }
-        }
-    }
-}
-
-// ── Dialog: Upload Document ──────────────────────────────────────────────────
-@Composable
-fun UploadDocumentDialog(
-    doc: DocumentItem,
-    onDismiss: () -> Unit,
-    onSuccess: () -> Unit
-) {
-    val colors = LocalAppColors.current
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-            border = BorderStroke(1.dp, colors.secondary.copy(alpha = 0.5f)),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Icon(Icons.Default.CloudUpload, contentDescription = null, tint = colors.secondary, modifier = Modifier.size(48.dp))
-                Text("Upload Local File", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                Text("Select a clear scan or image of your ${doc.name}", fontSize = 12.sp, color = colors.textSecondary, textAlign = TextAlign.Center)
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(120.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(colors.background)
-                        .clickable { onSuccess() }
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-                        drawRoundRect(
-                            color = colors.secondary.copy(alpha = 0.5f),
-                            style = Stroke(width = 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f))
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Add, contentDescription = null, tint = colors.secondary, modifier = Modifier.size(28.dp))
-                        Text("Tap to simulate file upload", fontSize = 13.sp, color = colors.secondary, fontWeight = FontWeight.SemiBold)
-                        Text("Supports PDF, PNG, JPG (Max 5MB)", fontSize = 10.sp, color = colors.textSecondary, modifier = Modifier.padding(top = 4.dp))
-                    }
-                }
-
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onDismiss) { Text("Cancel", color = colors.textPrimary) }
-                }
-            }
-        }
-    }
-}
-
-// ── Dialog: Certificate Viewer ───────────────────────────────────────────────
-@Composable
-fun CertificateViewerDialog(
-    doc: DocumentItem,
-    business: BusinessProfile,
-    onDismiss: () -> Unit
-) {
-    val colors = LocalAppColors.current
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = BorderStroke(2.dp, colors.primary),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(20.dp)
-            ) {
-                // Header with government branding
-                Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    // Ashoka Chakra symbol
-                    Text("☸", fontSize = 32.sp, color = colors.primary)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    
-                    Text("GOVERNMENT OF INDIA", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray, letterSpacing = 2.sp)
-                    Text(
-                        when (doc.type) {
-                            "GST" -> "DEPARTMENT OF REVENUE • GOODS AND SERVICES TAX"
-                            "FSSAI" -> "FOOD SAFETY AND STANDARDS AUTHORITY OF INDIA"
-                            "ShopEstablishment" -> "DEPARTMENT OF LABOUR & TRADE COMPLIANCE"
-                            "DrugLicense" -> "DRUG CONTROL ADMINISTRATION"
-                            "HealthTrade" -> "MUNICIPAL CORPORATION REGULATORY DEPT"
-                            "FireNOC" -> "STATE FIRE AND EMERGENCY SERVICES"
-                            "Udyam", "MSME_CERTIFICATE" -> "MINISTRY OF MICRO, SMALL & MEDIUM ENTERPRISES"
-                            "PAN" -> "INCOME TAX DEPARTMENT • GOVERNMENT OF INDIA"
-                            "TAN" -> "INCOME TAX DEPARTMENT • TDS WING"
-                            "BusinessRegistration" -> "MINISTRY OF CORPORATE AFFAIRS • ROC"
-                            "TradeLicense" -> "MUNICIPAL CORPORATION • COMMERCIAL TAXES"
-                            "LabourLicense" -> "DEPARTMENT OF LABOUR & EMPLOYMENT"
-                            "FactoryLicense" -> "CHIEF INSPECTOR OF FACTORIES"
-                            "EatingHouse" -> "FOOD SAFETY & MUNICIPAL CORPORATION"
-                            "PollutionControl" -> "STATE POLLUTION CONTROL BOARD"
-                            "ContractorLicense" -> "STATE CONTRACTOR LICENSING AUTHORITY"
-                            "BuildingPermit" -> "URBAN DEVELOPMENT AUTHORITY"
-                            "BuildingSafety" -> "MUNICIPAL BUILDING SAFETY DEPT"
-                            "PSARA" -> "HOME DEPARTMENT • PRIVATE SECURITY"
-                            "WarehouseRegistration" -> "FOOD CORPORATION OF INDIA / STATE WAREHOUSE"
-                            "InstitutionApproval" -> "EDUCATION DEPARTMENT / UGC / AICTE"
-                            "TrustSocietyReg" -> "REGISTRAR OF SOCIETIES / TRUST ACT"
-                            "NGO_12A_80G" -> "INCOME TAX DEPARTMENT • EXEMPTIONS"
-                            "ClinicalEstablishment" -> "STATE CLINICAL ESTABLISHMENTS AUTHORITY"
-                            "MedicalCouncil" -> "MEDICAL COUNCIL OF INDIA / STATE COUNCIL"
-                            "BioMedicalWaste" -> "CENTRAL POLLUTION CONTROL BOARD"
-                            "HotelLicense" -> "TOURISM DEPARTMENT / MUNICIPAL CORP"
-                            "RTO_Permit" -> "REGIONAL TRANSPORT OFFICE"
-                            "RBI_IRDAI_SEBI_Auth" -> "RBI / IRDAI / SEBI REGULATORY AUTHORITY"
-                            "BIS" -> "BUREAU OF INDIAN STANDARDS"
-                            "BIS_Hallmark" -> "BUREAU OF INDIAN STANDARDS • HALLMARK"
-                            "DPIIT" -> "DPIIT • MINISTRY OF COMMERCE & INDUSTRY"
-                            "FertilizerLicense" -> "DEPARTMENT OF AGRICULTURE / FERTILIZER DIVISION"
-                            "VetApproval" -> "DEPARTMENT OF ANIMAL HUSBANDRY"
-                            "NGO_DAR" -> "NGO DARPAN • NITI AAYOG"
-                            "FCRA" -> "MINISTRY OF HOME AFFAIRS • FCRA WING"
-                            else -> "OFFICIAL REGULATORY DEPARTMENT"
-                        },
-                        fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color.Gray, textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    HorizontalDivider(color = colors.primary, thickness = 2.dp, modifier = Modifier.width(180.dp))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    // Certificate title
-                    Text(doc.name.uppercase(), fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = colors.primary, textAlign = TextAlign.Center)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    
-                    // Registration number highlighted
-                    Text(doc.regNumber, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.Black, fontFamily = FontFamily.Monospace)
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Certificate fields based on document type
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // For MSME/Udyam certificates, show specialized fields
-                    if (doc.type == "Udyam" || doc.type == "MSME_CERTIFICATE") {
-                        CertificateField("Udyam Registration Number", doc.regNumber, isHighlight = true)
-                        CertificateField("Name of Enterprise", business.name.uppercase())
-                        CertificateField("Name of Entrepreneur/Owner", business.ownerName)
-                        CertificateField("Type of Enterprise", business.scale)
-                        CertificateField("Major Activity", business.category)
-                        CertificateField("State of Registration", business.state)
-                        if (business.city.isNotBlank()) {
-                            CertificateField("District / City", business.city)
-                        }
-                        CertificateField("Issue Date", doc.issueDate)
-                        CertificateField("Validity", "Permanent (No Expiry)")
-                        
-                        // Investment & Turnover section (if available)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            // Investment box
-                            Card(
-                                modifier = Modifier.weight(1f),
-                                colors = CardDefaults.cardColors(containerColor = colors.primary.copy(alpha = 0.1f)),
-                                border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.3f)),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(8.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text("INVESTMENT", fontSize = 8.sp, color = colors.textSecondary, fontWeight = FontWeight.Bold)
-                                    Text("Not Available", fontSize = 12.sp, color = colors.primary, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                            // Turnover box
-                            Card(
-                                modifier = Modifier.weight(1f),
-                                colors = CardDefaults.cardColors(containerColor = colors.primary.copy(alpha = 0.1f)),
-                                border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.3f)),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(8.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text("TURNOVER", fontSize = 8.sp, color = colors.textSecondary, fontWeight = FontWeight.Bold)
-                                    Text("Not Available", fontSize = 12.sp, color = colors.primary, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                        
-                        // QR Code placeholder
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
-                            border = BorderStroke(1.dp, colors.border),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text("▣", fontSize = 28.sp, color = colors.primary)
-                                Text("Scan to verify on Udyam Portal", fontSize = 9.sp, color = colors.textSecondary, fontStyle = FontStyle.Italic)
-                            }
-                        }
-                    } else {
-                        // Generic certificate fields for other document types
-                        CertificateField("Registration / License No", doc.regNumber, isHighlight = true)
-                        CertificateField("Legal Name of Business", business.name.uppercase())
-                        CertificateField("Name of Proprietor/Owner", business.ownerName)
-                        CertificateField("State of Registration", business.state)
-                        CertificateField("Category & Scale", "${business.category} (${business.scale})")
-                        CertificateField("Issue Date", doc.issueDate)
-                        CertificateField("Validity / Expiry Date", doc.expiryDate)
-                    }
-                    
-                    // Locker Status (common for all)
-                    CertificateField("Locker Status", if (doc.status == "FETCHED") "VERIFIED GOVERNMENT DATA" else "SECURE USER UPLOADS",
-                        textColor = if (doc.status == "FETCHED") colors.success else colors.secondary)
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = colors.background, contentColor = colors.textOnPrimary),
-                    shape = RoundedCornerShape(8.dp)
-                ) { Text("Close Document View", fontWeight = FontWeight.Bold) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CertificateField(label: String, value: String, isHighlight: Boolean = false, textColor: Color = Color.Black) {
-    Column {
-        Text(label.uppercase(), fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray, letterSpacing = 0.5.sp)
-        Text(value, fontSize = if (isHighlight) 14.sp else 12.sp, fontWeight = if (isHighlight) FontWeight.Bold else FontWeight.Normal,
-            color = textColor, fontFamily = if (isHighlight) FontFamily.Monospace else FontFamily.Default)
-        Spacer(modifier = Modifier.height(2.dp))
-        HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f), thickness = 0.5.dp)
-    }
-}
-
-// ── Docs Screen (bottom-nav "Docs" tab) ───────────────────────────────────────
-@Composable
-fun DocsScreen(
-    documents: List<DocumentItem>,
-    onFetchDoc: (DocumentItem) -> Unit,
-    onUploadDoc: (DocumentItem) -> Unit,
-    onViewDoc: (DocumentItem) -> Unit,
-    businesses: List<ShopResponse> = emptyList()
-) {
-    val colors = LocalAppColors.current
-    val shopNameById = businesses.associate { it.id.toString() to it.shopName }
-    val grouped = documents.groupBy { it.type }
-    val orderedTypes = grouped.keys.sortedBy { grouped[it]?.first()?.name ?: it }
-
-    Column(modifier = Modifier.fillMaxSize().background(colors.background)) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = colors.background,
-            shadowElevation = 4.dp
-        ) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
-                Text(
-                    "Documents",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = colors.textPrimary
-                )
-                Text(
-                    if (documents.isEmpty()) "No documents yet"
-                    else "${documents.size} document${if (documents.size == 1) "" else "s"} across ${businesses.size} business${if (businesses.size == 1) "" else "es"}",
-                    fontSize = 12.sp,
-                    color = colors.textSecondary
-                )
-            }
-        }
-
-        if (documents.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.Description,
-                        contentDescription = null,
-                        tint = colors.textSecondary.copy(alpha = 0.3f),
-                        modifier = Modifier.size(96.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("No Documents", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary)
-                    Text("Upload or auto-fetch documents from a business", fontSize = 14.sp, color = colors.textSecondary.copy(alpha = 0.6f))
-                }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                contentPadding = PaddingValues(vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(orderedTypes) { type ->
-                    val docs = grouped[type] ?: emptyList()
-                    DocTypeSection(
-                        title = docs.first().name,
-                        count = docs.size,
-                        docs = docs,
-                        shopNameById = shopNameById,
-                        onFetchDoc = onFetchDoc,
-                        onUploadDoc = onUploadDoc,
-                        onViewDoc = onViewDoc
-                    )
-                }
-                item { Spacer(modifier = Modifier.height(72.dp)) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DocTypeSection(
-    title: String,
-    count: Int,
-    docs: List<DocumentItem>,
-    shopNameById: Map<String, String>,
-    onFetchDoc: (DocumentItem) -> Unit,
-    onUploadDoc: (DocumentItem) -> Unit,
-    onViewDoc: (DocumentItem) -> Unit
-) {
-    val colors = LocalAppColors.current
-    var expanded by remember { mutableStateOf(false) }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-        border = BorderStroke(1.dp, colors.border),
-        shape = RoundedCornerShape(14.dp)
-    ) {
-        Column {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded }
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Default.Description, contentDescription = null, tint = colors.primary, modifier = Modifier.size(22.dp))
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                    Text(
-                        "$count document${if (count == 1) "" else "s"}",
-                        fontSize = 12.sp,
-                        color = colors.textSecondary
-                    )
-                }
-                Icon(
-                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = if (expanded) "Collapse" else "Expand",
-                    tint = colors.textSecondary
-                )
-            }
-
-            if (expanded) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    docs.forEach { doc ->
-                        Column {
-                            val shopName = shopNameById[doc.businessId]
-                            if (!shopName.isNullOrBlank()) {
-                                Text(
-                                    shopName,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = colors.secondary,
-                                    modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
-                                )
-                            }
-                            DocumentCard(
-                                doc = doc,
-                                onFetch = { onFetchDoc(doc) },
-                                onUpload = { onUploadDoc(doc) },
-                                onView = { onViewDoc(doc) },
-                                onDelete = { }
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-            }
-        }
-    }
-}
-
-// ── Settings Screen (bottom-nav "Settings" tab) ───────────────────────────────
-@Composable
-fun SettingsScreen(
-    isDarkTheme: Boolean,
-    onToggleTheme: () -> Unit,
-    user: UserAccount,
-    onLogout: () -> Unit,
-    businesses: List<ShopResponse> = emptyList()
-) {
-    val colors = LocalAppColors.current
-    Column(modifier = Modifier.fillMaxSize().background(colors.background)) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = colors.background,
-            shadowElevation = 4.dp
-        ) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
-                Text("Settings", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                Text("Account & preferences", fontSize = 12.sp, color = colors.textSecondary)
-            }
-        }
-
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                if (businesses.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(
-                            "Businesses you manage",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = colors.primary,
-                            letterSpacing = 1.sp
-                        )
-                        businesses.forEach { shop ->
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-                                border = BorderStroke(1.dp, colors.border),
-                                shape = RoundedCornerShape(14.dp)
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(44.dp)
-                                                .clip(CircleShape)
-                                                .background(colors.primary.copy(alpha = 0.2f)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary, modifier = Modifier.size(24.dp))
-                                        }
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Column {
-                                            Text(shop.shopName.ifBlank { "Business" }, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                                            Text(user.role, fontSize = 12.sp, color = colors.primary, fontWeight = FontWeight.SemiBold)
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    HorizontalDivider(color = colors.border)
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text("Owner: ${shop.ownerName}", fontSize = 14.sp, color = colors.textSecondary)
-                                    Text("Mobile: +91 ${shop.mobile}", fontSize = 14.sp, color = colors.textSecondary)
-                                    val businessAddress = listOfNotNull(shop.address, shop.city, shop.state, shop.pincode)
-                                        .filter { it.isNotBlank() }
-                                        .joinToString(", ")
-                                    if (businessAddress.isNotBlank()) {
-                                        Text("Address: $businessAddress", fontSize = 14.sp, color = colors.textSecondary)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-                    border = BorderStroke(1.dp, colors.border),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(colors.primary.copy(alpha = 0.2f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary, modifier = Modifier.size(24.dp))
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(user.name.ifBlank { "User" }, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                                Text(user.role, fontSize = 12.sp, color = colors.primary, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        HorizontalDivider(color = colors.border)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("Mobile: +91 ${user.mobile}", fontSize = 14.sp, color = colors.textSecondary)
-                        if (user.email.isNotBlank()) {
-                            Text("Email: ${user.email}", fontSize = 14.sp, color = colors.textSecondary)
-                        }
-                    }
-                }
-                }
-            }
-
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-                    border = BorderStroke(1.dp, colors.border),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                        TextButton(
-                            onClick = onToggleTheme,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
-                                    contentDescription = "Toggle theme",
-                                    modifier = Modifier.size(20.dp),
-                                    tint = colors.primary
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    if (isDarkTheme) "Switch to Light Theme" else "Switch to Dark Theme",
-                                    color = colors.primary,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
-                                )
-                            }
-                        }
-                        HorizontalDivider(color = colors.border)
-                        TextButton(
-                            onClick = onLogout,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.Logout, contentDescription = null, tint = Color.Red, modifier = Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text("Logout & Clear Session", color = Color.Red, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            }
-                        }
-                    }
-                }
-            }
-
-            item { Spacer(modifier = Modifier.height(24.dp)) }
         }
     }
 }

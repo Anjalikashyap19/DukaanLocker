@@ -9,14 +9,14 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 
 private val DukaanDarkColorScheme = darkColorScheme(
-    primary = GoldColor,
+    primary = PrimaryBlue,
     onPrimary = Color.White,
-    primaryContainer = GoldColor.copy(alpha = 0.15f),
-    onPrimaryContainer = GoldColor,
-    secondary = SecondaryBlue,
+    primaryContainer = PrimaryBlue.copy(alpha = 0.15f),
+    onPrimaryContainer = PrimaryBlue,
+    secondary = SecondaryTeal,
     onSecondary = Color.White,
-    secondaryContainer = SecondaryBlue.copy(alpha = 0.15f),
-    onSecondaryContainer = SecondaryBlue,
+    secondaryContainer = SecondaryTeal.copy(alpha = 0.15f),
+    onSecondaryContainer = SecondaryTeal,
     tertiary = EmeraldColor,
     onTertiary = Color.White,
     background = DarkBg,
@@ -32,14 +32,14 @@ private val DukaanDarkColorScheme = darkColorScheme(
 )
 
 private val DukaanLightColorScheme = lightColorScheme(
-    primary = GoldColor,
+    primary = PrimaryBlue,
     onPrimary = Color.White,
-    primaryContainer = GoldColor.copy(alpha = 0.1f),
-    onPrimaryContainer = GoldColor,
-    secondary = SecondaryBlue,
+    primaryContainer = PrimaryBlue.copy(alpha = 0.1f),
+    onPrimaryContainer = PrimaryBlue,
+    secondary = SecondaryTeal,
     onSecondary = Color.White,
-    secondaryContainer = SecondaryBlue.copy(alpha = 0.1f),
-    onSecondaryContainer = SecondaryBlue,
+    secondaryContainer = SecondaryTeal.copy(alpha = 0.1f),
+    onSecondaryContainer = SecondaryTeal,
     tertiary = EmeraldColor,
     onTertiary = Color.White,
     background = Color(0xFFF8FAFC),

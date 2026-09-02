@@ -24,7 +24,10 @@ data class AuthResponse(
     @SerializedName("mobileNumber") val mobileNumber: String,
     @SerializedName("emailId") val emailId: String,
     @SerializedName("role") val role: String,
-    @SerializedName("managerCode") val managerCode: String? = null
+    @SerializedName("managerCode") val managerCode: String? = null,
+    @SerializedName("certificatePdfUrl") val certificatePdfUrl: String? = null,
+    @SerializedName("shopId") val shopId: Long? = null,
+    @SerializedName("shopName") val shopName: String? = null
 )
 
 // ── Shops (Businesses) ──────────────────────────────────────────────────────
@@ -230,12 +233,13 @@ data class MsmeAuthResponse(
     @SerializedName("shopAddress") val shopAddress: String?
 )
 
+private val sharedGson = com.google.gson.Gson()
+
 fun <T> retrofit2.Response<T>.parseErrorMessage(): String {
     val body = errorBody()?.string()
     if (body != null) {
         try {
-            val gson = com.google.gson.Gson()
-            val err = gson.fromJson(body, ErrorResponse::class.java)
+            val err = sharedGson.fromJson(body, ErrorResponse::class.java)
             if (!err.message.isNullOrBlank()) return err.message
         } catch (_: Exception) {}
     }

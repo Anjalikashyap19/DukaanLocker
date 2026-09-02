@@ -32,6 +32,8 @@ import com.iadv.dukaanlocker.BusinessProfile
 import com.iadv.dukaanlocker.ManagerAccess
 import com.iadv.dukaanlocker.api.ApiClient
 import com.iadv.dukaanlocker.api.LocationSuggestion
+import com.iadv.dukaanlocker.ui.strings.AppStrings
+import com.iadv.dukaanlocker.ui.strings.LocalAppLanguage
 import com.iadv.dukaanlocker.ui.theme.*
 import kotlinx.coroutines.delay
 
@@ -46,6 +48,7 @@ fun AddBusinessScreen(
     onCancel: () -> Unit
 ) {
     val colors = LocalAppColors.current
+    val lang = LocalAppLanguage.current
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var ownerName by remember { mutableStateOf(initial?.ownerName ?: "") }
     var category by remember { mutableStateOf(initial?.category ?: "") }
@@ -203,11 +206,11 @@ fun AddBusinessScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onCancel) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = colors.textPrimary)
+                    Icon(Icons.Default.ArrowBack, contentDescription = AppStrings.get(lang, "Back"), tint = colors.textPrimary)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (initial == null) "Add New Business" else "Edit Business",
+                    text = if (initial == null) AppStrings.get(lang, "Add New Business") else AppStrings.get(lang, "Edit Business"),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = colors.textPrimary
@@ -217,7 +220,7 @@ fun AddBusinessScreen(
 
         // Category counter hint
         Text(
-            text = "${categories.size} categories available",
+            text = "${categories.size} ${AppStrings.get(lang, "categories available")}",
             fontSize = 11.sp,
             color = colors.textSecondary.copy(alpha = 0.5f),
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
@@ -233,7 +236,7 @@ fun AddBusinessScreen(
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text("Business / Shop Name", color = colors.textSecondary) },
+                label = { Text(AppStrings.get(lang, "Business / Shop Name"), color = colors.textSecondary) },
                 leadingIcon = { Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -248,7 +251,7 @@ fun AddBusinessScreen(
             OutlinedTextField(
                 value = ownerName,
                 onValueChange = { ownerName = it },
-                label = { Text("Owner / Proprietor Name", color = colors.textSecondary) },
+                label = { Text(AppStrings.get(lang, "Owner / Proprietor Name"), color = colors.textSecondary) },
                 leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = colors.primary) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -268,7 +271,7 @@ fun AddBusinessScreen(
                     value = category,
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Business Category", color = colors.textSecondary) },
+                    label = { Text(AppStrings.get(lang, "Business Category"), color = colors.textSecondary) },
                     leadingIcon = { Icon(Icons.Default.Category, contentDescription = null, tint = colors.primary) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showCategoryDropdown) },
                     modifier = Modifier.menuAnchor().fillMaxWidth(),
@@ -280,7 +283,7 @@ fun AddBusinessScreen(
                 ExposedDropdownMenu(expanded = showCategoryDropdown, onDismissRequest = { showCategoryDropdown = false }) {
                     categories.forEach { item ->
                         DropdownMenuItem(
-                            text = { Text(item) },
+                            text = { Text(AppStrings.get(lang, item)) },
                             onClick = { category = item; showCategoryDropdown = false }
                         )
                     }
@@ -296,7 +299,7 @@ fun AddBusinessScreen(
                     value = scale,
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Business Scale", color = colors.textSecondary) },
+                    label = { Text(AppStrings.get(lang, "Business Scale"), color = colors.textSecondary) },
                     leadingIcon = { Icon(Icons.Default.TrendingUp, contentDescription = null, tint = colors.primary) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showScaleDropdown) },
                     modifier = Modifier.menuAnchor().fillMaxWidth(),
@@ -308,7 +311,7 @@ fun AddBusinessScreen(
                 ExposedDropdownMenu(expanded = showScaleDropdown, onDismissRequest = { showScaleDropdown = false }) {
                     scales.forEach { item ->
                         DropdownMenuItem(
-                            text = { Text(item) },
+                            text = { Text(AppStrings.get(lang, item)) },
                             onClick = { scale = item; showScaleDropdown = false }
                         )
                     }
@@ -323,7 +326,7 @@ fun AddBusinessScreen(
                 OutlinedTextField(
                     value = branchName,
                     onValueChange = { branchName = it; locationSelected = false },
-                    label = { Text("Branch / Location Name *", color = colors.textSecondary) },
+                    label = { Text(AppStrings.get(lang, "Branch / Location Name *"), color = colors.textSecondary) },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = colors.primary) },
                     trailingIcon = {
                         if (isSearchingLocation) {
@@ -342,7 +345,7 @@ fun AddBusinessScreen(
                     ),
                     shape = RoundedCornerShape(12.dp),
                     supportingText = if (branchName.isBlank()) {
-                        { Text("Type to search your location", color = colors.textSecondary.copy(alpha = 0.6f), fontSize = 11.sp) }
+                        { Text(AppStrings.get(lang, "Type to search your location"), color = colors.textSecondary.copy(alpha = 0.6f), fontSize = 11.sp) }
                     } else null
                 )
                 ExposedDropdownMenu(
@@ -383,7 +386,7 @@ fun AddBusinessScreen(
                     value = state,
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("State of Operation", color = colors.textSecondary) },
+                    label = { Text(AppStrings.get(lang, "State of Operation"), color = colors.textSecondary) },
                     leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, tint = colors.primary) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showStateDropdown) },
                     modifier = Modifier.menuAnchor().fillMaxWidth(),
@@ -406,7 +409,7 @@ fun AddBusinessScreen(
             OutlinedTextField(
                 value = city,
                 onValueChange = { city = it },
-                label = { Text("City / Town", color = colors.textSecondary) },
+                label = { Text(AppStrings.get(lang, "City / Town"), color = colors.textSecondary) },
                 leadingIcon = { Icon(Icons.Default.Place, contentDescription = null, tint = colors.primary) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -426,10 +429,10 @@ fun AddBusinessScreen(
                     onExpandedChange = { showManagerDropdown = !showManagerDropdown }
                 ) {
                     OutlinedTextField(
-                        value = managers.find { it.id == selectedManagerId }?.managerName ?: "Unassigned",
+                        value = managers.find { it.id == selectedManagerId }?.managerName ?: AppStrings.get(lang, "Unassigned"),
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Assign to Manager", color = colors.textSecondary) },
+                        label = { Text(AppStrings.get(lang, "Assign to Manager"), color = colors.textSecondary) },
                         leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = colors.primary) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showManagerDropdown) },
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
@@ -440,7 +443,7 @@ fun AddBusinessScreen(
                     )
                     ExposedDropdownMenu(expanded = showManagerDropdown, onDismissRequest = { showManagerDropdown = false }) {
                         DropdownMenuItem(
-                            text = { Text("Unassigned", fontWeight = if (selectedManagerId == null) FontWeight.Bold else FontWeight.Normal) },
+                            text = { Text(AppStrings.get(lang, "Unassigned"), fontWeight = if (selectedManagerId == null) FontWeight.Bold else FontWeight.Normal) },
                             onClick = { selectedManagerId = null; showManagerDropdown = false }
                         )
                         managers.forEach { mgr ->
@@ -448,7 +451,7 @@ fun AddBusinessScreen(
                                 text = {
                                     Column {
                                         Text(mgr.managerName, fontWeight = if (selectedManagerId == mgr.id) FontWeight.Bold else FontWeight.Normal)
-                                        Text("Code: ${mgr.code}", fontSize = 11.sp, color = colors.textSecondary)
+                                        Text("${AppStrings.get(lang, "Code:")} ${mgr.code}", fontSize = 11.sp, color = colors.textSecondary)
                                     }
                                 },
                                 onClick = { selectedManagerId = mgr.id; showManagerDropdown = false }
@@ -491,7 +494,7 @@ fun AddBusinessScreen(
             ) {
                 Icon(Icons.Default.Save, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("SAVE BUSINESS", fontWeight = FontWeight.Bold, fontSize = 16.sp, letterSpacing = 1.sp)
+                Text(AppStrings.get(lang, "SAVE BUSINESS"), fontWeight = FontWeight.Bold, fontSize = 16.sp, letterSpacing = 1.sp)
             }
 
             // Bottom spacing for system navigation bar

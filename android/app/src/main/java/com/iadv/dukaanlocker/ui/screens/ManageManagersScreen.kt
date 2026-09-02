@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.iadv.dukaanlocker.ui.components.SkeletonManagerCard
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -32,6 +33,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.iadv.dukaanlocker.BusinessProfile
 import com.iadv.dukaanlocker.ManagerAccess
+import com.iadv.dukaanlocker.ui.strings.AppStrings
+import com.iadv.dukaanlocker.ui.strings.LocalAppLanguage
 import com.iadv.dukaanlocker.ui.theme.*
 
 @Composable
@@ -41,9 +44,11 @@ fun ManageManagersScreen(
     managerShopAssignments: Map<String, List<String>> = emptyMap(),
     onAddManager: (String, List<String>) -> Unit,
     onDeleteManager: (String) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    isLoadingManagers: Boolean = false
 ) {
     val colors = LocalAppColors.current
+    val lang = LocalAppLanguage.current
     var showAddDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -64,12 +69,15 @@ fun ManageManagersScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = colors.textPrimary)
+                    Icon(Icons.Default.ArrowBack, contentDescription = AppStrings.get(lang, "Back"), tint = colors.textPrimary)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Manage Managers", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                    Text("${managers.size} manager(s) active", fontSize = 12.sp, color = colors.textSecondary)
+                    Text(AppStrings.get(lang, "Manage Managers"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                    Text(
+                        if (isLoadingManagers) AppStrings.get(lang, "Loading...") else "${managers.size} ${AppStrings.get(lang, "manager(s) active")}",
+                        fontSize = 12.sp, color = colors.textSecondary
+                    )
                 }
                 // Add Manager Button
                 Button(
@@ -80,12 +88,22 @@ fun ManageManagersScreen(
                 ) {
                     Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Add", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(AppStrings.get(lang, "Add"), fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 }
             }
         }
 
-        if (managers.isEmpty()) {
+        if (isLoadingManagers) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(3) {
+                    SkeletonManagerCard()
+                }
+            }
+        } else if (managers.isEmpty()) {
             // Empty State
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -99,8 +117,8 @@ fun ManageManagersScreen(
                         modifier = Modifier.size(80.dp)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("No Managers Added Yet", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary)
-                    Text("Tap 'Add' to invite a manager", fontSize = 13.sp, color = colors.textSecondary.copy(alpha = 0.6f))
+                    Text(AppStrings.get(lang, "No Managers Added Yet"), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary)
+                    Text(AppStrings.get(lang, "Tap 'Add' to invite a manager"), fontSize = 13.sp, color = colors.textSecondary.copy(alpha = 0.6f))
                 }
             }
         } else {
@@ -113,7 +131,8 @@ fun ManageManagersScreen(
                     ManagerCard(
                         manager = manager,
                         businesses = businesses,
-                        onDelete = { onDeleteManager(manager.code) }
+                        onDelete = { onDeleteManager(manager.code) },
+                        lang = lang
                     )
                 }
             }
@@ -141,7 +160,8 @@ fun ManageManagersScreen(
 private fun ManagerCard(
     manager: ManagerAccess,
     businesses: List<BusinessProfile>,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    lang: String
 ) {
     val colors = LocalAppColors.current
     Card(
@@ -172,12 +192,12 @@ private fun ManagerCard(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Lock, contentDescription = null, tint = colors.primary, modifier = Modifier.size(12.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Code: ${manager.code}", fontSize = 12.sp, color = colors.primary, fontWeight = FontWeight.Medium)
+                             Text("${AppStrings.get(lang, "Code:")} ${manager.code}", fontSize = 12.sp, color = colors.primary, fontWeight = FontWeight.Medium)
                         }
                     }
                 }
                 IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red.copy(alpha = 0.7f))
+                     Icon(Icons.Default.Delete, contentDescription = AppStrings.get(lang, "Delete"), tint = Color.Red.copy(alpha = 0.7f))
                 }
             }
 
@@ -185,7 +205,7 @@ private fun ManagerCard(
             HorizontalDivider(color = colors.border, thickness = 0.5.dp)
             Spacer(modifier = Modifier.height(10.dp))
 
-            Text("Assigned Businesses:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = colors.textSecondary)
+            Text(AppStrings.get(lang, "Assigned Businesses:"), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = colors.textSecondary)
             Spacer(modifier = Modifier.height(6.dp))
 
             manager.assignedBusinessIds.forEach { bizId ->
@@ -214,6 +234,7 @@ private fun AddManagerDialog(
     onConfirm: (String, List<String>) -> Unit
 ) {
     val colors = LocalAppColors.current
+    val lang = LocalAppLanguage.current
     var managerName by remember { mutableStateOf("") }
     val selectedBusinessIds = remember { mutableStateListOf<String>() }
 
@@ -231,13 +252,13 @@ private fun AddManagerDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Icon(Icons.Default.PersonAdd, contentDescription = null, tint = colors.primary, modifier = Modifier.size(40.dp))
-                Text("Add New Manager", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                Text("A unique access code will be generated automatically", fontSize = 13.sp, color = colors.textSecondary)
+                Text(AppStrings.get(lang, "Add New Manager"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                Text(AppStrings.get(lang, "A unique access code will be generated automatically"), fontSize = 13.sp, color = colors.textSecondary)
 
                 OutlinedTextField(
                     value = managerName,
                     onValueChange = { managerName = it },
-                    label = { Text("Manager Name", color = colors.textSecondary) },
+                    label = { Text(AppStrings.get(lang, "Manager Name"), color = colors.textSecondary) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -263,14 +284,14 @@ private fun AddManagerDialog(
                         Icon(Icons.Default.VpnKey, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
-                            Text("Access Code", fontSize = 10.sp, color = colors.textSecondary)
-                            Text("Will be generated after creation", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = colors.primary)
+                            Text(AppStrings.get(lang, "Access Code"), fontSize = 10.sp, color = colors.textSecondary)
+                            Text(AppStrings.get(lang, "Will be generated after creation"), fontSize = 13.sp, fontWeight = FontWeight.Medium, color = colors.primary)
                         }
                     }
                 }
 
                 // Business selection
-                Text("Assign Businesses:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+                Text(AppStrings.get(lang, "Assign Businesses:"), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
 
                 businesses.forEach { biz ->
                     Row(
@@ -306,7 +327,7 @@ private fun AddManagerDialog(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
-                        Text("Cancel", color = colors.textSecondary)
+                        Text(AppStrings.get(lang, "Cancel"), color = colors.textSecondary)
                     }
                     Button(
                         onClick = { onConfirm(managerName, selectedBusinessIds.toList()) },
@@ -315,7 +336,7 @@ private fun AddManagerDialog(
                         colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = colors.background),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Create Manager", fontWeight = FontWeight.Bold)
+                        Text(AppStrings.get(lang, "Create Manager"), fontWeight = FontWeight.Bold)
                     }
                 }
             }

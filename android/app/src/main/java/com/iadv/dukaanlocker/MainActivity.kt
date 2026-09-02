@@ -198,6 +198,6 @@ class MainActivity : FragmentActivity() {
         Locale.setDefault(locale)
         val config = resources.configuration
         config.setLocale(locale)
-        resources.updateConfiguration(config, resources.displayMetrics)
+        baseContext = createConfigurationContext(config)
     }
 }

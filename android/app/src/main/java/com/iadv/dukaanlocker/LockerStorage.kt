@@ -1,6 +1,8 @@
 package com.iadv.dukaanlocker
 
 import android.content.Context
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -14,7 +16,23 @@ data class UserAccount(
     val password: String = "",
     val role: String,           // "OWNER" or "MANAGER"
     val managerCode: String = ""
-)
+) {
+    override fun toString(): String = "UserAccount(mobile=$mobile, name=$name, email=$email, role=$role, managerCode=$managerCode)"
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is UserAccount) return false
+        return mobile == other.mobile && name == other.name && email == other.email &&
+                role == other.role && managerCode == other.managerCode
+    }
+    override fun hashCode(): Int {
+        var result = mobile.hashCode()
+        result = 31 * result + name.hashCode()
+        result = 31 * result + email.hashCode()
+        result = 31 * result + role.hashCode()
+        result = 31 * result + managerCode.hashCode()
+        return result
+    }
+}
 
 data class WizardAnswers(
     val businessCount: String = "ONE",          // "ONE" or "MULTIPLE"
@@ -78,27 +96,45 @@ object LockerStorage {
     private const val K_BIOMETRIC_LOGIN_ENABLED = "biometric_login_enabled"
 
     // ── User ──────────────────────────────────────────────────────────────────
+    private const val SECURE_PREFS = "dukaan_locker_secure"
+    private const val K_PASSWORD = "user_password"
+
+    private fun securePrefs(ctx: Context) = EncryptedSharedPreferences.create(
+        ctx,
+        SECURE_PREFS,
+        MasterKey.Builder(ctx)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build(),
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+    )
+
     fun saveUser(ctx: Context, u: UserAccount) {
         pref(ctx).edit().putString(K_USER, JSONObject().apply {
             put("mobile", u.mobile); put("name", u.name)
-            put("email", u.email); put("password", u.password)
+            put("email", u.email)
             put("role", u.role); put("managerCode", u.managerCode)
         }.toString()).apply()
+        securePrefs(ctx).edit().putString(K_PASSWORD, u.password).apply()
     }
 
     fun getUser(ctx: Context): UserAccount? = try {
         pref(ctx).getString(K_USER, null)?.let { s ->
             JSONObject(s).let {
+                val password = securePrefs(ctx).getString(K_PASSWORD, "") ?: ""
                 UserAccount(
                     it.getString("mobile"), it.getString("name"),
-                    it.optString("email", ""), it.optString("password", ""),
+                    it.optString("email", ""), password,
                     it.getString("role"), it.optString("managerCode", "")
                 )
             }
         }
     } catch (e: Exception) { null }
 
-    fun clearUser(ctx: Context) = pref(ctx).edit().remove(K_USER).apply()
+    fun clearUser(ctx: Context) {
+        pref(ctx).edit().remove(K_USER).apply()
+        securePrefs(ctx).edit().remove(K_PASSWORD).apply()
+    }
 
     // ── Wizard ────────────────────────────────────────────────────────────────
     fun saveWizard(ctx: Context, w: WizardAnswers) {
@@ -192,6 +228,7 @@ object LockerStorage {
                 put("id", d.id); put("businessId", d.businessId); put("type", d.type)
                 put("name", d.name); put("status", d.status); put("regNumber", d.regNumber)
                 put("expiryDate", d.expiryDate); put("issueDate", d.issueDate)
+                put("fileUrl", d.fileUrl ?: JSONObject.NULL)
             })
         }
         pref(ctx).edit().putString(K_DOCS, arr.toString()).apply()
@@ -205,9 +242,12 @@ object LockerStorage {
         val arr = JSONArray(str)
         (0 until arr.length()).map { i ->
             arr.getJSONObject(i).let {
-                DocumentItem(it.getString("id"), it.getString("businessId"), it.getString("type"),
+                val fileUrl = if (it.isNull("fileUrl")) null else it.optString("fileUrl", null)
+                DocumentItem(
+                    it.getString("id"), it.getString("businessId"), it.getString("type"),
                     it.getString("name"), it.getString("status"), it.optString("regNumber", ""),
-                    it.optString("expiryDate", ""), it.optString("issueDate", ""))
+                    it.optString("expiryDate", ""), it.optString("issueDate", ""), fileUrl
+                )
             }
         }
     } catch (e: Exception) { emptyList() }

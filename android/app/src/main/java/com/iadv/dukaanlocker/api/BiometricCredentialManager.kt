@@ -5,6 +5,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import com.iadv.dukaanlocker.BuildConfig
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -30,7 +31,6 @@ object BiometricCredentialManager {
     private const val PREFS_NAME = "biometric_credentials"
     private const val KEY_ENCRYPTED_DATA = "encrypted_data"
     private const val KEY_IV = "encryption_iv"
-    private const val DELIMITER = "|||"
 
     /**
      * Generate or retrieve the Android Keystore key.
@@ -112,17 +112,22 @@ object BiometricCredentialManager {
             // Clear any stale old-format credentials first
             clearCredentials(context)
             
-            // Concatenate all fields into a single string
-            val plainData = listOf(token, userId.toString(), userName, email, role)
-                .joinToString(DELIMITER)
+            // Encode all fields as JSON to avoid delimiter collision
+            val plainData = org.json.JSONObject().apply {
+                put("token", token)
+                put("userId", userId)
+                put("userName", userName)
+                put("email", email)
+                put("role", role)
+            }.toString()
 
-            android.util.Log.d("BiometricCredential", "Storing credentials, plainData length: ${plainData.length}")
+            if (BuildConfig.DEBUG) android.util.Log.d("BiometricCredential", "Storing credentials, plainData length: ${plainData.length}")
 
             // Encrypt the entire string in ONE operation using the authenticated cipher
             val encrypted = cryptoCipher.doFinal(plainData.toByteArray())
             val iv = cryptoCipher.iv
 
-            android.util.Log.d("BiometricCredential", "Encryption successful, encrypted size: ${encrypted.size}, iv size: ${iv.size}")
+            if (BuildConfig.DEBUG) android.util.Log.d("BiometricCredential", "Encryption successful, encrypted size: ${encrypted.size}, iv size: ${iv.size}")
 
             // Store the encrypted data and IV
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -135,7 +140,7 @@ object BiometricCredentialManager {
             // Verify the write succeeded
             val verifyData = prefs.getString(KEY_ENCRYPTED_DATA, null)
             val verifyIv = prefs.getString(KEY_IV, null)
-            android.util.Log.d("BiometricCredential", "Verification: data=${verifyData != null}, iv=${verifyIv != null}")
+            if (BuildConfig.DEBUG) android.util.Log.d("BiometricCredential", "Verification: data=${verifyData != null}, iv=${verifyIv != null}")
             
             true
         } catch (e: KeyPermanentlyInvalidatedException) {
@@ -161,34 +166,40 @@ object BiometricCredentialManager {
         return try {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val encryptedData = prefs.getString(KEY_ENCRYPTED_DATA, null)
-            android.util.Log.d("BiometricCredential", "getCredentialsWithCipher: encryptedData=${encryptedData != null}")
+            if (BuildConfig.DEBUG) android.util.Log.d("BiometricCredential", "getCredentialsWithCipher: encryptedData=${encryptedData != null}")
             if (encryptedData == null) return null
 
             // The cipher is already in DECRYPT_MODE from the CryptoObject
             // Just use it directly to decrypt
             val decryptedBytes = cryptoCipher.doFinal(Base64.decode(encryptedData, Base64.NO_WRAP))
             val decrypted = String(decryptedBytes)
-            android.util.Log.d("BiometricCredential", "Decryption successful, parts: ${decrypted.split(DELIMITER).size}")
+            if (BuildConfig.DEBUG) android.util.Log.d("BiometricCredential", "Decryption successful")
 
-            // Split by delimiter to get individual fields
-            val parts = decrypted.split(DELIMITER)
-            if (parts.size != 5) {
+            // Parse JSON to get individual fields
+            val json = org.json.JSONObject(decrypted)
+            val token = json.optString("token", "")
+            val userId = json.optLong("userId", -1)
+            val userName = json.optString("userName", "")
+            val email = json.optString("email", "")
+            val role = json.optString("role", "")
+
+            if (token.isBlank() || userId == -1L) {
                 clearCredentials(context)
                 return null
             }
 
             BiometricCredentials(
-                token = parts[0],
-                userId = parts[1].toLongOrNull() ?: -1,
-                userName = parts[2],
-                email = parts[3],
-                role = parts[4]
+                token = token,
+                userId = userId,
+                userName = userName,
+                email = email,
+                role = role
             )
         } catch (e: KeyPermanentlyInvalidatedException) {
             clearCredentials(context)
             null
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e("BiometricCredential", "getCredentialsWithCipher failed", e)
             null
         }
     }

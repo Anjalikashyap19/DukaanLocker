@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
-import com.iadv.dukaanlocker.BuildConfig
+
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -13,9 +13,14 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.io.InterruptedIOException
 import java.util.concurrent.TimeUnit
 
+import android.util.Base64
+import com.iadv.dukaanlocker.BuildConfig
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
+
 object ApiClient {
 
-    private const val BASE_URL = "https://api.dukaanlocker.com/"
+    private const val BASE_URL = BuildConfig.BASE_URL
     private const val PREFS_NAME = "dukaan_api_prefs"
     private const val SECURE_PREFS_NAME = "dukaan_secure_prefs"
     private const val KEY_TOKEN = "jwt_token"
@@ -30,6 +35,7 @@ object ApiClient {
     @Volatile private var retrofit: Retrofit? = null
     @Volatile private var documentStreamApi: DocumentStreamApi? = null
     @Volatile private var documentStreamRetrofit: Retrofit? = null
+    @Volatile private var cachedSecurePrefs: SharedPreferences? = null
 
     // ── Token Management ──────────────────────────────────────────────────────
 
@@ -42,16 +48,20 @@ object ApiClient {
      * from plaintext prefs files or device backups.
      */
     private fun securePrefs(context: Context): SharedPreferences {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-        return EncryptedSharedPreferences.create(
-            context,
-            SECURE_PREFS_NAME,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
+        return cachedSecurePrefs ?: synchronized(this) {
+            cachedSecurePrefs ?: run {
+                val masterKey = MasterKey.Builder(context.applicationContext)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build()
+                EncryptedSharedPreferences.create(
+                    context.applicationContext,
+                    SECURE_PREFS_NAME,
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                ).also { cachedSecurePrefs = it }
+            }
+        }
     }
 
     fun saveAuth(context: Context, response: AuthResponse) {
@@ -85,6 +95,20 @@ object ApiClient {
     fun getManagerCode(context: Context): String = securePrefs(context).getString(KEY_MANAGER_CODE, "") ?: ""
 
     fun isLoggedIn(context: Context): Boolean = getToken(context) != null
+
+    fun isTokenExpired(context: Context): Boolean {
+        val token = getToken(context) ?: return true
+        return try {
+            val parts = token.split(".")
+            if (parts.size != 3) return true
+            val payload = String(Base64.decode(parts[1], Base64.URL_SAFE))
+            val exp = JSONObject(payload).optLong("exp", 0)
+            val now = System.currentTimeMillis() / 1000
+            now >= exp
+        } catch (_: Exception) {
+            true
+        }
+    }
 
     fun clearAuth(context: Context) {
         prefs(context).edit().clear().apply()
@@ -168,7 +192,7 @@ object ApiClient {
                         (e.message?.contains("ChunkedSource") == true)
                     
                     if (isRetryable && attempt < maxRetries) {
-                        Thread.sleep(500L * attempt) // Exponential backoff
+                        try { Thread.sleep(500L * attempt) } catch (_: InterruptedException) { return@Interceptor chain.proceed(chain.request()) }
                         continue
                     }
                     throw e

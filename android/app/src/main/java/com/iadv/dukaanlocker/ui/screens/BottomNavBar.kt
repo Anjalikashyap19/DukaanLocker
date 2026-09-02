@@ -29,29 +29,33 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.iadv.dukaanlocker.ui.navigation.BottomTab
+import com.iadv.dukaanlocker.ui.strings.AppStrings
+import com.iadv.dukaanlocker.ui.strings.LocalAppLanguage
 import com.iadv.dukaanlocker.ui.theme.*
 
 sealed class BottomNavItem(
-    val route: String,
-    val label: String,
+    val tab: BottomTab,
+    val labelKey: String,
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector
 ) {
-    data object Home : BottomNavItem("home", "Home", Icons.Filled.Home, Icons.Outlined.Home)
-    data object Business : BottomNavItem("business", "Business", Icons.Filled.Business, Icons.Outlined.Business)
-    data object Docs : BottomNavItem("docs", "Docs", Icons.Filled.Description, Icons.Outlined.Description)
-    data object Team : BottomNavItem("team", "Team", Icons.Filled.People, Icons.Outlined.People)
-    data object Settings : BottomNavItem("settings", "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
+    data object Home : BottomNavItem(BottomTab.Home, "Home", Icons.Filled.Home, Icons.Outlined.Home)
+    data object Business : BottomNavItem(BottomTab.Business, "Business", Icons.Filled.Business, Icons.Outlined.Business)
+    data object Docs : BottomNavItem(BottomTab.Docs, "Docs", Icons.Filled.Description, Icons.Outlined.Description)
+    data object Team : BottomNavItem(BottomTab.Team, "Team", Icons.Filled.People, Icons.Outlined.People)
+    data object Settings : BottomNavItem(BottomTab.Settings, "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
 }
 
 @Composable
 fun BottomNavBar(
-    currentRoute: String,
-    onNavigate: (String) -> Unit,
+    currentTab: BottomTab,
+    onNavigate: (BottomTab) -> Unit,
     isDarkTheme: Boolean = true,
     showTeam: Boolean = true
 ) {
     val colors = LocalAppColors.current
+    val language = LocalAppLanguage.current
 
     val items = buildList {
         add(BottomNavItem.Home)
@@ -61,7 +65,6 @@ fun BottomNavBar(
         add(BottomNavItem.Settings)
     }
 
-    // ── Floating pill-shaped nav bar: ~94% width, compact height ──────────
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -79,12 +82,12 @@ fun BottomNavBar(
                     spotColor = if (isDarkTheme) Color.Black.copy(alpha = 0.35f) else Color.Black.copy(alpha = 0.08f)
                 ),
             colors = CardDefaults.cardColors(
-                containerColor = if (isDarkTheme) Color(0xFF2D2D2D) else Color.White
+                containerColor = if (isDarkTheme) colors.cardBg else colors.background
             ),
             shape = RoundedCornerShape(22.dp),
             border = BorderStroke(
                 1.dp,
-                if (isDarkTheme) Color(0xFF3A3A3A) else Color(0xFFE2E8F0)
+                if (isDarkTheme) colors.border else colors.border.copy(alpha = 0.5f)
             )
         ) {
             Row(
@@ -95,7 +98,7 @@ fun BottomNavBar(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 items.forEach { item ->
-                    val isSelected = currentRoute == item.route
+                    val isSelected = currentTab == item.tab
 
                     val iconColor by animateColorAsState(
                         targetValue = if (isSelected) colors.primary else colors.textSecondary.copy(alpha = 0.55f),
@@ -106,12 +109,11 @@ fun BottomNavBar(
                         label = "textColor"
                     )
 
-                    // ── Clickable item ────────────────────────────────────
                     Column(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(14.dp))
-                            .clickable { onNavigate(item.route) }
+                            .clickable { onNavigate(item.tab) }
                             .background(
                                 if (isSelected) colors.primary.copy(alpha = 0.10f)
                                 else Color.Transparent
@@ -122,13 +124,13 @@ fun BottomNavBar(
                     ) {
                         Icon(
                             imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
-                            contentDescription = item.label,
+                            contentDescription = item.labelKey,
                             tint = iconColor,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = item.label,
+                            text = AppStrings.get(language, item.labelKey),
                             fontSize = 9.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                             color = textColor

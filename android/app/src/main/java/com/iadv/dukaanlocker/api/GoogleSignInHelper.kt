@@ -8,10 +8,11 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import com.iadv.dukaanlocker.BuildConfig
 
 class GoogleSignInHelper(private val context: Context) {
     
-    private val webClientId = "733563364874-v71tsg3phavb9b12oiu7vjhjnjtv8qg1.apps.googleusercontent.com"
+    private val webClientId = BuildConfig.GOOGLE_WEB_CLIENT_ID
     
     private val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
         .requestIdToken(webClientId)
