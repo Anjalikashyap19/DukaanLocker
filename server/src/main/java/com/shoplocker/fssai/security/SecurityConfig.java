@@ -88,7 +88,8 @@ public class SecurityConfig {
                     List<String> publicPaths = new ArrayList<>(List.of(
                             "/api/auth/**",
                             "/api/udyam/**",
-                            "/api/location/**"
+                            "/api/location/**",
+                            "/api/gst/**"
                     ));
                     // Swagger UI / OpenAPI, H2 console and actuator are ONLY exposed
                     // when app.security.expose-devtools=true (default false). Even with

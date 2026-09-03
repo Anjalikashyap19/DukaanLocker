@@ -67,6 +67,8 @@ public enum FailureCode {
     PDF_PROCESSING_ERROR       ("pdf_processing_error",       HttpStatus.INTERNAL_SERVER_ERROR),
 
     // ---- Location / External API errors ----
+    /** GST verification via API Setu failed (network, auth, or invalid response). */
+    GST_VERIFICATION_FAILED     ("gst_verification_failed",     HttpStatus.BAD_GATEWAY),
 
     // ---- Shop / Manager / Assignment errors ----
     /** Shop not found. */

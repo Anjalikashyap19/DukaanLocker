@@ -112,4 +112,12 @@ interface ApiService {
 
     @POST("api/auth/msme-login-verify")
     suspend fun msmeLoginVerify(@Body request: MsmeOtpVerifyRequest): Response<AuthResponse>
+
+    // ── GST Verification ───────────────────────────────────────────────────
+
+    @GET("api/gst/verify/{gstNumber}")
+    suspend fun verifyGst(@Path("gstNumber") gstNumber: String): Response<GstVerificationResponse>
+
+    @POST("api/gst/fetch")
+    suspend fun fetchGst(@Body request: GstFetchRequest): Response<GstVerificationResponse>
 }

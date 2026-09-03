@@ -725,4 +725,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    fun fetchGst(shopId: String, gstin: String, onResult: (Boolean, GstVerificationResponse?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val response = api.fetchGst(GstFetchRequest(shopId = shopId, gstin = gstin))
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    if (response.isSuccessful) {
+                        val body = response.body()
+                        if (body != null && body.success) {
+                            onResult(true, body)
+                        } else {
+                            onResult(false, body)
+                        }
+                    } else {
+                        Toast.makeText(context, "GST verification failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
+                        onResult(false, null)
+                    }
+                }
+            } catch (e: Exception) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
+                    onResult(false, null)
+                }
+            }
+        }
+    }
 }

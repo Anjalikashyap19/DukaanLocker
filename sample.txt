@@ -1,1 +1,15 @@
-73e48c7ad5a8462417fcba330dfd934eeb5be42c91f2c78e29ee3d46bcf7d80b
+I need to integrate the API Setu "GSTN Taxpayers Verification API" into this project in gst fetch things. 
+
+
+
+Please write a clean, secure backend controller/route that handles the following implementation details:
+
+1. HTTP Method: GET
+2. Target URL: https://apisetu.gov.in{gst_number}
+   (The {gst_number} must be dynamic, fetched from the incoming client request parameters or query strings)
+3. Required Headers:
+   - 'X-API-KEY': '[0d8b1c2d28a262c2054755cfbef2019e36fe3b136b87e8f133f9f3ebac8d17ea]'
+   - 'X-CLIENT-ID': '[in.indiaadvocacy]'
+   - 'accept': 'application/json'
+
+Please include robust error handling (try-catch block) so that if API Setu returns an error (like a 404 for an invalid GSTIN or a 401 for an authentication failure), my backend passes a clean JSON error response back to the frontend.

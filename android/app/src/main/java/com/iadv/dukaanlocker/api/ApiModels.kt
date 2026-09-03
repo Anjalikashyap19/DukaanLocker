@@ -261,3 +261,23 @@ data class MsmeOtpResponse(
     @SerializedName("requestId") val requestId: String?,
     @SerializedName("message") val message: String?
 )
+
+// ── GST Verification ─────────────────────────────────────────────────────
+
+data class GstVerificationResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("gstin") val gstin: String?,
+    @SerializedName("legalName") val legalName: String?,
+    @SerializedName("tradeName") val tradeName: String?,
+    @SerializedName("registrationDate") val registrationDate: String?,
+    @SerializedName("status") val status: String?,
+    @SerializedName("state") val state: String?,
+    @SerializedName("pdfUrl") val pdfUrl: String?,
+    @SerializedName("certificateHtml") val certificateHtml: String?,
+    @SerializedName("errorMessage") val errorMessage: String?
+)
+
+data class GstFetchRequest(
+    @SerializedName("shopId") val shopId: String,
+    @SerializedName("gstin") val gstin: String
+)

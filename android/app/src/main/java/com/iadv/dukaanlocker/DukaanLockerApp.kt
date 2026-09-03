@@ -322,7 +322,22 @@ fun DukaanLockerApp(
                         if (state.showFetchDialog && state.fetchTargetDoc != null) {
                             val fetchDoc = state.fetchTargetDoc!!
                             val shop = state.shops.find { it.id.toString() == fetchDoc.businessId }
-                            FetchDocumentDialog(doc = fetchDoc, shopName = shop?.shopName ?: "Business", onDismiss = { vm.dismissFetchDialog() }, onSuccess = { _, _, _ -> vm.dismissFetchDialog() })
+                            FetchDocumentDialog(
+                                doc = fetchDoc,
+                                shopName = shop?.shopName ?: "Business",
+                                onDismiss = { vm.dismissFetchDialog() },
+                                onSuccess = { regNum, issue, expiry ->
+                                    vm.dismissFetchDialog()
+                                    if (shop != null) {
+                                        vm.loadDocuments(shop.id)
+                                    }
+                                },
+                                onFetchGst = { shopId, gstin, result ->
+                                    vm.fetchGst(shopId, gstin) { success, response ->
+                                        result(success, response)
+                                    }
+                                }
+                            )
                         }
 
                         // ── Certificate Viewer Dialog ──
