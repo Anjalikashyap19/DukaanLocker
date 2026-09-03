@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit
 import android.util.Base64
 import com.iadv.dukaanlocker.BuildConfig
 import org.json.JSONObject
-import java.util.concurrent.TimeUnit
+
 
 object ApiClient {
 
