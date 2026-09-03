@@ -196,8 +196,8 @@ class MainActivity : FragmentActivity() {
         val code = LockerStorage.getLanguage(this)
         val locale = Locale(code)
         Locale.setDefault(locale)
-        val config = resources.configuration
+        val config = android.content.res.Configuration(resources.configuration)
         config.setLocale(locale)
-        baseContext = createConfigurationContext(config)
+        applyOverrideConfiguration(config)
     }
 }

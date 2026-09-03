@@ -41,8 +41,32 @@ fun FetchDocumentDialog(
     var fetchError by remember { mutableStateOf<String?>(null) }
     var gstResponse by remember { mutableStateOf<GstVerificationResponse?>(null) }
 
+    // Hold the pending result from onFetchGst callback
+    var pendingResult by remember { mutableStateOf<Pair<Boolean, GstVerificationResponse?>?>(null) }
+
     val labelText = docFetchLabel(doc.type)
     val isGst = doc.type == "GST"
+
+    // Handle the pending result on the Main thread
+    LaunchedEffect(pendingResult) {
+        pendingResult?.let { (success, response) ->
+            pendingResult = null
+            isFetching = false
+            if (success && response != null) {
+                gstResponse = response
+                val formatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                val today = Date()
+                val expiryCal = Calendar.getInstance().apply { add(Calendar.YEAR, 5) }
+                onSuccess(
+                    response.gstin ?: regInput.uppercase(),
+                    response.registrationDate ?: formatter.format(today),
+                    formatter.format(expiryCal.time)
+                )
+            } else {
+                fetchError = response?.errorMessage ?: "Verification failed. Please check the GSTIN and try again."
+            }
+        }
+    }
 
     LaunchedEffect(isFetching) {
         if (isFetching) {
@@ -62,21 +86,9 @@ fun FetchDocumentDialog(
                     currentStepText = text
                 }
 
+                // Call the backend — callback sets pendingResult, which is handled on Main via LaunchedEffect above
                 onFetchGst(doc.businessId, regInput.trim().uppercase()) { success, response ->
-                    isFetching = false
-                    if (success && response != null) {
-                        gstResponse = response
-                        val formatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-                        val today = Date()
-                        val expiryCal = Calendar.getInstance().apply { add(Calendar.YEAR, 5) }
-                        onSuccess(
-                            response.gstin ?: regInput.uppercase(),
-                            response.registrationDate ?: formatter.format(today),
-                            formatter.format(expiryCal.time)
-                        )
-                    } else {
-                        fetchError = response?.errorMessage ?: "Verification failed. Please check the GSTIN and try again."
-                    }
+                    pendingResult = success to response
                 }
             } else {
                 val steps = listOf(
@@ -94,6 +106,7 @@ fun FetchDocumentDialog(
                 val formatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
                 val today = Date()
                 val expiryCal = Calendar.getInstance().apply { add(Calendar.YEAR, 5) }
+                isFetching = false
                 onSuccess(regInput.uppercase(), formatter.format(today), formatter.format(expiryCal.time))
             }
         }
