@@ -1,14 +1,1 @@
-Act as a Senior Android Developer and Gradle Build Expert. I am analyzing my APK using Android Studio's APK Analyzer and encountered two critical performance/compatibility warnings under the "Alignment" column:
 
-1. "Does not support 16 KB devices" (at the root APK level)
-2. "4 KB LOAD section alignment, but 16 KB is required" (specifically affecting native binaries inside my 'dump_syms' directory for windows, linux, and macos)
-
-Context:
-- The app crashes instantly on startup on newer devices/emulators running Android 15+ configured with a 16 KB memory page size.
-- I need to publish this application to the Google Play Store, so it must fully comply with Google's modern 16 KB page alignment standard.
-
-Please provide a comprehensive, step-by-step technical guide to fix this issue root-and-branch:
-1. Exact changes needed in my project-level and app-level 'build.gradle' (or 'build.gradle.kts') files.
-2. How to identify which third-party SDK or dependency is pulling in these unaligned 'dump_syms' native binaries.
-3. The correct NDK architecture configurations (like ndk.abiFilters) required to ensure native C/C++ libraries are built with 16 KB page alignment.
-4. How to set up an Android 15 (16 KB page size) Virtual Device in Android Studio to locally test and verify that the crash is fully resolved before production deployment.
