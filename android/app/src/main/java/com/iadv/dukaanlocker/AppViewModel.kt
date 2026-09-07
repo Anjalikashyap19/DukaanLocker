@@ -729,7 +729,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun fetchGst(shopId: String, gstin: String, onResult: (Boolean, GstVerificationResponse?) -> Unit) {
         viewModelScope.launch {
             try {
+                android.util.Log.d("GST_FETCH", ">>> REQUEST: shopId=$shopId, gstin=$gstin")
                 val response = api.fetchGst(GstFetchRequest(shopId = shopId, gstin = gstin))
+                android.util.Log.d("GST_FETCH", "<<< RESPONSE CODE: ${response.code()}")
+                android.util.Log.d("GST_FETCH", "<<< RESPONSE BODY: ${response.body()}")
+                if (!response.isSuccessful) {
+                    android.util.Log.e("GST_FETCH", "<<< ERROR BODY: ${response.errorBody()?.string()}")
+                }
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     if (response.isSuccessful) {
                         val body = response.body()
@@ -744,6 +750,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             } catch (e: Exception) {
+                android.util.Log.e("GST_FETCH", "<<< EXCEPTION: ${e.javaClass.simpleName}: ${e.message}", e)
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
                     onResult(false, null)

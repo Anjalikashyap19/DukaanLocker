@@ -1,15 +1,14 @@
-I need to integrate the API Setu "GSTN Taxpayers Verification API" into this project in gst fetch things. 
+Act as a Senior Android Developer and Gradle Build Expert. I am analyzing my APK using Android Studio's APK Analyzer and encountered two critical performance/compatibility warnings under the "Alignment" column:
 
+1. "Does not support 16 KB devices" (at the root APK level)
+2. "4 KB LOAD section alignment, but 16 KB is required" (specifically affecting native binaries inside my 'dump_syms' directory for windows, linux, and macos)
 
+Context:
+- The app crashes instantly on startup on newer devices/emulators running Android 15+ configured with a 16 KB memory page size.
+- I need to publish this application to the Google Play Store, so it must fully comply with Google's modern 16 KB page alignment standard.
 
-Please write a clean, secure backend controller/route that handles the following implementation details:
-
-1. HTTP Method: GET
-2. Target URL: https://apisetu.gov.in{gst_number}
-   (The {gst_number} must be dynamic, fetched from the incoming client request parameters or query strings)
-3. Required Headers:
-   - 'X-API-KEY': '[0d8b1c2d28a262c2054755cfbef2019e36fe3b136b87e8f133f9f3ebac8d17ea]'
-   - 'X-CLIENT-ID': '[in.indiaadvocacy]'
-   - 'accept': 'application/json'
-
-Please include robust error handling (try-catch block) so that if API Setu returns an error (like a 404 for an invalid GSTIN or a 401 for an authentication failure), my backend passes a clean JSON error response back to the frontend.
+Please provide a comprehensive, step-by-step technical guide to fix this issue root-and-branch:
+1. Exact changes needed in my project-level and app-level 'build.gradle' (or 'build.gradle.kts') files.
+2. How to identify which third-party SDK or dependency is pulling in these unaligned 'dump_syms' native binaries.
+3. The correct NDK architecture configurations (like ndk.abiFilters) required to ensure native C/C++ libraries are built with 16 KB page alignment.
+4. How to set up an Android 15 (16 KB page size) Virtual Device in Android Studio to locally test and verify that the crash is fully resolved before production deployment.

@@ -1,5 +1,6 @@
 package com.iadv.dukaanlocker
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -93,8 +94,29 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    override fun attachBaseContext(newBase: Context?) {
+        super.attachBaseContext(newBase?.let { applyLanguage(it) })
+    }
+
+    private fun applyLanguage(base: Context): Context {
+        val code = readLanguageFromPrefs(base)
+        val locale = Locale(code)
+        Locale.setDefault(locale)
+        val config = android.content.res.Configuration()
+        config.setLocale(locale)
+        return base.createConfigurationContext(config)
+    }
+
+    private fun readLanguageFromPrefs(context: Context): String {
+        return try {
+            val prefsFile = context.getSharedPreferences("dukaan_locker_v2", MODE_PRIVATE)
+            prefsFile.getString("language", "en") ?: "en"
+        } catch (_: Exception) {
+            "en"
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        applyLanguage()
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -192,12 +214,4 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    private fun applyLanguage() {
-        val code = LockerStorage.getLanguage(this)
-        val locale = Locale(code)
-        Locale.setDefault(locale)
-        val config = android.content.res.Configuration(resources.configuration)
-        config.setLocale(locale)
-        applyOverrideConfiguration(config)
-    }
 }

@@ -17,6 +17,11 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // 16 KB page alignment — only ship the ABIs you actually need
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
     }
 
     buildFeatures {
@@ -60,6 +65,25 @@ android {
     kotlin {
         jvmToolchain(21)
     }
+
+    // JNI libs extracted to disk for backward compatibility (Android 12 and below)
+    // On Android 15+ with 16KB page size, Google Play enforces alignment at upload time
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+        resources {
+            // Exclude dump_syms native binaries from Firebase Crashlytics buildtools
+            // These cause 16KB alignment warnings and are not needed at runtime
+            excludes += listOf(
+                "META-INF/DEPENDENCIES",
+                "META-INF/LICENSE",
+                "META-INF/LICENSE.txt",
+                "META-INF/NOTICE",
+                "META-INF/NOTICE.txt"
+            )
+        }
+    }
 }
 
 dependencies {
@@ -86,7 +110,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
-    implementation(libs.firebase.crashlytics.buildtools)
+    // Build-time only: used for mapping file upload, not needed at runtime
+    compileOnly(libs.firebase.crashlytics.buildtools)
 
     // Networking
     implementation(libs.retrofit)

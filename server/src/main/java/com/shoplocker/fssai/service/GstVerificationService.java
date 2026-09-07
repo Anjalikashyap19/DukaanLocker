@@ -35,8 +35,7 @@ public class GstVerificationService {
 
     private static final Logger log = LoggerFactory.getLogger(GstVerificationService.class);
 
-    private static final String BASE_URL = "https://apisetu.gov.in/public/abc/v2/gstn/";
-    private static final String BASE_URL_FALLBACK = "https://apisetu.gov.in/";
+    private static final String BASE_URL = "https://apisetu.gov.in/gstn/v2/taxpayers/";
 
     @Value("${app.api-setu.x-api-key}")
     private String apiKey;
@@ -116,8 +115,8 @@ public class GstVerificationService {
                 .build()) {
 
             HttpGet request = new HttpGet(url);
-            request.setHeader("X-API-KEY", apiKey);
-            request.setHeader("X-CLIENT-ID", clientId);
+            request.setHeader("X-APISETU-APIKEY", apiKey);
+            request.setHeader("X-APISETU-CLIENTID", clientId);
             request.setHeader("accept", "application/json");
 
             log.info("GST verification request for GSTIN: {}, URL: {}", gstNumber, url);
@@ -166,8 +165,8 @@ public class GstVerificationService {
                 .build()) {
 
             HttpGet fallbackRequest = new HttpGet(fallbackUrl);
-            fallbackRequest.setHeader("X-API-KEY", apiKey);
-            fallbackRequest.setHeader("X-CLIENT-ID", clientId);
+            fallbackRequest.setHeader("X-APISETU-APIKEY", apiKey);
+            fallbackRequest.setHeader("X-APISETU-CLIENTID", clientId);
             fallbackRequest.setHeader("accept", "application/json");
 
             return client.execute(fallbackRequest, response -> {
@@ -203,12 +202,12 @@ public class GstVerificationService {
             }
 
             // Extract taxpayer details from the response
-            // The exact structure depends on the API Setu response format
-            String legalName = extractField(root, "lgnm");
-            String tradeName = extractField(root, "tradeNam");
-            String registrationDate = extractField(root, "rgdt");
-            String status = extractField(root, "sts");
-            String state = extractField(root, "stj");
+            // API Setu GSTN V2 response fields
+            String legalName = extractField(root, "legalNameOfBusiness");
+            String tradeName = extractField(root, "tradeName");
+            String registrationDate = extractField(root, "dateOfRegistration");
+            String status = extractField(root, "gstnStatus");
+            String state = extractField(root, "stateJurisdiction");
 
             if (legalName == null && tradeName == null) {
                 return GstVerificationResponse.error("Could not extract taxpayer details from the response.");
