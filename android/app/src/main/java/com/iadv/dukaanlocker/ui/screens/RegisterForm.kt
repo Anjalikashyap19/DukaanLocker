@@ -88,7 +88,6 @@ fun RegisterForm(
                     )
                 }
             }
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

@@ -32,7 +32,7 @@ public class Shop {
             regexp = "^[0-9]{10}$",
             message = "Mobile number must be 10 digits"
     )
-    @Column(unique = true)
+    @Column(nullable = false)
     private String mobile;
 
     @NotBlank(message = "category is required")
