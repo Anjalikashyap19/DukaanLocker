@@ -21,10 +21,18 @@ public class GstHtmlGenerator {
      * @param registrationDate Date of registration
      * @param status          Registration status (e.g., "Active")
      * @param state           State jurisdiction
+     * @param constitutionOfBusiness Constitution of business (e.g., "Proprietorship")
+     * @param principalPlaceAddress Address of principal place of business
+     * @param centralJurisdiction Central jurisdiction for approving authority
+     * @param periodOfValidity Period of validity string
+     * @param typeOfRegistration Type of registration (e.g., "Regular")
      * @return Complete XHTML string ready for PDF conversion
      */
     public static String generateCertificateHtml(String gstin, String legalName, String tradeName,
-                                                  String registrationDate, String status, String state) {
+                                                  String registrationDate, String status, String state,
+                                                  String constitutionOfBusiness, String principalPlaceAddress,
+                                                  String centralJurisdiction, String periodOfValidity,
+                                                  String typeOfRegistration) {
         String printDate = new SimpleDateFormat("dd MMMM yyyy, hh:mm a", Locale.ENGLISH).format(new Date());
 
         String displayLegalName = escapeXml(legalName != null ? legalName : "-");
@@ -33,6 +41,11 @@ public class GstHtmlGenerator {
         String displayStatus = escapeXml(status != null ? status : "-");
         String displayState = escapeXml(state != null ? state : "-");
         String displayGstin = escapeXml(gstin != null ? gstin : "-");
+        String displayConstitution = escapeXml(constitutionOfBusiness != null ? constitutionOfBusiness : "-");
+        String displayAddress = escapeXml(principalPlaceAddress != null ? principalPlaceAddress : "-");
+        String displayJurisdiction = escapeXml(centralJurisdiction != null ? centralJurisdiction : "-");
+        String displayPeriod = escapeXml(periodOfValidity != null ? periodOfValidity : "-");
+        String displayRegType = escapeXml(typeOfRegistration != null ? typeOfRegistration : "-");
 
         return "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n" +
                 "<html xmlns=\"http://www.w3.org/1999/xhtml\"><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"/>\n" +
@@ -40,7 +53,7 @@ public class GstHtmlGenerator {
                 "  @page { size: A4 portrait; margin: 14mm 16mm; }\n" +
                 "  * { box-sizing: border-box; }\n" +
                 "  body { margin:0; padding:0; font-family: Arial, Helvetica, sans-serif; font-size:10pt; color:#111; line-height:1.4; }\n" +
-                "  .certificate { border:2px solid #1565C0; padding:4px; background:#fff; }\n" +
+                "  .certificate { padding:4px; background:#fff; }\n" +
                 "\n" +
                 "  /* ===== HEADER ===== */\n" +
                 "  .top { position:relative; background:linear-gradient(135deg, #1565C0 0%, #1E88E5 50%, #1565C0 100%); color:#fff; text-align:center; padding:16px 12px 14px 12px; min-height:90px; }\n" +
@@ -49,7 +62,6 @@ public class GstHtmlGenerator {
                 "  .top-govt { font-size:12pt; font-weight:bold; margin:3px 0 1px; letter-spacing:1px; text-transform:uppercase; }\n" +
                 "  .top-dept { font-size:9pt; margin:1px 0; letter-spacing:0.5px; }\n" +
                 "  .top-sub { font-size:8pt; margin:3px 0 0; opacity:0.85; font-style:italic; }\n" +
-                "  .gst-badge { position:absolute; right:14px; top:10px; width:56px; height:56px; border:2px solid rgba(255,255,255,0.4); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:20pt; color:#FFD54F; background:rgba(255,255,255,0.08); font-weight:bold; }\n" +
                 "\n" +
                 "  /* ===== TITLE ===== */\n" +
                 "  .title { text-align:center; font-family:'Times New Roman',Times,serif; font-size:17pt; font-weight:bold; color:#1565C0; padding:10px 0 5px; text-transform:uppercase; letter-spacing:1px; border-bottom:2px solid #1565C0; margin-bottom:5px; }\n" +
@@ -88,7 +100,6 @@ public class GstHtmlGenerator {
                 "    <p class=\"top-govt\">Government of India</p>\n" +
                 "    <p class=\"top-dept\">Central Board of Indirect Taxes and Customs</p>\n" +
                 "    <p class=\"top-sub\">Ministry of Finance, Department of Revenue</p>\n" +
-                "    <div class=\"gst-badge\">GST</div>\n" +
                 "  </div>\n" +
                 "\n" +
                 "  <div class=\"title\">GST REGISTRATION CERTIFICATE</div>\n" +
@@ -106,6 +117,33 @@ public class GstHtmlGenerator {
                 "    <tr><td class=\"label\">Date of Registration</td><td class=\"value\">" + displayRegDate + "</td></tr>\n" +
                 "    <tr><td class=\"label\">Registration Status</td><td class=\"value " + (displayStatus.equalsIgnoreCase("Active") ? "status-active" : "status-inactive") + "\">" + displayStatus + "</td></tr>\n" +
                 "    <tr><td class=\"label\">State / Union Territory</td><td class=\"value\">" + displayState + "</td></tr>\n" +
+                "  </table>\n" +
+                "\n" +
+                "  <div class=\"space\"></div>\n" +
+                "\n" +
+                "  <div class=\"section\">REGISTRATION DETAILS</div>\n" +
+                "\n" +
+                "  <table>\n" +
+                "    <tr><td class=\"label\">Period of Validity</td><td class=\"value\">" + displayPeriod + "</td></tr>\n" +
+                "    <tr><td class=\"label\">Type of Registration</td><td class=\"value\">" + displayRegType + "</td></tr>\n" +
+                "  </table>\n" +
+                "\n" +
+                "  <div class=\"space\"></div>\n" +
+                "\n" +
+                "  <div class=\"section\">BUSINESS DETAILS</div>\n" +
+                "\n" +
+                "  <table>\n" +
+                "    <tr><td class=\"label\">Constitution of Business</td><td class=\"value\">" + displayConstitution + "</td></tr>\n" +
+                "    <tr><td class=\"label\">Address of Principal Place of Business</td><td class=\"value\">" + displayAddress + "</td></tr>\n" +
+                "  </table>\n" +
+                "\n" +
+                "  <div class=\"space\"></div>\n" +
+                "\n" +
+                "  <div class=\"section\">APPROVING AUTHORITY</div>\n" +
+                "\n" +
+                "  <table>\n" +
+                "    <tr><td class=\"label\">Authority</td><td class=\"value\">Central Board of Indirect Taxes and Customs</td></tr>\n" +
+                "    <tr><td class=\"label\">Jurisdiction</td><td class=\"value\">" + displayJurisdiction + "</td></tr>\n" +
                 "  </table>\n" +
                 "\n" +
                 "  <div class=\"space\"></div>\n" +

@@ -75,7 +75,12 @@ public class GstVerificationService {
                         parsed.getTradeName(),
                         parsed.getRegistrationDate(),
                         parsed.getStatus(),
-                        parsed.getState()
+                        parsed.getState(),
+                        parsed.getConstitutionOfBusiness(),
+                        parsed.getPrincipalPlaceAddress(),
+                        parsed.getCentralJurisdiction(),
+                        parsed.getPeriodOfValidity(),
+                        parsed.getTypeOfRegistration()
                 );
 
                 byte[] pdfBytes = convertHtmlToPdf(certificateHtml, normalizedGst);
@@ -208,12 +213,25 @@ public class GstVerificationService {
             String registrationDate = extractField(root, "dateOfRegistration");
             String status = extractField(root, "gstnStatus");
             String state = extractField(root, "stateJurisdiction");
+            String constitutionOfBusiness = extractField(root, "constitutionOfBusiness");
+            String centralJurisdiction = extractField(root, "centralJurisdiction");
+
+            // Build principal place address from address fields
+            String principalPlaceAddress = buildPrincipalPlaceAddress(root);
+
+            // Derive period of validity
+            String periodOfValidity = derivePeriodOfValidity(registrationDate, status);
+
+            // Derive type of registration from GSTIN (3rd character)
+            String typeOfRegistration = deriveTypeOfRegistration(gstNumber);
 
             if (legalName == null && tradeName == null) {
                 return GstVerificationResponse.error("Could not extract taxpayer details from the response.");
             }
 
-            return GstVerificationResponse.ok(gstNumber, legalName, tradeName, registrationDate, status, state, null, null);
+            return GstVerificationResponse.ok(gstNumber, legalName, tradeName, registrationDate, status, state,
+                    constitutionOfBusiness, principalPlaceAddress, centralJurisdiction,
+                    periodOfValidity, typeOfRegistration, null, null);
 
         } catch (Exception e) {
             log.error("Failed to parse GST verification response", e);
@@ -230,6 +248,71 @@ public class GstVerificationService {
             return node.asText();
         }
         return null;
+    }
+
+    /**
+     * Builds the principal place address from individual address fields in the API response.
+     */
+    private String buildPrincipalPlaceAddress(JsonNode root) {
+        StringBuilder address = new StringBuilder();
+        String[] addressFields = {"door", "building", "street", "location", "city", "district", "state", "pincode"};
+        String[] addressSeparators = {", ", ", ", ", ", ", ", ", ", ", ", " - ", " "};
+
+        for (int i = 0; i < addressFields.length; i++) {
+            String value = extractField(root, addressFields[i]);
+            if (value != null && !value.trim().isEmpty()) {
+                if (address.length() > 0) {
+                    address.append(addressSeparators[i]);
+                }
+                address.append(value.trim());
+            }
+        }
+
+        return address.length() > 0 ? address.toString() : null;
+    }
+
+    /**
+     * Derives the period of validity based on registration date and status.
+     * For Active: "Valid from {date} until cancelled"
+     * For Cancelled: "Cancelled on {cancellationDate}"
+     */
+    private String derivePeriodOfValidity(String registrationDate, String status) {
+        if (status != null && status.equalsIgnoreCase("Cancelled")) {
+            return "Cancelled";
+        }
+        if (registrationDate != null && !registrationDate.isEmpty()) {
+            return "Valid from " + registrationDate + " until cancelled";
+        }
+        return "Until cancelled";
+    }
+
+    /**
+     * Derives the type of registration from the GSTIN number.
+     * The 3rd character of GSTIN indicates the entity type:
+     * 1 = Regular, 2 = Composition, 6 = TDS Deductor, 7 = TCS Collector,
+     * 8 = Non-resident taxable person, 9 = UIN, A = GST Practitioner,
+     * P = Input Service Distributor, S = SEZ Developer/Unit, etc.
+     */
+    private String deriveTypeOfRegistration(String gstin) {
+        if (gstin == null || gstin.length() < 3) {
+            return "Regular";
+        }
+        char thirdChar = gstin.charAt(2);
+        switch (thirdChar) {
+            case '1': return "Regular";
+            case '2': return "Composition";
+            case '6': return "TDS Deductor";
+            case '7': return "TCS Collector";
+            case '8': return "Non-resident taxable person";
+            case '9': return "UN Body / Embassy / Consulate";
+            case 'A': return "GST Practitioner";
+            case 'P': return "Input Service Distributor";
+            case 'R': return "Resollector Agent";
+            case 'S': return "SEZ Developer / SEZ Unit";
+            case 'T': return "TRP (Tax Return Preparer)";
+            case 'M': return "Miscellaneous";
+            default: return "Regular";
+        }
     }
 
     /**

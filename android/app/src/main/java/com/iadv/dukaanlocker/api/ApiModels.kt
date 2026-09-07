@@ -272,6 +272,11 @@ data class GstVerificationResponse(
     @SerializedName("registrationDate") val registrationDate: String?,
     @SerializedName("status") val status: String?,
     @SerializedName("state") val state: String?,
+    @SerializedName("constitutionOfBusiness") val constitutionOfBusiness: String?,
+    @SerializedName("principalPlaceAddress") val principalPlaceAddress: String?,
+    @SerializedName("centralJurisdiction") val centralJurisdiction: String?,
+    @SerializedName("periodOfValidity") val periodOfValidity: String?,
+    @SerializedName("typeOfRegistration") val typeOfRegistration: String?,
     @SerializedName("pdfUrl") val pdfUrl: String?,
     @SerializedName("certificateHtml") val certificateHtml: String?,
     @SerializedName("errorMessage") val errorMessage: String?

@@ -14,6 +14,11 @@ public class GstVerificationResponse {
     private String registrationDate;
     private String status;
     private String state;
+    private String constitutionOfBusiness;
+    private String principalPlaceAddress;
+    private String centralJurisdiction;
+    private String periodOfValidity;
+    private String typeOfRegistration;
     private String pdfUrl;
     private String certificateHtml;
     private String errorMessage;
@@ -21,8 +26,11 @@ public class GstVerificationResponse {
     public GstVerificationResponse() {}
 
     public static GstVerificationResponse ok(String gstin, String legalName, String tradeName,
-                                              String registrationDate, String status, String state,
-                                              String pdfUrl, String certificateHtml) {
+                                               String registrationDate, String status, String state,
+                                               String constitutionOfBusiness, String principalPlaceAddress,
+                                               String centralJurisdiction, String periodOfValidity,
+                                               String typeOfRegistration,
+                                               String pdfUrl, String certificateHtml) {
         GstVerificationResponse r = new GstVerificationResponse();
         r.success = true;
         r.gstin = gstin;
@@ -31,6 +39,11 @@ public class GstVerificationResponse {
         r.registrationDate = registrationDate;
         r.status = status;
         r.state = state;
+        r.constitutionOfBusiness = constitutionOfBusiness;
+        r.principalPlaceAddress = principalPlaceAddress;
+        r.centralJurisdiction = centralJurisdiction;
+        r.periodOfValidity = periodOfValidity;
+        r.typeOfRegistration = typeOfRegistration;
         r.pdfUrl = pdfUrl;
         r.certificateHtml = certificateHtml;
         return r;
@@ -63,6 +76,21 @@ public class GstVerificationResponse {
 
     public String getState() { return state; }
     public void setState(String state) { this.state = state; }
+
+    public String getConstitutionOfBusiness() { return constitutionOfBusiness; }
+    public void setConstitutionOfBusiness(String constitutionOfBusiness) { this.constitutionOfBusiness = constitutionOfBusiness; }
+
+    public String getPrincipalPlaceAddress() { return principalPlaceAddress; }
+    public void setPrincipalPlaceAddress(String principalPlaceAddress) { this.principalPlaceAddress = principalPlaceAddress; }
+
+    public String getCentralJurisdiction() { return centralJurisdiction; }
+    public void setCentralJurisdiction(String centralJurisdiction) { this.centralJurisdiction = centralJurisdiction; }
+
+    public String getPeriodOfValidity() { return periodOfValidity; }
+    public void setPeriodOfValidity(String periodOfValidity) { this.periodOfValidity = periodOfValidity; }
+
+    public String getTypeOfRegistration() { return typeOfRegistration; }
+    public void setTypeOfRegistration(String typeOfRegistration) { this.typeOfRegistration = typeOfRegistration; }
 
     public String getPdfUrl() { return pdfUrl; }
     public void setPdfUrl(String pdfUrl) { this.pdfUrl = pdfUrl; }
