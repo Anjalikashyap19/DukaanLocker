@@ -14,6 +14,7 @@ public class GstVerificationResponse {
     private String registrationDate;
     private String status;
     private String state;
+    private String stateJurisdictionCode;
     private String constitutionOfBusiness;
     private String principalPlaceAddress;
     private String centralJurisdiction;
@@ -29,6 +30,7 @@ public class GstVerificationResponse {
 
     public static GstVerificationResponse ok(String gstin, String legalName, String tradeName,
                                                String registrationDate, String status, String state,
+                                               String stateJurisdictionCode,
                                                String constitutionOfBusiness, String principalPlaceAddress,
                                                String centralJurisdiction, String centralJurisdictionCode,
                                                String dateOfIssue, String periodOfValidity,
@@ -42,6 +44,7 @@ public class GstVerificationResponse {
         r.registrationDate = registrationDate;
         r.status = status;
         r.state = state;
+        r.stateJurisdictionCode = stateJurisdictionCode;
         r.constitutionOfBusiness = constitutionOfBusiness;
         r.principalPlaceAddress = principalPlaceAddress;
         r.centralJurisdiction = centralJurisdiction;
@@ -81,6 +84,9 @@ public class GstVerificationResponse {
 
     public String getState() { return state; }
     public void setState(String state) { this.state = state; }
+
+    public String getStateJurisdictionCode() { return stateJurisdictionCode; }
+    public void setStateJurisdictionCode(String stateJurisdictionCode) { this.stateJurisdictionCode = stateJurisdictionCode; }
 
     public String getConstitutionOfBusiness() { return constitutionOfBusiness; }
     public void setConstitutionOfBusiness(String constitutionOfBusiness) { this.constitutionOfBusiness = constitutionOfBusiness; }

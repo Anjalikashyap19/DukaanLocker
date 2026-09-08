@@ -77,6 +77,7 @@ public class GstVerificationService {
                         parsed.getRegistrationDate(),
                         parsed.getStatus(),
                         parsed.getState(),
+                        parsed.getStateJurisdictionCode(),
                         parsed.getConstitutionOfBusiness(),
                         parsed.getPrincipalPlaceAddress(),
                         parsed.getCentralJurisdiction(),
@@ -217,8 +218,9 @@ public class GstVerificationService {
             String status = extractField(root, "gstnStatus");
             String state = extractField(root, "stateJurisdiction");
             String constitutionOfBusiness = extractField(root, "constitutionOfBusiness");
-            String centralJurisdiction = extractField(root, "centralJurisdiction");
-            String centralJurisdictionCode = extractField(root, "centralJurisdictionCode");
+            String centralJurisdiction = extractField(root, "centerJurisdiction");
+            String centralJurisdictionCode = extractField(root, "centerJurisdictionCode");
+            String stateJurisdictionCode = extractField(root, "stateJurisdictionCode");
 
             // Build principal place address from address fields
             String principalPlaceAddress = buildPrincipalPlaceAddress(root);
@@ -237,8 +239,8 @@ public class GstVerificationService {
             }
 
             return GstVerificationResponse.ok(gstNumber, legalName, tradeName, registrationDate, status, state,
-                    constitutionOfBusiness, principalPlaceAddress, centralJurisdiction, centralJurisdictionCode,
-                    dateOfIssue, periodOfValidity, typeOfRegistration, null, null);
+                    stateJurisdictionCode, constitutionOfBusiness, principalPlaceAddress, centralJurisdiction,
+                    centralJurisdictionCode, dateOfIssue, periodOfValidity, typeOfRegistration, null, null);
 
         } catch (Exception e) {
             log.error("Failed to parse GST verification response", e);
@@ -259,14 +261,25 @@ public class GstVerificationService {
 
     /**
      * Builds the principal place address from individual address fields in the API response.
+     * The API response contains a nested object: principalPlaceOfBusinessFields.principalPlaceOfBusinessAddress
      */
     private String buildPrincipalPlaceAddress(JsonNode root) {
+        // Try nested structure first: principalPlaceOfBusinessFields.principalPlaceOfBusinessAddress
+        JsonNode addressNode = root.path("principalPlaceOfBusinessFields").path("principalPlaceOfBusinessAddress");
+
+        // Fall back to flat structure if nested doesn't exist
+        if (addressNode.isMissingNode()) {
+            addressNode = root;
+        }
+
         StringBuilder address = new StringBuilder();
-        String[] addressFields = {"door", "building", "street", "location", "city", "district", "state", "pincode"};
-        String[] addressSeparators = {", ", ", ", ", ", ", ", ", ", ", ", " - ", " "};
+
+        // Build address in logical order: building number, building name, street, location, district, state, pincode
+        String[] addressFields = {"buildingNumber", "buildingName", "streetName", "location", "districtName", "stateName", "pincode"};
+        String[] addressSeparators = {", ", ", ", ", ", ", ", ", ", " - ", " "};
 
         for (int i = 0; i < addressFields.length; i++) {
-            String value = extractField(root, addressFields[i]);
+            String value = extractField(addressNode, addressFields[i]);
             if (value != null && !value.trim().isEmpty()) {
                 if (address.length() > 0) {
                     address.append(addressSeparators[i]);

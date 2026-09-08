@@ -25,6 +25,7 @@ public class GstHtmlGenerator {
      * @param principalPlaceAddress Address of principal place of business
      * @param centralJurisdiction Central jurisdiction for approving authority
      * @param centralJurisdictionCode Central jurisdiction code
+     * @param stateJurisdictionCode State jurisdiction code
      * @param dateOfIssue Date of issue of certificate
      * @param periodOfValidity Period of validity string
      * @param typeOfRegistration Type of registration (e.g., "Regular")
@@ -32,6 +33,7 @@ public class GstHtmlGenerator {
      */
     public static String generateCertificateHtml(String gstin, String legalName, String tradeName,
                                                   String registrationDate, String status, String state,
+                                                  String stateJurisdictionCode,
                                                   String constitutionOfBusiness, String principalPlaceAddress,
                                                   String centralJurisdiction, String centralJurisdictionCode,
                                                   String dateOfIssue, String periodOfValidity,
@@ -43,6 +45,7 @@ public class GstHtmlGenerator {
         String displayRegDate = escapeXml(registrationDate != null ? registrationDate : "-");
         String displayStatus = escapeXml(status != null ? status : "-");
         String displayState = escapeXml(state != null ? state : "-");
+        String displayStateCode = escapeXml(stateJurisdictionCode != null ? stateJurisdictionCode : "-");
         String displayGstin = escapeXml(gstin != null ? gstin : "-");
         String displayConstitution = escapeXml(constitutionOfBusiness != null ? constitutionOfBusiness : "-");
         String displayAddress = escapeXml(principalPlaceAddress != null ? principalPlaceAddress : "-");
@@ -120,6 +123,7 @@ public class GstHtmlGenerator {
                 "    <tr><td class=\"label\">Date of Registration</td><td class=\"value\">" + displayRegDate + "</td></tr>\n" +
                 "    <tr><td class=\"label\">Registration Status</td><td class=\"value " + (displayStatus.equalsIgnoreCase("Active") ? "status-active" : "status-inactive") + "\">" + displayStatus + "</td></tr>\n" +
                 "    <tr><td class=\"label\">State / Union Territory</td><td class=\"value\">" + displayState + "</td></tr>\n" +
+                "    <tr><td class=\"label\">State Jurisdiction Code</td><td class=\"value\">" + displayStateCode + "</td></tr>\n" +
                 "  </table>\n" +
                 "\n" +
                 "  <div class=\"space\"></div>\n" +
@@ -147,6 +151,8 @@ public class GstHtmlGenerator {
                 "\n" +
                 "  <table>\n" +
                 "    <tr><td class=\"label\">Authority</td><td class=\"value\">Central Board of Indirect Taxes and Customs</td></tr>\n" +
+                "    <tr><td class=\"label\">State Jurisdiction</td><td class=\"value\">" + displayState + "</td></tr>\n" +
+                "    <tr><td class=\"label\">State Jurisdiction Code</td><td class=\"value\">" + displayStateCode + "</td></tr>\n" +
                 "    <tr><td class=\"label\">Central Jurisdiction</td><td class=\"value\">" + displayJurisdiction + "</td></tr>\n" +
                 "    <tr><td class=\"label\">Central Jurisdiction Code</td><td class=\"value\">" + displayJurisdictionCode + "</td></tr>\n" +
                 "  </table>\n" +
