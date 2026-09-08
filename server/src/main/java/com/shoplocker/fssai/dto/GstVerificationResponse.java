@@ -17,6 +17,8 @@ public class GstVerificationResponse {
     private String constitutionOfBusiness;
     private String principalPlaceAddress;
     private String centralJurisdiction;
+    private String centralJurisdictionCode;
+    private String dateOfIssue;
     private String periodOfValidity;
     private String typeOfRegistration;
     private String pdfUrl;
@@ -28,7 +30,8 @@ public class GstVerificationResponse {
     public static GstVerificationResponse ok(String gstin, String legalName, String tradeName,
                                                String registrationDate, String status, String state,
                                                String constitutionOfBusiness, String principalPlaceAddress,
-                                               String centralJurisdiction, String periodOfValidity,
+                                               String centralJurisdiction, String centralJurisdictionCode,
+                                               String dateOfIssue, String periodOfValidity,
                                                String typeOfRegistration,
                                                String pdfUrl, String certificateHtml) {
         GstVerificationResponse r = new GstVerificationResponse();
@@ -42,6 +45,8 @@ public class GstVerificationResponse {
         r.constitutionOfBusiness = constitutionOfBusiness;
         r.principalPlaceAddress = principalPlaceAddress;
         r.centralJurisdiction = centralJurisdiction;
+        r.centralJurisdictionCode = centralJurisdictionCode;
+        r.dateOfIssue = dateOfIssue;
         r.periodOfValidity = periodOfValidity;
         r.typeOfRegistration = typeOfRegistration;
         r.pdfUrl = pdfUrl;
@@ -85,6 +90,12 @@ public class GstVerificationResponse {
 
     public String getCentralJurisdiction() { return centralJurisdiction; }
     public void setCentralJurisdiction(String centralJurisdiction) { this.centralJurisdiction = centralJurisdiction; }
+
+    public String getCentralJurisdictionCode() { return centralJurisdictionCode; }
+    public void setCentralJurisdictionCode(String centralJurisdictionCode) { this.centralJurisdictionCode = centralJurisdictionCode; }
+
+    public String getDateOfIssue() { return dateOfIssue; }
+    public void setDateOfIssue(String dateOfIssue) { this.dateOfIssue = dateOfIssue; }
 
     public String getPeriodOfValidity() { return periodOfValidity; }
     public void setPeriodOfValidity(String periodOfValidity) { this.periodOfValidity = periodOfValidity; }

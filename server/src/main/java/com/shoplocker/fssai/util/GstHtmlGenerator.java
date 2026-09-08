@@ -24,6 +24,8 @@ public class GstHtmlGenerator {
      * @param constitutionOfBusiness Constitution of business (e.g., "Proprietorship")
      * @param principalPlaceAddress Address of principal place of business
      * @param centralJurisdiction Central jurisdiction for approving authority
+     * @param centralJurisdictionCode Central jurisdiction code
+     * @param dateOfIssue Date of issue of certificate
      * @param periodOfValidity Period of validity string
      * @param typeOfRegistration Type of registration (e.g., "Regular")
      * @return Complete XHTML string ready for PDF conversion
@@ -31,7 +33,8 @@ public class GstHtmlGenerator {
     public static String generateCertificateHtml(String gstin, String legalName, String tradeName,
                                                   String registrationDate, String status, String state,
                                                   String constitutionOfBusiness, String principalPlaceAddress,
-                                                  String centralJurisdiction, String periodOfValidity,
+                                                  String centralJurisdiction, String centralJurisdictionCode,
+                                                  String dateOfIssue, String periodOfValidity,
                                                   String typeOfRegistration) {
         String printDate = new SimpleDateFormat("dd MMMM yyyy, hh:mm a", Locale.ENGLISH).format(new Date());
 
@@ -44,6 +47,8 @@ public class GstHtmlGenerator {
         String displayConstitution = escapeXml(constitutionOfBusiness != null ? constitutionOfBusiness : "-");
         String displayAddress = escapeXml(principalPlaceAddress != null ? principalPlaceAddress : "-");
         String displayJurisdiction = escapeXml(centralJurisdiction != null ? centralJurisdiction : "-");
+        String displayJurisdictionCode = escapeXml(centralJurisdictionCode != null ? centralJurisdictionCode : "-");
+        String displayDateOfIssue = escapeXml(dateOfIssue != null ? dateOfIssue : "-");
         String displayPeriod = escapeXml(periodOfValidity != null ? periodOfValidity : "-");
         String displayRegType = escapeXml(typeOfRegistration != null ? typeOfRegistration : "-");
 
@@ -56,28 +61,27 @@ public class GstHtmlGenerator {
                 "  .certificate { padding:4px; background:#fff; }\n" +
                 "\n" +
                 "  /* ===== HEADER ===== */\n" +
-                "  .top { position:relative; background:linear-gradient(135deg, #1565C0 0%, #1E88E5 50%, #1565C0 100%); color:#fff; text-align:center; padding:16px 12px 14px 12px; min-height:90px; }\n" +
-                "  .emblem { position:absolute; left:14px; top:10px; width:56px; height:56px; border:2px solid rgba(255,255,255,0.4); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:34pt; color:#FFD54F; background:rgba(255,255,255,0.08); }\n" +
-                "  .top-title { font-size:9pt; font-weight:bold; letter-spacing:3px; margin:0; text-transform:uppercase; }\n" +
-                "  .top-govt { font-size:12pt; font-weight:bold; margin:3px 0 1px; letter-spacing:1px; text-transform:uppercase; }\n" +
+                "  .top { text-align:center; padding:12px 10px; border-bottom:2px solid #333; margin-bottom:8px; }\n" +
+                "  .top-title { font-size:10pt; font-weight:bold; letter-spacing:2px; margin:0; text-transform:uppercase; }\n" +
+                "  .top-govt { font-size:11pt; font-weight:bold; margin:4px 0 2px; letter-spacing:1px; text-transform:uppercase; }\n" +
                 "  .top-dept { font-size:9pt; margin:1px 0; letter-spacing:0.5px; }\n" +
-                "  .top-sub { font-size:8pt; margin:3px 0 0; opacity:0.85; font-style:italic; }\n" +
+                "  .top-sub { font-size:8pt; margin:3px 0 0; font-style:italic; }\n" +
                 "\n" +
                 "  /* ===== TITLE ===== */\n" +
-                "  .title { text-align:center; font-family:'Times New Roman',Times,serif; font-size:17pt; font-weight:bold; color:#1565C0; padding:10px 0 5px; text-transform:uppercase; letter-spacing:1px; border-bottom:2px solid #1565C0; margin-bottom:5px; }\n" +
+                "  .title { text-align:center; font-family:'Times New Roman',Times,serif; font-size:16pt; font-weight:bold; color:#111; padding:8px 0 4px; text-transform:uppercase; letter-spacing:1px; border-bottom:1px solid #333; margin-bottom:6px; }\n" +
                 "\n" +
-                "  /* ===== GSTIN BOX ===== */\n" +
-                "  .gstin-box { text-align:center; padding:10px; margin:8px 0; background:#E3F2FD; border:1px solid #90CAF9; border-radius:6px; }\n" +
-                "  .gstin-label { font-size:9pt; color:#555; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }\n" +
-                "  .gstin-value { font-family:'Courier New',Courier,monospace; font-size:18pt; font-weight:bold; color:#1565C0; letter-spacing:2px; }\n" +
+                "  /* ===== GSTIN ===== */\n" +
+                "  .gstin-row { text-align:center; margin:6px 0 10px; }\n" +
+                "  .gstin-label { font-size:9pt; color:#555; text-transform:uppercase; letter-spacing:1px; margin-bottom:3px; }\n" +
+                "  .gstin-value { font-family:'Courier New',Courier,monospace; font-size:16pt; font-weight:bold; color:#111; letter-spacing:2px; }\n" +
                 "\n" +
                 "  /* ===== TABLES ===== */\n" +
                 "  table { width:100%; border-collapse:collapse; margin-bottom:6px; }\n" +
-                "  td, th { border:1px solid #bbb; padding:6px 10px; vertical-align:middle; }\n" +
+                "  td, th { border:1px solid #999; padding:6px 10px; vertical-align:middle; }\n" +
                 "  .noborder td { border:none; padding:7px 10px; }\n" +
                 "\n" +
                 "  /* ===== FIELD ROWS ===== */\n" +
-                "  .label { width:40%; font-family:'Times New Roman',Times,serif; font-weight:bold; font-size:10pt; color:#333; background:#f8f9fa; }\n" +
+                "  .label { width:40%; font-family:'Times New Roman',Times,serif; font-weight:bold; font-size:10pt; color:#333; background:#f5f5f5; }\n" +
                 "  .value { font-weight:bold; font-size:10.5pt; color:#111; }\n" +
                 "\n" +
                 "  /* Status Badge */\n" +
@@ -85,17 +89,16 @@ public class GstHtmlGenerator {
                 "  .status-inactive { color:#C62828; font-weight:bold; }\n" +
                 "\n" +
                 "  /* Section Header */\n" +
-                "  .section { background:#1565C0; color:#fff; text-align:center; font-family:'Times New Roman',Times,serif; font-size:11pt; font-weight:bold; padding:5px; margin:8px 0; letter-spacing:0.5px; }\n" +
+                "  .section { background:#444; color:#fff; text-align:center; font-family:'Times New Roman',Times,serif; font-size:10pt; font-weight:bold; padding:4px; margin:8px 0; letter-spacing:0.5px; }\n" +
                 "\n" +
                 "  /* Notes */\n" +
-                "  .note { font:9pt 'Times New Roman',Times,serif; line-height:1.4; padding:10px 12px 0; background:#fafafa; border:1px solid #e0e0e0; margin-top:8px; }\n" +
-                "  .note p { margin:0 0 6px; }\n" +
+                "  .note { font:9pt 'Times New Roman',Times,serif; line-height:1.4; padding:8px 10px; background:#fafafa; border:1px solid #ddd; margin-top:8px; }\n" +
+                "  .note p { margin:0 0 5px; }\n" +
                 "  .note .bold { font-weight:bold; }\n" +
                 "\n" +
-                "  .space { height:5px; }\n" +
+                "  .space { height:4px; }\n" +
                 "</style></head><body><div class=\"certificate\">\n" +
                 "  <div class=\"top\">\n" +
-                "    <div class=\"emblem\">\u2638</div>\n" +
                 "    <p class=\"top-title\">GOODS AND SERVICES TAX</p>\n" +
                 "    <p class=\"top-govt\">Government of India</p>\n" +
                 "    <p class=\"top-dept\">Central Board of Indirect Taxes and Customs</p>\n" +
@@ -104,7 +107,7 @@ public class GstHtmlGenerator {
                 "\n" +
                 "  <div class=\"title\">GST REGISTRATION CERTIFICATE</div>\n" +
                 "\n" +
-                "  <div class=\"gstin-box\">\n" +
+                "  <div class=\"gstin-row\">\n" +
                 "    <div class=\"gstin-label\">GST Identification Number (GSTIN)</div>\n" +
                 "    <div class=\"gstin-value\">" + displayGstin + "</div>\n" +
                 "  </div>\n" +
@@ -124,8 +127,9 @@ public class GstHtmlGenerator {
                 "  <div class=\"section\">REGISTRATION DETAILS</div>\n" +
                 "\n" +
                 "  <table>\n" +
-                "    <tr><td class=\"label\">Period of Validity</td><td class=\"value\">" + displayPeriod + "</td></tr>\n" +
                 "    <tr><td class=\"label\">Type of Registration</td><td class=\"value\">" + displayRegType + "</td></tr>\n" +
+                "    <tr><td class=\"label\">Period of Validity</td><td class=\"value\">" + displayPeriod + "</td></tr>\n" +
+                "    <tr><td class=\"label\">Date of Issue of Certificate</td><td class=\"value\">" + displayDateOfIssue + "</td></tr>\n" +
                 "  </table>\n" +
                 "\n" +
                 "  <div class=\"space\"></div>\n" +
@@ -143,7 +147,8 @@ public class GstHtmlGenerator {
                 "\n" +
                 "  <table>\n" +
                 "    <tr><td class=\"label\">Authority</td><td class=\"value\">Central Board of Indirect Taxes and Customs</td></tr>\n" +
-                "    <tr><td class=\"label\">Jurisdiction</td><td class=\"value\">" + displayJurisdiction + "</td></tr>\n" +
+                "    <tr><td class=\"label\">Central Jurisdiction</td><td class=\"value\">" + displayJurisdiction + "</td></tr>\n" +
+                "    <tr><td class=\"label\">Central Jurisdiction Code</td><td class=\"value\">" + displayJurisdictionCode + "</td></tr>\n" +
                 "  </table>\n" +
                 "\n" +
                 "  <div class=\"space\"></div>\n" +
@@ -156,7 +161,7 @@ public class GstHtmlGenerator {
                 "    <p><span class=\"bold\">Note:</span> This certificate is computer-generated and does not require a physical signature.</p>\n" +
                 "  </div>\n" +
                 "\n" +
-                "  <div style=\"font-size:8pt; color:#888; text-align:right; padding:8px 12px 2px; border-top:1px solid #ddd; margin-top:8px;\">Generated by DukaanLocker on " + printDate + "</div>\n" +
+                "  <div style=\"font-size:8pt; color:#888; text-align:right; padding:6px 10px 2px; border-top:1px solid #ddd; margin-top:8px;\">Generated by DukaanLocker on " + printDate + "</div>\n" +
                 "</div></body></html>";
     }
 

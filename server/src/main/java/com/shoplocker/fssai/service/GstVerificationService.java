@@ -36,6 +36,7 @@ public class GstVerificationService {
     private static final Logger log = LoggerFactory.getLogger(GstVerificationService.class);
 
     private static final String BASE_URL = "https://apisetu.gov.in/gstn/v2/taxpayers/";
+    private static final String BASE_URL_FALLBACK = "https://apisetu.gov.in/gstn/v1/taxpayers/";
 
     @Value("${app.api-setu.x-api-key}")
     private String apiKey;
@@ -79,6 +80,8 @@ public class GstVerificationService {
                         parsed.getConstitutionOfBusiness(),
                         parsed.getPrincipalPlaceAddress(),
                         parsed.getCentralJurisdiction(),
+                        parsed.getCentralJurisdictionCode(),
+                        parsed.getDateOfIssue(),
                         parsed.getPeriodOfValidity(),
                         parsed.getTypeOfRegistration()
                 );
@@ -215,9 +218,13 @@ public class GstVerificationService {
             String state = extractField(root, "stateJurisdiction");
             String constitutionOfBusiness = extractField(root, "constitutionOfBusiness");
             String centralJurisdiction = extractField(root, "centralJurisdiction");
+            String centralJurisdictionCode = extractField(root, "centralJurisdictionCode");
 
             // Build principal place address from address fields
             String principalPlaceAddress = buildPrincipalPlaceAddress(root);
+
+            // Date of issue is the registration date
+            String dateOfIssue = registrationDate;
 
             // Derive period of validity
             String periodOfValidity = derivePeriodOfValidity(registrationDate, status);
@@ -230,8 +237,8 @@ public class GstVerificationService {
             }
 
             return GstVerificationResponse.ok(gstNumber, legalName, tradeName, registrationDate, status, state,
-                    constitutionOfBusiness, principalPlaceAddress, centralJurisdiction,
-                    periodOfValidity, typeOfRegistration, null, null);
+                    constitutionOfBusiness, principalPlaceAddress, centralJurisdiction, centralJurisdictionCode,
+                    dateOfIssue, periodOfValidity, typeOfRegistration, null, null);
 
         } catch (Exception e) {
             log.error("Failed to parse GST verification response", e);
