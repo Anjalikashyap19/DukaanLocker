@@ -123,6 +123,7 @@ public class ShopService {
         return toShopResponse(saved);
     }
 
+    @Transactional(readOnly = true)
     public List<ShopResponse> getMyShops(String userEmail) {
         // Try case-insensitive lookup: first by normalized (lowercase) emailId,
         // then by original case, then by mobile — covers all account types
