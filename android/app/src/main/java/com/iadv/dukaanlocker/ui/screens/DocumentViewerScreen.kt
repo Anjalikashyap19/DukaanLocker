@@ -255,18 +255,6 @@ fun DocumentViewerScreen(
                         Icon(imageVector = Icons.Default.ArrowBack, contentDescription = AppStrings.get(lang, "Back"))
                     }
                 },
-                actions = {
-                    IconButton(
-                        onClick = {
-                            renderedPages.values.forEach { if (!it.isRecycled) it.recycle() }
-                            renderedPages = emptyMap()
-                            currentPage = 0
-                            coroutineScope.launch { loadDocument() }
-                        }
-                    ) {
-                        Icon(imageVector = Icons.Default.Refresh, contentDescription = AppStrings.get(lang, "Refresh"))
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = colors.primary.copy(alpha = 0.15f)
                 )

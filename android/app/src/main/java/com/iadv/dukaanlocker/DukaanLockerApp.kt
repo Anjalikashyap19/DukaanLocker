@@ -3,6 +3,8 @@ package com.iadv.dukaanlocker
 import android.app.Activity
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -40,6 +42,25 @@ fun DukaanLockerApp(
 ) {
     val context = LocalContext.current
     val state by vm.uiState.collectAsState()
+
+    // File picker launcher for document upload
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null && state.pendingUploadDoc != null) {
+            vm.uploadDocument(state.pendingUploadDoc!!, uri)
+            vm.updateState { it.copy(pendingUploadDoc = null) }
+        } else {
+            vm.updateState { it.copy(pendingUploadDoc = null) }
+        }
+    }
+
+    // Launch file picker when pendingUploadDoc is set
+    LaunchedEffect(state.pendingUploadDoc) {
+        state.pendingUploadDoc?.let {
+            filePickerLauncher.launch("application/pdf")
+        }
+    }
 
     // ── GOOGLE SIGN-IN ──
     LaunchedEffect(Unit) {
@@ -388,7 +409,7 @@ fun DukaanLockerApp(
                     }
 
                     // ── Bottom Navigation Bar ──
-                    if (state.isLoggedIn && (state.currentScreen is Screen.OwnerHome || state.currentScreen is Screen.ManagerHome)) {
+                    if (state.isLoggedIn && state.viewDocumentId == null && (state.currentScreen is Screen.OwnerHome || state.currentScreen is Screen.ManagerHome)) {
                         BottomNavBar(currentTab = state.selectedBottomTab, onNavigate = { tab -> vm.setBottomTab(tab) }, isDarkTheme = state.isDarkTheme, showTeam = state.currentUserRole != "MANAGER")
                     }
                 }
