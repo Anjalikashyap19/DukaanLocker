@@ -28,6 +28,8 @@ import org.springframework.stereotype.Service;
 import com.shoplocker.fssai.dto.UdyamInitResponse;
 import com.shoplocker.fssai.dto.UdyamVerifyRequest;
 import com.shoplocker.fssai.dto.UdyamVerifyResponse;
+import com.shoplocker.fssai.dto.MsmeParsedData;
+import com.shoplocker.fssai.util.MsmeHtmlGenerator;
 import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
 import com.shoplocker.fssai.util.MsmeDataParser;
@@ -879,6 +881,60 @@ public class UdyamVerificationService {
             return null;
         }
         return session.captchaImage;
+    }
+
+    // ─── PDF GENERATION FROM PARSED DATA ────────────────────────────────────
+
+    /**
+     * Generates a PDF certificate from already-parsed MSME data and uploads to S3.
+     * This uses {@link MsmeHtmlGenerator} which takes structured fields instead of
+     * re-parsing raw HTML, making it more reliable than {@code convertHtmlToPdf()}.
+     *
+     * @param data parsed MSME data from {@link com.shoplocker.fssai.util.MsmeDataParser}
+     * @param udyamNumber the Udyam registration number
+     * @return S3 URL of the uploaded PDF, or null if generation/upload failed
+     */
+    public String generatePdfFromParsedData(MsmeParsedData data, String udyamNumber) {
+        try {
+            String certificateHtml = MsmeHtmlGenerator.generateCertificateHtml(data);
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            PdfRendererBuilder builder = new PdfRendererBuilder();
+            builder.withHtmlContent(certificateHtml, "https://udyam.register.gov.in/");
+            builder.toStream(baos);
+
+            try {
+                String[] fontPaths = {
+                        "C:/Windows/Fonts/arial.ttf",
+                        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                        "/usr/share/fonts/TTF/DejaVuSans.ttf",
+                        "/System/Library/Fonts/Helvetica.ttc"
+                };
+                for (String fontPath : fontPaths) {
+                    java.io.File fontFile = new java.io.File(fontPath);
+                    if (fontFile.exists()) {
+                        builder.useFont(fontFile, "Arial");
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Could not load system font for MSME PDF, may use default font", e);
+            }
+            builder.run();
+
+            byte[] pdfBytes = baos.toByteArray();
+            String fileKey = "msme/verify/" + udyamNumber.toLowerCase()
+                    .replace(" ", "_") + "/udyam_certificate.pdf";
+            String pdfUrl = s3Service.uploadFile(pdfBytes,
+                    org.apache.hc.core5.http.ContentType.APPLICATION_PDF.getMimeType(), fileKey);
+
+            log.info("Generated MSME PDF from parsed data: {} bytes for Udyam {}", pdfBytes.length, udyamNumber);
+            return pdfUrl;
+
+        } catch (Exception e) {
+            log.error("Failed to generate MSME PDF from parsed data for {}", udyamNumber, e);
+            return null;
+        }
     }
 
     // ─── SESSION STATE ─────────────────────────────────────────────────────

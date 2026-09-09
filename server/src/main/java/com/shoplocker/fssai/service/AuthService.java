@@ -452,6 +452,23 @@ public class AuthService {
             }
         }
 
+        // ── Step 2b: Regenerate PDF from parsed data for reliable content ──
+        // The initial PDF from verifyAndGeneratePdf() may have empty fields if the
+        // government portal HTML was not fully populated. Regenerating from parsed
+        // data ensures the PDF contains the correct enterprise details.
+        String finalPdfUrl = verifyResult.getPdfUrl();
+        if (parsedData != null && udyamNumber != null) {
+            try {
+                String regeneratedPdfUrl = udyamService.generatePdfFromParsedData(parsedData, udyamNumber);
+                if (regeneratedPdfUrl != null && !regeneratedPdfUrl.isBlank()) {
+                    finalPdfUrl = regeneratedPdfUrl;
+                    log.info("Regenerated MSME PDF from parsed data for Udyam {}", udyamNumber);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to regenerate PDF from parsed data, using original: {}", e.getMessage());
+            }
+        }
+
         // ── Steps 3-5: Create User, Shop and required documents atomically ──
         // Runs in its own transaction (via self-proxy) so a failure rolls back
         // completely instead of leaving orphaned rows, and so a constraint
@@ -459,7 +476,7 @@ public class AuthService {
         MsmePersistResult persisted;
         try {
             persisted = self.persistMsmeAccount(
-                    mobile, parsedData, udyamNumber, request.getEmailId(), verifyResult.getPdfUrl());
+                    mobile, parsedData, udyamNumber, request.getEmailId(), finalPdfUrl);
         } catch (DataIntegrityViolationException e) {
             log.warn("MSME registration rolled back due to a data constraint (likely a duplicate email from a concurrent registration): {}", e.getMessage());
             throw new FssaiException(
@@ -482,7 +499,7 @@ public class AuthService {
         // ── Step 7: Build response with all details ──
         AuthResponse auth = AuthResponse.from(savedUser, token);
         MsmeAuthResponse msmeAuth = new MsmeAuthResponse(
-                auth, verifyResult.getPdfUrl(), udyamNumber);
+                auth, finalPdfUrl, udyamNumber);
 
         // Populate enterprise and shop details
         if (parsedData != null) {
