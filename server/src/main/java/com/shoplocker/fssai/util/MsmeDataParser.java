@@ -242,6 +242,22 @@ public final class MsmeDataParser {
             data.setAddress(buildAddress(data));
         }
 
+        log.info("=== MSME PARSED RESULT ===");
+        log.info("  udyamNumber: {}", data.getUdyamNumber());
+        log.info("  enterpriseName: {}", data.getEnterpriseName());
+        log.info("  entrepreneurName: {}", data.getEntrepreneurName());
+        log.info("  mobileNumber: {}", data.getMobileNumber());
+        log.info("  emailId: {}", data.getEmailId());
+        log.info("  address: {}", data.getAddress());
+        log.info("  city: {}", data.getCity());
+        log.info("  district: {}", data.getDistrict());
+        log.info("  state: {}", data.getState());
+        log.info("  pincode: {}", data.getPincode());
+        log.info("  majorActivity: {}", data.getMajorActivity());
+        log.info("  enterpriseType: {}", data.getEnterpriseType());
+        log.info("  typeOfOrganization: {}", data.getTypeOfOrganization());
+        log.info("=== END PARSED RESULT ===");
+
         log.info("Parsed MSME data: {}", data);
         return data;
     }
@@ -254,6 +270,8 @@ public final class MsmeDataParser {
     private static void parseTableFields(Document doc, MsmeParsedData data) {
         // 1) Table rows (primary, most reliable)
         Elements rows = doc.select("tr");
+        log.info("=== MSME PARSER: Found {} table rows ===", rows.size());
+        int rowIdx = 0;
         for (Element row : rows) {
             Elements cells = row.select("td, th");
             String label;
@@ -274,15 +292,19 @@ public final class MsmeDataParser {
                 continue;
             }
             if (value.isEmpty()) continue;
+            log.info("ROW {}: label=\"{}\" value=\"{}\"", rowIdx++, label, value);
             matchField(label.toLowerCase(), value, data);
         }
 
         // 2) Leaf block elements as a supplement (only fills still-empty fields)
         Elements leaves = doc.select("div, span, p, li");
+        log.info("=== MSME PARSER: Found {} leaf elements ===", leaves.size());
+        int leafIdx = 0;
         for (Element el : leaves) {
             if (!el.children().isEmpty()) continue; // ignore elements with nested markup
             String[] kv = splitLabelValue(el.text().trim());
             if (kv == null) continue;
+            log.info("LEAF {}: label=\"{}\" value=\"{}\"", leafIdx++, kv[0], kv[1]);
             matchField(kv[0].toLowerCase(), kv[1], data);
         }
     }

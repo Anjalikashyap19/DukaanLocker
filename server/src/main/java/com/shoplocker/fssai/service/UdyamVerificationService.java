@@ -342,6 +342,9 @@ public class UdyamVerificationService {
 
             log.info("Udyam print page HTML length={}", printHtml.length());
 
+            // DEBUG: Log the raw HTML for debugging parser issues
+            log.info("=== RAW UDYAM PRINT PAGE HTML START ===\n{}\n=== RAW UDYAM PRINT PAGE HTML END ===", printHtml.substring(0, Math.min(printHtml.length(), 10000)));
+
             // Guard against an absurdly large response (could OOM Jsoup/PDF render).
             if (printHtml.length() > 2_000_000) {
                 return UdyamVerifyResponse.error(
