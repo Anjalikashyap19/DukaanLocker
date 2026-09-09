@@ -197,6 +197,12 @@ public final class MsmeDataParser {
 
     /**
      * Parses the Udyam certificate HTML and extracts all relevant enterprise data.
+     * Uses a multi-strategy approach:
+     *   1. Table row parsing (original method)
+     *   2. Leaf element parsing (div/span/p with "Label: Value" text)
+     *   3. ASP.NET span/input ID-based extraction (e.g. &lt;span id="lblXxx"&gt;)
+     *   4. Comprehensive full-text regex extraction (works regardless of HTML structure)
+     *   5. Regex fallback for specific fields (mobile, email, pincode)
      *
      * @param html the raw HTML from PrintUdyamApplication.aspx
      * @return parsed enterprise data
@@ -209,37 +215,59 @@ public final class MsmeDataParser {
 
         MsmeParsedData data = new MsmeParsedData();
         Document doc = Jsoup.parse(html);
+        String fullText = doc.text();
 
-        // Extract table-based fields (primary method)
+        // Strategy 1: Table row parsing (original method)
         parseTableFields(doc, data);
 
-        // Extract Udyam number from full text if not found in table
+        // Strategy 2: ASP.NET span/input ID-based extraction
+        // The government portal often uses <span id="...lblEnterpriseName...">VALUE</span>
+        // or <input id="...txtXxx..." value="VALUE" />
+        extractFromAspIds(doc, data);
+
+        // Strategy 3: Comprehensive full-text regex extraction
+        // Works regardless of HTML structure — finds "Label Value" patterns in text
+        extractFromFullText(fullText, data);
+
+        // Strategy 4: Regex fallbacks for specific fields
         if (data.getUdyamNumber() == null || data.getUdyamNumber().isBlank()) {
-            data.setUdyamNumber(extractByRegex(doc.text(), UDYAM_PATTERN));
+            data.setUdyamNumber(extractByRegex(fullText, UDYAM_PATTERN));
         }
-
-        // Extract mobile from full text if not found in table
-        if (data.getMobileNumber() == null || data.getMobileNumber().isBlank()) {
-            String fullText = doc.text();
-            Matcher m = MOBILE_PATTERN.matcher(fullText);
-            if (m.find()) {
-                data.setMobileNumber(m.group());
-            }
-        }
-
-        // Extract email from full text if not found in table
+        // NOTE: Mobile number is NOT extracted via regex fallback because the portal
+        // masks it (e.g. "83*****456") and the regex would pick up the portal's
+        // helpline number from the footer instead. The mobile comes from the user's
+        // registration request, not from the HTML.
         if (data.getEmailId() == null || data.getEmailId().isBlank()) {
-            data.setEmailId(extractByRegex(doc.text(), EMAIL_PATTERN));
+            data.setEmailId(extractByRegex(fullText, EMAIL_PATTERN));
         }
-
-        // Extract pincode from address if not found separately
         if (data.getPincode() == null || data.getPincode().isBlank()) {
-            data.setPincode(extractByRegex(doc.text(), PINCODE_PATTERN));
+            data.setPincode(extractByRegex(fullText, PINCODE_PATTERN));
         }
 
         // Build the full address from components
         if (data.getAddress() == null || data.getAddress().isBlank()) {
             data.setAddress(buildAddress(data));
+        }
+
+        // For sole proprietorships, the enterprise name IS the entrepreneur name.
+        // If entrepreneurName is still null but enterpriseName is set, use it.
+        if ((data.getEntrepreneurName() == null || data.getEntrepreneurName().isBlank())
+                && data.getEnterpriseName() != null && !data.getEnterpriseName().isBlank()) {
+            data.setEntrepreneurName(data.getEnterpriseName());
+        }
+
+        // Clean up enterpriseType — the table parsing may grab the full classification
+        // table text. Extract just "Micro", "Small", or "Medium".
+        if (data.getEnterpriseType() != null && !data.getEnterpriseType().isBlank()) {
+            String typeLower = data.getEnterpriseType().toLowerCase();
+            if (typeLower.contains("micro")) {
+                data.setEnterpriseType("Micro");
+            } else if (typeLower.contains("small")) {
+                data.setEnterpriseType("Small");
+            } else if (typeLower.contains("medium")) {
+                data.setEnterpriseType("Medium");
+            }
+            // If none matched, leave as-is (might be a custom value)
         }
 
         log.info("=== MSME PARSED RESULT ===");
@@ -307,6 +335,438 @@ public final class MsmeDataParser {
             log.info("LEAF {}: label=\"{}\" value=\"{}\"", leafIdx++, kv[0], kv[1]);
             matchField(kv[0].toLowerCase(), kv[1], data);
         }
+    }
+
+    /**
+     * Strategy 2: Extract data from ASP.NET-style &lt;span&gt; and &lt;input&gt; elements
+     * whose IDs contain known field keywords. The government portal often renders
+     * certificate values in elements like:
+     * <pre>
+     *   &lt;span id="ctl00_ContentPlaceHolder1_lblEnterpriseName"&gt;My Enterprise&lt;/span&gt;
+     *   &lt;input id="ctl00_ContentPlaceHolder1_txtMobile" value="9876543210" /&gt;
+     * </pre>
+     * This method scans all span and input elements, matches their ID against
+     * known keywords, and populates the corresponding field.
+     */
+    private static void extractFromAspIds(Document doc, MsmeParsedData data) {
+        int found = 0;
+
+        // --- Span elements: extract text content ---
+        // The Udyam portal uses spans with IDs like:
+        //   ctl00_ContentPlaceHolder1_lblEnterpriseName
+        //   ctl00_ContentPlaceHolder1_lblOrganisationType
+        //   ctl00_ContentPlaceHolder1_lblServices
+        //   ctl00_ContentPlaceHolder1_lblCity, lblState, lblDistrict, lblPin, etc.
+        for (Element span : doc.select("span[id]")) {
+            String id = span.id();
+            String idLower = id.toLowerCase();
+            String value = span.text().trim();
+            if (value.isEmpty()) continue;
+
+            // Skip dashboard statistics spans (lblTotal, lblMicro, etc.)
+            if (idLower.contains("lbltotal") || idLower.contains("lblmicro")
+                    || idLower.contains("lblsmall") || idLower.contains("lblmedium")
+                    || idLower.contains("lblemp") || idLower.contains("lblhits")
+                    || idLower.contains("lbldate") || idLower.contains("uutor")
+                    || idLower.contains("uutoc") || idLower.contains("uutom")
+                    || idLower.contains("uutos") || idLower.contains("uutome")) {
+                continue;
+            }
+
+            // Match specific Udyam portal span IDs by suffix
+            String suffix = idLower.replace("ctl00_contentplaceholder1_", "");
+
+            if (suffix.equals("lblenterprisename") && !isNotBlank(data.getEnterpriseName())) {
+                data.setEnterpriseName(value);
+                log.info("ASP-ID: enterpriseName='{}' (from {})", value, id);
+                found++;
+            } else if (suffix.equals("lblorganisationtype") && !isNotBlank(data.getTypeOfOrganization())) {
+                data.setTypeOfOrganization(value);
+                log.info("ASP-ID: typeOfOrganization='{}' (from {})", value, id);
+                found++;
+            } else if (suffix.equals("lblservices") && !isNotBlank(data.getMajorActivity())) {
+                data.setMajorActivity(value);
+                log.info("ASP-ID: majorActivity='{}' (from {})", value, id);
+                found++;
+            } else if (suffix.equals("lblcity") && !isNotBlank(data.getCity())) {
+                data.setCity(value);
+                log.info("ASP-ID: city='{}' (from {})", value, id);
+                found++;
+            } else if (suffix.equals("lblstate") && !isNotBlank(data.getState())) {
+                data.setState(value);
+                log.info("ASP-ID: state='{}' (from {})", value, id);
+                found++;
+            } else if (suffix.equals("lbldistrict") && !isNotBlank(data.getDistrict())) {
+                data.setDistrict(value);
+                log.info("ASP-ID: district='{}' (from {})", value, id);
+                found++;
+            } else if (suffix.equals("lblpin") && !isNotBlank(data.getPincode())) {
+                Matcher m = PINCODE_PATTERN.matcher(value);
+                if (m.find()) {
+                    data.setPincode(m.group());
+                    log.info("ASP-ID: pincode='{}' (from {})", m.group(), id);
+                    found++;
+                }
+            } else if (suffix.equals("lblmobile") && !isNotBlank(data.getMobileNumber())) {
+                Matcher m = MOBILE_PATTERN.matcher(value);
+                if (m.find()) {
+                    data.setMobileNumber(m.group());
+                    log.info("ASP-ID: mobileNumber='{}' (from {})", m.group(), id);
+                    found++;
+                }
+            } else if (suffix.equals("lblemail") && !isNotBlank(data.getEmailId())) {
+                Matcher m = EMAIL_PATTERN.matcher(value);
+                if (m.find()) {
+                    data.setEmailId(m.group().toLowerCase());
+                    log.info("ASP-ID: emailId='{}' (from {})", m.group().toLowerCase(), id);
+                    found++;
+                }
+            } else if (suffix.equals("lblflats") && !isNotBlank(data.getAddress())) {
+                data.setAddress(value);
+                log.info("ASP-ID: address='{}' (from {})", value, id);
+                found++;
+            } else if (suffix.equals("lblvillage") && !isNotBlank(data.getCity())) {
+                data.setCity(value);
+                log.info("ASP-ID: city(village)='{}' (from {})", value, id);
+                found++;
+            } else if (suffix.equals("lblblock") || suffix.equals("lblroad")) {
+                // Append block/road to address
+                String existing = data.getAddress() != null ? data.getAddress() : "";
+                if (existing.toLowerCase().indexOf(value.toLowerCase()) < 0) {
+                    data.setAddress((existing + " " + value).trim());
+                    log.info("ASP-ID: address(appended)='{}' (from {})", value, id);
+                }
+            } else if (suffix.equals("lblacknowledgement") && !isNotBlank(data.getDateOfRegistration())) {
+                data.setDateOfRegistration(value);
+                log.info("ASP-ID: dateOfRegistration='{}' (from {})", value, id);
+                found++;
+            } else if (suffix.equals("lblgender") || suffix.equals("lblsocialcat")
+                    || suffix.equals("lbldateofincorporation") || suffix.equals("lbldateofcommencement")) {
+                // Known non-critical fields — skip silently
+            } else {
+                // Fallback: generic keyword matching for unknown span IDs
+                if (!isFieldSetByKeyword(idLower, data)) {
+                    setFieldByKeyword(idLower, value, data);
+                }
+            }
+        }
+
+        log.info("=== ASP-ID extraction: populated {} fields ===", found);
+    }
+
+    private static boolean isNotBlank(String s) {
+        return s != null && !s.isBlank();
+    }
+
+    /**
+     * Checks whether a field identified by an ASP.NET element ID is already set.
+     */
+    private static boolean isFieldSetByKeyword(String id, MsmeParsedData data) {
+        if (id.contains("udyam") && (data.getUdyamNumber() != null && !data.getUdyamNumber().isBlank())) return true;
+        if (id.contains("enterprise") && !id.contains("type") && id.contains("name")
+                && (data.getEnterpriseName() != null && !data.getEnterpriseName().isBlank())) return true;
+        if ((id.contains("entrepreneur") || id.contains("owner") || id.contains("proprietor")) && id.contains("name")
+                && (data.getEntrepreneurName() != null && !data.getEntrepreneurName().isBlank())) return true;
+        if (id.contains("mobile") && (data.getMobileNumber() != null && !data.getMobileNumber().isBlank())) return true;
+        if (id.contains("email") && (data.getEmailId() != null && !data.getEmailId().isBlank())) return true;
+        if (id.contains("state") && !id.contains("district") && (data.getState() != null && !data.getState().isBlank())) return true;
+        if (id.contains("district") && (data.getDistrict() != null && !data.getDistrict().isBlank())) return true;
+        if ((id.contains("city") || id.contains("town")) && (data.getCity() != null && !data.getCity().isBlank())) return true;
+        if (id.contains("pin") && (data.getPincode() != null && !data.getPincode().isBlank())) return true;
+        if (id.contains("activity") && !id.contains("nic") && (data.getMajorActivity() != null && !data.getMajorActivity().isBlank())) return true;
+        if ((id.contains("enterprise") && id.contains("type")) && (data.getEnterpriseType() != null && !data.getEnterpriseType().isBlank())) return true;
+        if (id.contains("organization") && (data.getTypeOfOrganization() != null && !data.getTypeOfOrganization().isBlank())) return true;
+        if (id.contains("address") || id.contains("flat") || id.contains("door") || id.contains("block")
+                || id.contains("road") || id.contains("street") || id.contains("premises")) {
+            return data.getAddress() != null && !data.getAddress().isBlank();
+        }
+        return false;
+    }
+
+    /**
+     * Sets a field in MsmeParsedData based on keywords found in an ASP.NET element ID.
+     * Returns true if the value was set.
+     */
+    private static boolean setFieldByKeyword(String id, String value, MsmeParsedData data) {
+        // Skip garbage values (HTML artifacts, single chars, etc.)
+        if (value.length() < 2 || value.equals("-")) return false;
+
+        // Udyam number
+        if (id.contains("udyam") && id.contains("number")) {
+            Matcher m = UDYAM_PATTERN.matcher(value);
+            if (m.find()) { data.setUdyamNumber(m.group().toUpperCase()); return true; }
+            if (value.toUpperCase().startsWith("UDYAM")) { data.setUdyamNumber(value.toUpperCase().trim()); return true; }
+        }
+        // Enterprise name
+        if (id.contains("enterprise") && id.contains("name") && !id.contains("type")) {
+            data.setEnterpriseName(value); return true;
+        }
+        // Entrepreneur / owner / proprietor name
+        if ((id.contains("entrepreneur") || id.contains("owner") || id.contains("proprietor")) && id.contains("name")) {
+            data.setEntrepreneurName(value); return true;
+        }
+        // Mobile
+        if (id.contains("mobile") || id.contains("phone")) {
+            Matcher m = MOBILE_PATTERN.matcher(value);
+            if (m.find()) { data.setMobileNumber(m.group()); return true; }
+        }
+        // Email
+        if (id.contains("email")) {
+            Matcher m = EMAIL_PATTERN.matcher(value);
+            if (m.find()) { data.setEmailId(m.group().toLowerCase()); return true; }
+        }
+        // State
+        if (id.contains("state") && !id.contains("district") && !id.contains("estate")) {
+            data.setState(value); return true;
+        }
+        // District
+        if (id.contains("district")) {
+            data.setDistrict(value); return true;
+        }
+        // City / Town
+        if (id.contains("city") || id.contains("town")) {
+            data.setCity(value); return true;
+        }
+        // Pincode
+        if (id.contains("pin") && !id.contains("spine")) {
+            Matcher m = PINCODE_PATTERN.matcher(value);
+            if (m.find()) { data.setPincode(m.group()); return true; }
+        }
+        // Major Activity
+        if (id.contains("activity") || id.contains("major") || id.contains("nic")) {
+            data.setMajorActivity(value); return true;
+        }
+        // Enterprise type (Micro/Small/Medium)
+        if (id.contains("enterprise") && id.contains("type")) {
+            data.setEnterpriseType(value); return true;
+        }
+        // Type of Organization
+        if (id.contains("organization") || id.contains("organisation")) {
+            data.setTypeOfOrganization(value); return true;
+        }
+        // Address components
+        if (id.contains("flat") || id.contains("door") || id.contains("block")
+                || id.contains("road") || id.contains("street") || id.contains("premises")
+                || id.contains("building") || id.contains("address")) {
+            String existing = data.getAddress() != null ? data.getAddress() : "";
+            if (existing.toLowerCase().indexOf(value.toLowerCase()) < 0) {
+                data.setAddress((existing + " " + value).trim());
+            }
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Strategy 3: Comprehensive full-text regex extraction.
+     * Scans the entire page text for patterns like:
+     *   "Name of Enterprise  My Enterprise Name"
+     *   "Name of Entrepreneur  John Doe"
+     *   "State  Maharashtra"
+     * This works regardless of HTML structure.
+     */
+    private static void extractFromFullText(String fullText, MsmeParsedData data) {
+        int found = 0;
+
+        // Enterprise name: "Name of Enterprise" or "Enterprise Name" followed by text
+        if (data.getEnterpriseName() == null || data.getEnterpriseName().isBlank()) {
+            String name = extractLabelFromText(fullText,
+                    "Name of Enterprise", "Enterprise Name", "Name of Business", "Business Name");
+            if (name != null && name.length() >= 2) {
+                data.setEnterpriseName(name);
+                log.info("FULLTEXT: enterpriseName='{}'", name);
+                found++;
+            }
+        }
+
+        // Entrepreneur name: "Name of Entrepreneur" or "Entrepreneur Name"
+        if (data.getEntrepreneurName() == null || data.getEntrepreneurName().isBlank()) {
+            String name = extractLabelFromText(fullText,
+                    "Name of Entrepreneur", "Entrepreneur Name", "Name of Proprietor",
+                    "Proprietor Name", "Owner Name", "Authorized Signatory");
+            if (name != null && name.length() >= 2) {
+                data.setEntrepreneurName(name);
+                log.info("FULLTEXT: entrepreneurName='{}'", name);
+                found++;
+            }
+        }
+
+        // State
+        if (data.getState() == null || data.getState().isBlank()) {
+            String state = extractLabelFromText(fullText, "State");
+            if (state != null && state.length() >= 2 && state.length() <= 40) {
+                data.setState(state);
+                log.info("FULLTEXT: state='{}'", state);
+                found++;
+            }
+        }
+
+        // District
+        if (data.getDistrict() == null || data.getDistrict().isBlank()) {
+            String district = extractLabelFromText(fullText, "District");
+            if (district != null && district.length() >= 2 && district.length() <= 40) {
+                data.setDistrict(district);
+                log.info("FULLTEXT: district='{}'", district);
+                found++;
+            }
+        }
+
+        // City/Town
+        if (data.getCity() == null || data.getCity().isBlank()) {
+            String city = extractLabelFromText(fullText,
+                    "City", "City/Town", "City/Town/District", "Village/Town");
+            if (city != null && city.length() >= 2 && city.length() <= 40) {
+                data.setCity(city);
+                log.info("FULLTEXT: city='{}'", city);
+                found++;
+            }
+        }
+
+        // Major Activity
+        if (data.getMajorActivity() == null || data.getMajorActivity().isBlank()) {
+            String activity = extractLabelFromText(fullText,
+                    "Major Activity", "Business Activity", "NIC Code", "Activity Type",
+                    "NIC 2 Digit", "NIC 4 Digit", "NIC 5 Digit");
+            if (activity != null && activity.length() >= 2) {
+                data.setMajorActivity(activity);
+                log.info("FULLTEXT: majorActivity='{}'", activity);
+                found++;
+            }
+        }
+
+        // Enterprise type (Micro/Small/Medium)
+        if (data.getEnterpriseType() == null || data.getEnterpriseType().isBlank()) {
+            // First try to find it as a labeled field
+            String type = extractLabelFromText(fullText,
+                    "Type of Enterprise", "Enterprise Type", "MSME Type", "Classification");
+            if (type != null && type.length() >= 2) {
+                data.setEnterpriseType(type);
+                log.info("FULLTEXT: enterpriseType='{}'", type);
+                found++;
+            } else {
+                // Fallback: look for the keywords directly in text
+                String lowerText = fullText.toLowerCase();
+                if (lowerText.contains("micro")) {
+                    data.setEnterpriseType("Micro"); found++;
+                } else if (lowerText.contains("small")) {
+                    data.setEnterpriseType("Small"); found++;
+                } else if (lowerText.contains("medium")) {
+                    data.setEnterpriseType("Medium"); found++;
+                }
+            }
+        }
+
+        // Type of Organization
+        if (data.getTypeOfOrganization() == null || data.getTypeOfOrganization().isBlank()) {
+            String orgType = extractLabelFromText(fullText,
+                    "Type of Organization", "Organization Type", "Type of Organisation");
+            if (orgType != null && orgType.length() >= 2) {
+                data.setTypeOfOrganization(orgType);
+                log.info("FULLTEXT: typeOfOrganization='{}'", orgType);
+                found++;
+            }
+        }
+
+        // Address
+        if (data.getAddress() == null || data.getAddress().isBlank()) {
+            String addr = extractLabelFromText(fullText,
+                    "Flat/Door/Block No", "Flat/Door/Block", "Official Address",
+                    "Address", "Flat No", "Door No", "Block No");
+            if (addr != null && addr.length() >= 2) {
+                data.setAddress(addr);
+                log.info("FULLTEXT: address='{}'", addr);
+                found++;
+            }
+        }
+
+        // Udyam number (from full text, more aggressive)
+        if (data.getUdyamNumber() == null || data.getUdyamNumber().isBlank()) {
+            String udyam = extractLabelFromText(fullText,
+                    "Udyam Registration Number", "Udyam No", "Registration Number");
+            if (udyam != null) {
+                Matcher m = UDYAM_PATTERN.matcher(udyam);
+                if (m.find()) {
+                    data.setUdyamNumber(m.group().toUpperCase());
+                    log.info("FULLTEXT: udyamNumber='{}'", data.getUdyamNumber());
+                    found++;
+                } else if (udyam.toUpperCase().startsWith("UDYAM")) {
+                    data.setUdyamNumber(udyam.toUpperCase().trim());
+                    log.info("FULLTEXT: udyamNumber='{}'", data.getUdyamNumber());
+                    found++;
+                }
+            }
+        }
+
+        log.info("=== FULLTEXT extraction: populated {} fields ===", found);
+    }
+
+    /**
+     * Extracts a value following one or more known labels in full page text.
+     * Searches for patterns like "Label  value" or "Label: value" or "Label value"
+     * where the value is the text after the label until the next newline, label, or
+     * a reasonable boundary.
+     *
+     * @param text the full page text
+     * @param labels one or more label patterns to search for (case-insensitive)
+     * @return the extracted value, or null if not found
+     */
+    private static String extractLabelFromText(String text, String... labels) {
+        String lowerText = text.toLowerCase();
+        for (String label : labels) {
+            String labelLower = label.toLowerCase();
+            int idx = lowerText.indexOf(labelLower);
+            if (idx < 0) continue;
+
+            // Get text after the label
+            String afterLabel = text.substring(idx + label.length()).trim();
+            if (afterLabel.isEmpty()) continue;
+
+            // Skip common separators at the start
+            if (afterLabel.startsWith(":")) afterLabel = afterLabel.substring(1).trim();
+            if (afterLabel.startsWith("-")) afterLabel = afterLabel.substring(1).trim();
+            if (afterLabel.startsWith("—")) afterLabel = afterLabel.substring(1).trim();
+
+            if (afterLabel.isEmpty()) continue;
+
+            // Extract until a reasonable boundary:
+            //   - newline
+            //   - next known label
+            //   - end of line (2+ consecutive spaces or tab)
+            String value = afterLabel.split("[\\n\\r]")[0].trim();
+
+            // If the line is very long, try to cut at the next label boundary
+            if (value.length() > 100) {
+                String[] cutLabels = {
+                        "Name of", "Type of", "State", "District", "City", "Pin",
+                        "Mobile", "Email", "Date of", "Investment", "Turnover",
+                        "NIC", "Activity", "Organization", "Enterprise", "Address",
+                        "Flat", "Door", "Block", "Road", "Street", "PAN"
+                };
+                for (String cut : cutLabels) {
+                    int cutIdx = value.toLowerCase().indexOf(cut.toLowerCase());
+                    if (cutIdx > 2 && cutIdx < value.length() - 1) {
+                        value = value.substring(0, cutIdx).trim();
+                        break;
+                    }
+                }
+            }
+
+            // Remove trailing label fragments that might have been captured
+            if (value.toLowerCase().contains("type of")) {
+                value = value.substring(0, value.toLowerCase().indexOf("type of")).trim();
+            }
+            if (value.toLowerCase().contains("udyam registration")) {
+                value = value.substring(0, value.toLowerCase().indexOf("udyam registration")).trim();
+            }
+
+            // Skip garbage values
+            if (value.isEmpty() || value.length() < 2 || value.equals("-")) continue;
+            // Skip values that are just numbers (likely not enterprise names)
+            if (label.toLowerCase().contains("name") && value.matches("\\d+")) continue;
+
+            return value;
+        }
+        return null;
     }
 
     /**

@@ -476,14 +476,14 @@ private fun renderSinglePage(pdfFile: File, pageIndex: Int): Bitmap? {
         val page = pdfRenderer.openPage(pageIndex)
 
         val scaleFactor = when {
-            page.width > 1000 -> 1.5f
-            page.width > 500 -> 2.0f
-            else -> 2.5f
+            page.width > 1000 -> 2.5f
+            page.width > 500 -> 3.0f
+            else -> 3.5f
         }
 
         val bitmap = Bitmap.createBitmap(
-            (page.width * scaleFactor).toInt().coerceAtMost(1600),
-            (page.height * scaleFactor).toInt().coerceAtMost(1600),
+            (page.width * scaleFactor).toInt().coerceAtMost(2400),
+            (page.height * scaleFactor).toInt().coerceAtMost(3400),
             Bitmap.Config.ARGB_8888
         )
         bitmap.eraseColor(android.graphics.Color.WHITE)

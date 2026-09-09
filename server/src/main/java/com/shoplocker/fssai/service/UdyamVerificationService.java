@@ -294,11 +294,18 @@ public class UdyamVerificationService {
             String verifyResult = client.execute(post, response -> {
                 int status = response.getCode();
                 log.info("Udyam verify HTTP status: {}", status);
+                // Log all response headers for debugging
+                Header[] headers = response.getHeaders();
+                for (Header h : headers) {
+                    log.info("  Response header: {} = {}", h.getName(), h.getValue());
+                }
                 byte[] bytes = EntityUtils.toByteArray(response.getEntity());
                 return new String(bytes, StandardCharsets.UTF_8);
             });
 
             log.info("Udyam verify response length={}", verifyResult.length());
+            // Log the full verify response for debugging
+            log.info("=== UDYAM VERIFY RESPONSE ===\n{}\n=== END VERIFY RESPONSE ===", verifyResult);
 
             // Check for common error patterns (case-insensitive)
             String verifyLower = verifyResult.toLowerCase();
@@ -324,10 +331,39 @@ public class UdyamVerificationService {
                         "Your verification session has expired. Please go back and load a new CAPTCHA.");
             }
 
-            // ── STEP 4: Fetch print page (must include the Udyam number) ──
-            // Without "?udyam=..." the portal returns an empty shell with no data.
-            String printUrl = PRINT_PAGE + "?udyam=" +
-                    URLEncoder.encode(request.getUdyamNumber(), StandardCharsets.UTF_8);
+            // ── STEP 4: Follow the ASP.NET pageRedirect to the print page ──
+            // The verify response contains a delta redirect like:
+            //   1|#||4|29|pageRedirect||%2fPrintUdyamApplication.aspx|
+            // We must follow this redirect URL (not use a hardcoded URL) and
+            // include the udyam number as a query parameter.
+            String printUrl;
+            if (verifyResult.contains("pageRedirect")) {
+                // Extract the redirect path from the delta response
+                int redirectIdx = verifyResult.indexOf("pageRedirect||");
+                if (redirectIdx >= 0) {
+                    String afterRedirect = verifyResult.substring(redirectIdx + "pageRedirect||".length());
+                    // The redirect path ends with '|'
+                    int endIdx = afterRedirect.indexOf('|');
+                    String redirectPath = endIdx > 0 ? afterRedirect.substring(0, endIdx) : afterRedirect;
+                    // URL-decode the path
+                    String decodedPath = java.net.URLDecoder.decode(redirectPath, StandardCharsets.UTF_8);
+                    // Prepend the base URL
+                    printUrl = BASE_URL + decodedPath + "?udyam=" +
+                            URLEncoder.encode(request.getUdyamNumber(), StandardCharsets.UTF_8);
+                    log.info("Following ASP.NET pageRedirect to: {}", printUrl);
+                } else {
+                    // Fallback: use the original print page URL
+                    printUrl = PRINT_PAGE + "?udyam=" +
+                            URLEncoder.encode(request.getUdyamNumber(), StandardCharsets.UTF_8);
+                    log.info("Could not parse pageRedirect, using fallback URL: {}", printUrl);
+                }
+            } else {
+                // No redirect found — use the original print page URL
+                printUrl = PRINT_PAGE + "?udyam=" +
+                        URLEncoder.encode(request.getUdyamNumber(), StandardCharsets.UTF_8);
+                log.info("No pageRedirect found, using URL: {}", printUrl);
+            }
+
             HttpGet printRequest = new HttpGet(printUrl);
             addBrowserHeaders(printRequest);
             printRequest.setHeader("Referer", VERIFY_PAGE);
@@ -342,7 +378,15 @@ public class UdyamVerificationService {
 
             log.info("Udyam print page HTML length={}", printHtml.length());
 
-            // DEBUG: Log the raw HTML for debugging parser issues
+            // DEBUG: Save full HTML to file for analysis
+            try {
+                java.nio.file.Files.write(
+                    java.nio.file.Paths.get("/tmp/udyam_debug.html"),
+                    printHtml.getBytes(StandardCharsets.UTF_8));
+                log.info("Saved full Udyam HTML ({} bytes) to /tmp/udyam_debug.html", printHtml.length());
+            } catch (Exception e) {
+                log.warn("Failed to save debug HTML: {}", e.getMessage());
+            }
             log.info("=== RAW UDYAM PRINT PAGE HTML START ===\n{}\n=== RAW UDYAM PRINT PAGE HTML END ===", printHtml.substring(0, Math.min(printHtml.length(), 10000)));
 
             // Guard against an absurdly large response (could OOM Jsoup/PDF render).
@@ -569,6 +613,35 @@ public class UdyamVerificationService {
                 certFields.append(extractCertificateFields(fullText));
             }
 
+            // ── Enhanced fallback: use MsmeDataParser for fields still empty ──
+            // The table parsing above may miss fields when the portal HTML doesn't
+            // use simple <td>label</td><td>value</td> rows. MsmeDataParser has
+            // additional strategies (ASP.NET span ID extraction, full-text regex)
+            // that can recover missing fields.
+            if (enterpriseName.isEmpty() || entrepreneurName.isEmpty() || state.isEmpty()
+                    || district.isEmpty() || city.isEmpty()) {
+                try {
+                    MsmeParsedData fallback = MsmeDataParser.parse(rawHtml);
+                    if (enterpriseName.isEmpty()) enterpriseName = fallback.getEnterpriseName() != null ? fallback.getEnterpriseName() : "";
+                    if (entrepreneurName.isEmpty()) entrepreneurName = fallback.getEntrepreneurName() != null ? fallback.getEntrepreneurName() : "";
+                    if (enterpriseType.isEmpty()) enterpriseType = fallback.getEnterpriseType() != null ? fallback.getEnterpriseType() : "";
+                    if (address.isEmpty()) address = fallback.getAddress() != null ? fallback.getAddress() : "";
+                    if (state.isEmpty()) state = fallback.getState() != null ? fallback.getState() : "";
+                    if (district.isEmpty()) district = fallback.getDistrict() != null ? fallback.getDistrict() : "";
+                    if (city.isEmpty()) city = fallback.getCity() != null ? fallback.getCity() : "";
+                    if (pincode.isEmpty()) pincode = fallback.getPincode() != null ? fallback.getPincode() : "";
+                    if (mobile.isEmpty()) mobile = fallback.getMobileNumber() != null ? fallback.getMobileNumber() : "";
+                    if (email.isEmpty()) email = fallback.getEmailId() != null ? fallback.getEmailId() : "";
+                    if (dateOfRegistration.isEmpty() && fallback.getUdyamNumber() != null) {
+                        // Date of registration is not in MsmeParsedData, but try full text
+                    }
+                    log.info("PDF fallback via MsmeDataParser: enterprise='{}' owner='{}' state='{}'",
+                            enterpriseName, entrepreneurName, state);
+                } catch (Exception e) {
+                    log.warn("MsmeDataParser fallback failed for PDF generation: {}", e.getMessage());
+                }
+            }
+
             // Build address string
             if (address.isEmpty()) {
                 StringBuilder addrBuilder = new StringBuilder();
@@ -722,12 +795,10 @@ public class UdyamVerificationService {
                     "  <div class=\"note\">\n" +
                     "    <p>1. In case of proprietorship, the registration will be in the name of proprietor. In case of partnership concern, the registration will be issued as per the provisions of Partnership Act, 1932.</p>\n" +
                     "    <p>2. The enterprise shall furnish the information online and self-declaration on the Udyam Registration portal. This certificate is based on the details furnished by the enterprise.</p>\n" +
-                    "    <p><span class=\"bold\">For any assistance, you may contact:</span></p>\n" +
-                    "    <p>1. District Industry Centre: Check with your local DIC office</p>\n" +
-                    "    <p>2. MSME-DFO: Check with your regional MSME office</p>\n" +
+                    "    <p><strong>Note:</strong> This is a computer-generated certificate and does not require any physical or digital signature.</p>\n" +
                     "  </div>\n" +
                     "\n" +
-                    "  <div style=\"font-size:7pt; color:#888; text-align:right; padding:6px 10px 2px; border-top:1px solid #ddd; margin-top:6px;\">Generated by DukaanLocker on " + printDate + "</div>\n" +
+                    "  <div style=\"font-size:7pt; color:#888; text-align:right; padding:6px 10px 2px; border-top:1px solid #ddd; margin-top:6px;\">Generated and Verified by DukaanLocker on " + printDate + "</div>\n" +
                     "</div></body></html>";
 
             // Render to PDF

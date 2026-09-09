@@ -452,6 +452,13 @@ public class AuthService {
             }
         }
 
+        // The portal masks the mobile number in the HTML (e.g. "83*****456"),
+        // so the parser can't extract it. Use the mobile from the registration
+        // request instead — it's the actual number the user provided.
+        if (parsedData != null && (parsedData.getMobileNumber() == null || parsedData.getMobileNumber().isBlank())) {
+            parsedData.setMobileNumber(mobile);
+        }
+
         // ── Step 2b: Regenerate PDF from parsed data for reliable content ──
         // The initial PDF from verifyAndGeneratePdf() may have empty fields if the
         // government portal HTML was not fully populated. Regenerating from parsed

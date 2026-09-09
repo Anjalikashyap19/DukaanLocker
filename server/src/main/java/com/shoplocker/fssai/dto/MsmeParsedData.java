@@ -19,6 +19,7 @@ public class MsmeParsedData {
     private String majorActivity;
     private String enterpriseType; // Micro / Small / Medium
     private String typeOfOrganization;
+    private String dateOfRegistration;
 
     public MsmeParsedData() {}
 
@@ -63,6 +64,9 @@ public class MsmeParsedData {
     public String getTypeOfOrganization() { return typeOfOrganization; }
     public void setTypeOfOrganization(String typeOfOrganization) { this.typeOfOrganization = typeOfOrganization; }
 
+    public String getDateOfRegistration() { return dateOfRegistration; }
+    public void setDateOfRegistration(String dateOfRegistration) { this.dateOfRegistration = dateOfRegistration; }
+
     @Override
     public String toString() {
         return "MsmeParsedData{" +
@@ -77,6 +81,7 @@ public class MsmeParsedData {
                 ", pincode='" + pincode + '\'' +
                 ", majorActivity='" + majorActivity + '\'' +
                 ", enterpriseType='" + enterpriseType + '\'' +
+                ", dateOfRegistration='" + dateOfRegistration + '\'' +
                 '}';
     }
 }
