@@ -58,7 +58,8 @@ data class ManagerAccess(
     val code: String,
     val managerName: String,
     val assignedBusinessIds: List<String>,
-    val id: String? = null
+    val id: String? = null,
+    val enabled: Boolean = true
 )
 
 data class ShopDetails(

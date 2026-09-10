@@ -44,6 +44,8 @@ fun ManageManagersScreen(
     managerShopAssignments: Map<String, List<String>> = emptyMap(),
     onAddManager: (String, List<String>) -> Unit,
     onDeleteManager: (String) -> Unit,
+    onDisableManager: (String) -> Unit,
+    onEnableManager: (String) -> Unit,
     onBack: () -> Unit,
     isLoadingManagers: Boolean = false
 ) {
@@ -132,6 +134,8 @@ fun ManageManagersScreen(
                         manager = manager,
                         businesses = businesses,
                         onDelete = { onDeleteManager(manager.code) },
+                        onDisable = { onDisableManager(manager.id ?: manager.code) },
+                        onEnable = { onEnableManager(manager.id ?: manager.code) },
                         lang = lang
                     )
                 }
@@ -161,13 +165,15 @@ private fun ManagerCard(
     manager: ManagerAccess,
     businesses: List<BusinessProfile>,
     onDelete: () -> Unit,
+    onDisable: () -> Unit,
+    onEnable: () -> Unit,
     lang: String
 ) {
     val colors = LocalAppColors.current
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-        border = BorderStroke(1.dp, colors.border),
+        border = BorderStroke(1.dp, if (manager.enabled) colors.border else colors.error.copy(alpha = 0.3f)),
         shape = RoundedCornerShape(14.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -181,23 +187,49 @@ private fun ManagerCard(
                         modifier = Modifier
                             .size(44.dp)
                             .clip(CircleShape)
-                            .background(colors.secondary.copy(alpha = 0.2f)),
+                            .background(if (manager.enabled) colors.secondary.copy(alpha = 0.2f) else colors.error.copy(alpha = 0.1f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Person, contentDescription = null, tint = colors.secondary, modifier = Modifier.size(24.dp))
+                        Icon(Icons.Default.Person, contentDescription = null, tint = if (manager.enabled) colors.secondary else colors.error, modifier = Modifier.size(24.dp))
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text(manager.managerName, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(manager.managerName, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                color = if (manager.enabled) Color(0xFF22C55E).copy(alpha = 0.15f) else Color.Red.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    if (manager.enabled) "Active" else "Disabled",
+                                    fontSize = 10.sp,
+                                    color = if (manager.enabled) Color(0xFF22C55E) else Color.Red,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Lock, contentDescription = null, tint = colors.primary, modifier = Modifier.size(12.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                             Text("${AppStrings.get(lang, "Code:")} ${manager.code}", fontSize = 12.sp, color = colors.primary, fontWeight = FontWeight.Medium)
+                            Text("${AppStrings.get(lang, "Code:")} ${manager.code}", fontSize = 12.sp, color = colors.primary, fontWeight = FontWeight.Medium)
                         }
                     }
                 }
-                IconButton(onClick = onDelete) {
-                     Icon(Icons.Default.Delete, contentDescription = AppStrings.get(lang, "Delete"), tint = Color.Red.copy(alpha = 0.7f))
+                Row {
+                    if (manager.enabled) {
+                        IconButton(onClick = onDisable) {
+                            Icon(Icons.Default.Lock, contentDescription = "Disable", tint = Color(0xFFFFA000))
+                        }
+                    } else {
+                        IconButton(onClick = onEnable) {
+                            Icon(Icons.Default.VpnKey, contentDescription = "Enable", tint = Color(0xFF22C55E))
+                        }
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Default.Delete, contentDescription = AppStrings.get(lang, "Delete"), tint = Color.Red.copy(alpha = 0.7f))
+                    }
                 }
             }
 

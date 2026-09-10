@@ -639,6 +639,40 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun disableManager(managerId: String) {
+        viewModelScope.launch {
+            val id = managerId.toLongOrNull() ?: return@launch
+            try {
+                val resp = api.disableManager(id)
+                if (resp.isSuccessful) {
+                    Toast.makeText(context, "Manager disabled", Toast.LENGTH_SHORT).show()
+                    loadManagers()
+                } else {
+                    Toast.makeText(context, "Failed: ${resp.parseErrorMessage()}", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun enableManager(managerId: String) {
+        viewModelScope.launch {
+            val id = managerId.toLongOrNull() ?: return@launch
+            try {
+                val resp = api.enableManager(id)
+                if (resp.isSuccessful) {
+                    Toast.makeText(context, "Manager enabled", Toast.LENGTH_SHORT).show()
+                    loadManagers()
+                } else {
+                    Toast.makeText(context, "Failed: ${resp.parseErrorMessage()}", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     fun createShop(biz: BusinessProfile, pendingManagerId: String?, onDone: () -> Unit) {
         viewModelScope.launch {
             updateState { it.copy(isLoading = true) }

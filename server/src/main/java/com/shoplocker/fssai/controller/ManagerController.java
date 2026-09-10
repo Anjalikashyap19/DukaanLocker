@@ -259,4 +259,58 @@ public class ManagerController {
 
         return ResponseEntity.ok().build();
     }
+
+    @Operation(summary = "Disable manager login", description = "ADMIN only. Disables a manager's account " +
+            "so they can no longer log in. Their shop assignments are also deactivated.")
+    @PutMapping("/{managerId}/disable")
+    public ResponseEntity<Void> disableManager(@PathVariable Long managerId,
+                                                Authentication authentication) {
+        User admin = shopAccessService.getAuthenticatedUser(authentication);
+        shopAccessService.ensureAdmin(admin);
+
+        User manager = userRepository.findById(managerId)
+                .orElseThrow(() -> new FssaiException("Manager not found", FailureCode.MANAGER_NOT_FOUND));
+
+        if (manager.getCreatedByAdmin() == null || !manager.getCreatedByAdmin().getId().equals(admin.getId())) {
+            throw new FssaiException("You do not have permission to modify this manager",
+                    FailureCode.FORBIDDEN);
+        }
+
+        // Disable the manager's login
+        manager.setEnabled(false);
+        userRepository.save(manager);
+
+        // Deactivate all shop assignments
+        List<ManagerShopAssignment> assignments = assignmentRepository.findByManagerIdAndAssignedByAdminId(managerId, admin.getId());
+        for (ManagerShopAssignment assignment : assignments) {
+            if (assignment.isActive()) {
+                assignment.setActive(false);
+                assignmentRepository.save(assignment);
+            }
+        }
+
+        return ResponseEntity.ok().build();
+    }
+
+    @Operation(summary = "Enable manager login", description = "ADMIN only. Re-enables a previously disabled " +
+            "manager's account so they can log in again.")
+    @PutMapping("/{managerId}/enable")
+    public ResponseEntity<Void> enableManager(@PathVariable Long managerId,
+                                               Authentication authentication) {
+        User admin = shopAccessService.getAuthenticatedUser(authentication);
+        shopAccessService.ensureAdmin(admin);
+
+        User manager = userRepository.findById(managerId)
+                .orElseThrow(() -> new FssaiException("Manager not found", FailureCode.MANAGER_NOT_FOUND));
+
+        if (manager.getCreatedByAdmin() == null || !manager.getCreatedByAdmin().getId().equals(admin.getId())) {
+            throw new FssaiException("You do not have permission to modify this manager",
+                    FailureCode.FORBIDDEN);
+        }
+
+        manager.setEnabled(true);
+        userRepository.save(manager);
+
+        return ResponseEntity.ok().build();
+    }
 }

@@ -79,6 +79,12 @@ interface ApiService {
         @Path("shopId") shopId: Long
     ): Response<Unit>
 
+    @PUT("api/managers/{managerId}/disable")
+    suspend fun disableManager(@Path("managerId") managerId: Long): Response<Unit>
+
+    @PUT("api/managers/{managerId}/enable")
+    suspend fun enableManager(@Path("managerId") managerId: Long): Response<Unit>
+
     // ── Business Profile ─────────────────────────────────────────────────────
 
     @POST("api/business-profile")

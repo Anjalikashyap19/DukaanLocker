@@ -198,12 +198,14 @@ fun DukaanLockerApp(
                         val manageManagersContent: @Composable () -> Unit = {
                             ManageManagersScreen(
                                 managers = state.managers.map { mgr ->
-                                    ManagerAccess(code = mgr.managerCode ?: mgr.id.toString(), managerName = mgr.userName, id = mgr.id.toString(), assignedBusinessIds = state.managerShopAssignments[mgr.id] ?: emptyList())
+                                    ManagerAccess(code = mgr.managerCode ?: mgr.id.toString(), managerName = mgr.userName, id = mgr.id.toString(), assignedBusinessIds = state.managerShopAssignments[mgr.id] ?: emptyList(), enabled = mgr.enabled)
                                 },
                                 businesses = state.shops.map { vm.shopToBusiness(it) },
                                 managerShopAssignments = state.managerShopAssignments.mapKeys { it.key.toString() }.mapValues { it.value },
                                 onAddManager = { name, bizList -> vm.createManager(name, bizList) },
                                 onDeleteManager = { managerId -> vm.deleteManager(managerId) },
+                                onDisableManager = { managerId -> vm.disableManager(managerId) },
+                                onEnableManager = { managerId -> vm.enableManager(managerId) },
                                 onBack = { vm.setBottomTab(BottomTab.Business) },
                                 isLoadingManagers = state.isLoadingManagers
                             )
@@ -255,7 +257,7 @@ fun DukaanLockerApp(
                                 AddBusinessScreen(
                                     initial = state.editShopTarget?.let { vm.shopToBusiness(it) },
                                     managers = state.managers.map { mgr ->
-                                        ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(), managerName = mgr.userName, assignedBusinessIds = state.managerShopAssignments[mgr.id] ?: emptyList())
+ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(), managerName = mgr.userName, assignedBusinessIds = state.managerShopAssignments[mgr.id] ?: emptyList(), enabled = mgr.enabled)
                                     },
                                     assignedManagerId = currentManagerId,
                                     onManagerSelected = { managerId -> pendingManagerId = managerId },
