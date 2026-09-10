@@ -34,8 +34,10 @@ data class AppUiState(
     val managers: List<ManagerResponse> = emptyList(),
     val managerShopAssignments: Map<Long, List<String>> = emptyMap(),
     val currentScreen: Screen = Screen.Onboarding,
+    val navigationHistory: List<Screen> = emptyList(),
     val editShopTarget: ShopResponse? = null,
     val selectedBottomTab: BottomTab = BottomTab.Home,
+    val bottomTabHistory: List<BottomTab> = emptyList(),
     val isDarkTheme: Boolean = true,
     val language: String = "en",
     val isLoading: Boolean = false,
@@ -89,8 +91,54 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         updateState { it.copy(currentScreen = screen) }
     }
 
+    fun navigateTo(screen: Screen) {
+        val current = _uiState.value.currentScreen
+        if (current != screen) {
+            updateState {
+                it.copy(
+                    navigationHistory = it.navigationHistory + current,
+                    currentScreen = screen
+                )
+            }
+        }
+    }
+
+    fun goBack() {
+        val history = _uiState.value.navigationHistory
+        if (history.isNotEmpty()) {
+            val previous = history.last()
+            updateState {
+                it.copy(
+                    navigationHistory = it.navigationHistory.dropLast(1),
+                    currentScreen = previous
+                )
+            }
+        }
+    }
+
     fun setBottomTab(tab: BottomTab) {
-        updateState { it.copy(selectedBottomTab = tab) }
+        val current = _uiState.value.selectedBottomTab
+        if (current != tab) {
+            updateState {
+                it.copy(
+                    bottomTabHistory = it.bottomTabHistory + current,
+                    selectedBottomTab = tab
+                )
+            }
+        }
+    }
+
+    fun goBackTab() {
+        val history = _uiState.value.bottomTabHistory
+        if (history.isNotEmpty()) {
+            val previous = history.last()
+            updateState {
+                it.copy(
+                    bottomTabHistory = it.bottomTabHistory.dropLast(1),
+                    selectedBottomTab = previous
+                )
+            }
+        }
     }
 
     fun setTheme(dark: Boolean) {
@@ -108,7 +156,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         updateState {
             it.copy(
                 currentScreen = if (role == "MANAGER") Screen.ManagerHome else Screen.OwnerHome,
-                selectedBottomTab = BottomTab.Home
+                selectedBottomTab = BottomTab.Home,
+                bottomTabHistory = emptyList(),
+                navigationHistory = emptyList(),
+                shops = emptyList(),
+                shopDocuments = emptyList(),
+                managers = emptyList(),
+                managerShopAssignments = emptyMap(),
+                selectedShop = null,
+                editShopTarget = null,
+                pendingUploadDoc = null,
+                viewDocumentId = null,
+                viewDocumentName = "",
+                docForView = null,
+                fetchTargetDoc = null,
+                showFetchDialog = false
             )
         }
         loadShops()
@@ -136,7 +198,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 currentUserEmail = "",
                 currentUserRole = "",
                 currentUserManagerCode = "",
-                currentScreen = Screen.Login
+                shops = emptyList(),
+                shopDocuments = emptyList(),
+                managers = emptyList(),
+                managerShopAssignments = emptyMap(),
+                selectedShop = null,
+                editShopTarget = null,
+                pendingUploadDoc = null,
+                viewDocumentId = null,
+                viewDocumentName = "",
+                docForView = null,
+                fetchTargetDoc = null,
+                showFetchDialog = false,
+                currentScreen = Screen.Login,
+                navigationHistory = emptyList(),
+                bottomTabHistory = emptyList(),
+                selectedBottomTab = BottomTab.Home
             )
         }
         Toast.makeText(context, "Logged out", Toast.LENGTH_SHORT).show()
@@ -146,9 +223,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         ApiClient.clearAuth(context)
         updateState {
             it.copy(
-                currentUserManagerCode = "",
                 isLoggedIn = false,
-                currentScreen = Screen.Login
+                authToken = null,
+                currentUserId = -1,
+                currentUserName = "",
+                currentUserEmail = "",
+                currentUserRole = "",
+                currentUserManagerCode = "",
+                shops = emptyList(),
+                shopDocuments = emptyList(),
+                managers = emptyList(),
+                managerShopAssignments = emptyMap(),
+                selectedShop = null,
+                editShopTarget = null,
+                pendingUploadDoc = null,
+                viewDocumentId = null,
+                viewDocumentName = "",
+                docForView = null,
+                fetchTargetDoc = null,
+                showFetchDialog = false,
+                currentScreen = Screen.Login,
+                navigationHistory = emptyList(),
+                bottomTabHistory = emptyList(),
+                selectedBottomTab = BottomTab.Home
             )
         }
     }
@@ -610,15 +707,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun editBusiness(biz: BusinessProfile) {
         val shop = _uiState.value.shops.find { it.id.toString() == biz.id }
-        updateState { it.copy(editShopTarget = shop, currentScreen = Screen.AddBusiness) }
+        updateState { it.copy(editShopTarget = shop) }
+        navigateTo(Screen.AddBusiness)
     }
 
     fun addBusiness() {
-        updateState { it.copy(editShopTarget = null, currentScreen = Screen.AddBusiness) }
+        updateState { it.copy(editShopTarget = null) }
+        navigateTo(Screen.AddBusiness)
     }
 
     fun cancelAddBusiness() {
-        updateState { it.copy(editShopTarget = null, currentScreen = Screen.OwnerHome) }
+        updateState { it.copy(editShopTarget = null) }
+        goBack()
     }
 
     fun saveWizardProfile(wizard: WizardAnswers) {
@@ -649,7 +749,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun skipWizardAndLogout() {
         ApiClient.clearAuth(context)
-        updateState { it.copy(isLoggedIn = false, currentScreen = Screen.Login) }
+        updateState {
+            it.copy(
+                isLoggedIn = false,
+                shops = emptyList(),
+                shopDocuments = emptyList(),
+                managers = emptyList(),
+                managerShopAssignments = emptyMap(),
+                currentScreen = Screen.Login,
+                navigationHistory = emptyList()
+            )
+        }
     }
 
     fun enableBiometricLogin(cipher: javax.crypto.Cipher, token: String, userId: Long, userName: String, email: String, role: String): Boolean {
@@ -751,6 +861,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } catch (e: Exception) {
                 android.util.Log.e("GST_FETCH", "<<< EXCEPTION: ${e.javaClass.simpleName}: ${e.message}", e)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
+                    onResult(false, null)
+                }
+            }
+        }
+    }
+
+    fun fetchMsme(shopId: String, udyamNumber: String, sessionId: String, captchaText: String, onResult: (Boolean, UdyamVerifyResponse?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val response = api.fetchUdyam(UdyamFetchRequest(shopId = shopId, udyamNumber = udyamNumber, sessionId = sessionId, captchaText = captchaText))
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    if (response.isSuccessful) {
+                        val body = response.body()
+                        if (body != null && body.success) {
+                            onResult(true, body)
+                        } else {
+                            onResult(false, body)
+                        }
+                    } else {
+                        Toast.makeText(context, "MSME verification failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
+                        onResult(false, null)
+                    }
+                }
+            } catch (e: Exception) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
                     onResult(false, null)

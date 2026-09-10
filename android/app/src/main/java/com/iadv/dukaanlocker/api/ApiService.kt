@@ -100,6 +100,9 @@ interface ApiService {
     @POST("api/udyam/verify")
     suspend fun verifyUdyam(@Body request: UdyamVerifyRequest): Response<UdyamVerifyResponse>
 
+    @POST("api/udyam/fetch")
+    suspend fun fetchUdyam(@Body request: UdyamFetchRequest): Response<UdyamVerifyResponse>
+
     // ── MSME Registration ──────────────────────────────────────────────────
 
     @POST("api/auth/register-msme")

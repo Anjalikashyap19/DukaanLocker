@@ -4,6 +4,7 @@ import android.app.Activity
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -150,6 +151,26 @@ fun DukaanLockerApp(
                     Box(modifier = Modifier.fillMaxWidth().statusBarsPadding().background(statusBarBg))
 
                     Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        BackHandler(enabled = state.viewDocumentId != null) {
+                            vm.closeDocumentViewer()
+                        }
+                        BackHandler(
+                            enabled = state.currentScreen != Screen.Onboarding && state.currentScreen != Screen.Login && state.viewDocumentId == null
+                                    && !(state.navigationHistory.isEmpty() && (state.currentScreen is Screen.OwnerHome || state.currentScreen is Screen.ManagerHome) && state.selectedBottomTab == BottomTab.Home)
+                        ) {
+                            if (state.navigationHistory.isNotEmpty()) {
+                                vm.goBack()
+                            } else if (state.currentScreen is Screen.OwnerHome || state.currentScreen is Screen.ManagerHome) {
+                                if (state.selectedBottomTab != BottomTab.Home) {
+                                    if (state.bottomTabHistory.isNotEmpty()) {
+                                        vm.goBackTab()
+                                    } else {
+                                        vm.setBottomTab(BottomTab.Home)
+                                    }
+                                }
+                            }
+                        }
+
                         val handleLogout: () -> Unit = { vm.logout() }
 
                         val docsTabContent: @Composable () -> Unit = {
@@ -193,7 +214,7 @@ fun DukaanLockerApp(
                                 MainScreen(
                                     isDarkTheme = state.isDarkTheme,
                                     onToggleTheme = onToggleTheme,
-                                    onGetStarted = { vm.setScreen(Screen.Login) },
+                                    onGetStarted = { vm.navigateTo(Screen.Login) },
                                     onLanguageChanged = { code -> vm.setLanguage(code); onLanguageChanged(code) }
                                 )
                             }
@@ -355,6 +376,14 @@ fun DukaanLockerApp(
                                 },
                                 onFetchGst = { shopId, gstin, result ->
                                     vm.fetchGst(shopId, gstin) { success, response ->
+                                        result(success, response)
+                                    }
+                                },
+                                onInitMsmeCaptcha = { onResult ->
+                                    vm.initUdyamCaptcha(onResult)
+                                },
+                                onFetchMsme = { shopId, udyamNumber, sessionId, captchaText, result ->
+                                    vm.fetchMsme(shopId, udyamNumber, sessionId, captchaText) { success, response ->
                                         result(success, response)
                                     }
                                 }

@@ -286,3 +286,10 @@ data class GstFetchRequest(
     @SerializedName("shopId") val shopId: String,
     @SerializedName("gstin") val gstin: String
 )
+
+data class UdyamFetchRequest(
+    @SerializedName("shopId") val shopId: String,
+    @SerializedName("udyamNumber") val udyamNumber: String,
+    @SerializedName("sessionId") val sessionId: String,
+    @SerializedName("captchaText") val captchaText: String
+)

@@ -109,6 +109,8 @@ public class SecurityConfig {
 
                     auth
                     .requestMatchers(publicPaths.toArray(new String[0])).permitAll()
+                    // ── Udyam fetch requires authentication (other /api/udyam/** are public) ──
+                    .requestMatchers(HttpMethod.POST, "/api/udyam/fetch").authenticated()
                     // ── MANAGER-only (must be BEFORE the ADMIN /api/managers/** catch-all) ──
                     .requestMatchers(HttpMethod.GET, "/api/managers/me/shops").hasRole("MANAGER")
                     // ── ADMIN-only endpoints ──────────────────────────────────

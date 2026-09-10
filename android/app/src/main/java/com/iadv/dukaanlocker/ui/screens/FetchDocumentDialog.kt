@@ -1,6 +1,8 @@
 package com.iadv.dukaanlocker.ui.screens
 
+import android.util.Base64
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -9,6 +11,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -16,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.iadv.dukaanlocker.*
 import com.iadv.dukaanlocker.api.GstVerificationResponse
+import com.iadv.dukaanlocker.api.UdyamVerifyResponse
 import com.iadv.dukaanlocker.ui.strings.AppStrings
 import com.iadv.dukaanlocker.ui.strings.LocalAppLanguage
 import com.iadv.dukaanlocker.ui.theme.*
@@ -23,14 +28,15 @@ import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
 
-// ── Dialog: Fetch Document ───────────────────────────────────────────────────
 @Composable
 fun FetchDocumentDialog(
     doc: DocumentItem,
     shopName: String,
     onDismiss: () -> Unit,
     onSuccess: (regNum: String, issue: String, expiry: String) -> Unit,
-    onFetchGst: ((shopId: String, gstin: String, (Boolean, GstVerificationResponse?) -> Unit) -> Unit)? = null
+    onFetchGst: ((shopId: String, gstin: String, (Boolean, GstVerificationResponse?) -> Unit) -> Unit)? = null,
+    onInitMsmeCaptcha: (((String, String) -> Unit) -> Unit)? = null,
+    onFetchMsme: ((shopId: String, udyamNumber: String, sessionId: String, captchaText: String, (Boolean, UdyamVerifyResponse?) -> Unit) -> Unit)? = null
 ) {
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
@@ -40,17 +46,40 @@ fun FetchDocumentDialog(
     var currentStepText by remember { mutableStateOf(AppStrings.get(lang, "Connecting to National Database...")) }
     var fetchError by remember { mutableStateOf<String?>(null) }
     var gstResponse by remember { mutableStateOf<GstVerificationResponse?>(null) }
+    var msmeResponse by remember { mutableStateOf<UdyamVerifyResponse?>(null) }
 
-    // Hold the pending result from onFetchGst callback
-    var pendingResult by remember { mutableStateOf<Pair<Boolean, GstVerificationResponse?>?>(null) }
+    // MSME captcha state
+    val isMsme = doc.type == "MSME_CERTIFICATE"
+    var msmeCaptchaImage by remember { mutableStateOf<String?>(null) }
+    var msmeSessionId by remember { mutableStateOf("") }
+    var captchaInput by remember { mutableStateOf("") }
+    var isLoadingCaptcha by remember { mutableStateOf(false) }
+    var captchaLoaded by remember { mutableStateOf(false) }
+
+    // Hold pending results from callbacks
+    var pendingGstResult by remember { mutableStateOf<Pair<Boolean, GstVerificationResponse?>?>(null) }
+    var pendingMsmeResult by remember { mutableStateOf<Pair<Boolean, UdyamVerifyResponse?>?>(null) }
 
     val labelText = docFetchLabel(doc.type)
     val isGst = doc.type == "GST"
 
-    // Handle the pending result on the Main thread
-    LaunchedEffect(pendingResult) {
-        pendingResult?.let { (success, response) ->
-            pendingResult = null
+    // Init MSME captcha when dialog opens for MSME
+    LaunchedEffect(isMsme) {
+        if (isMsme && onInitMsmeCaptcha != null && !captchaLoaded && !isLoadingCaptcha) {
+            isLoadingCaptcha = true
+            onInitMsmeCaptcha { sessionId, captchaBase64 ->
+                msmeSessionId = sessionId
+                msmeCaptchaImage = captchaBase64
+                isLoadingCaptcha = false
+                captchaLoaded = true
+            }
+        }
+    }
+
+    // Handle GST pending result
+    LaunchedEffect(pendingGstResult) {
+        pendingGstResult?.let { (success, response) ->
+            pendingGstResult = null
             isFetching = false
             if (success && response != null) {
                 gstResponse = response
@@ -68,10 +97,32 @@ fun FetchDocumentDialog(
         }
     }
 
+    // Handle MSME pending result
+    LaunchedEffect(pendingMsmeResult) {
+        pendingMsmeResult?.let { (success, response) ->
+            pendingMsmeResult = null
+            isFetching = false
+            if (success && response != null) {
+                msmeResponse = response
+                val formatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                val today = Date()
+                val expiryCal = Calendar.getInstance().apply { add(Calendar.YEAR, 5) }
+                onSuccess(
+                    regInput.uppercase(),
+                    response.udyamNumber ?: formatter.format(today),
+                    formatter.format(expiryCal.time)
+                )
+            } else {
+                fetchError = response?.errorMessage ?: "Verification failed. Please check the Udyam number and captcha."
+            }
+        }
+    }
+
     LaunchedEffect(isFetching) {
         if (isFetching) {
             fetchError = null
             gstResponse = null
+            msmeResponse = null
 
             if (isGst && onFetchGst != null) {
                 val steps = listOf(
@@ -85,29 +136,24 @@ fun FetchDocumentDialog(
                     fetchProgress = progress
                     currentStepText = text
                 }
-
-                // Call the backend — callback sets pendingResult, which is handled on Main via LaunchedEffect above
                 onFetchGst(doc.businessId, regInput.trim().uppercase()) { success, response ->
-                    pendingResult = success to response
+                    pendingGstResult = success to response
                 }
-            } else {
+            } else if (isMsme && onFetchMsme != null && msmeSessionId.isNotBlank() && captchaInput.isNotBlank()) {
                 val steps = listOf(
-                    0.2f to AppStrings.get(lang, "Connecting to National Portal Gateway..."),
-                    0.5f to AppStrings.get(lang, "Verifying digital credentials against database..."),
+                    0.2f to AppStrings.get(lang, "Connecting to Udyam Portal Gateway..."),
+                    0.5f to AppStrings.get(lang, "Verifying Udyam number against government database..."),
                     0.8f to AppStrings.get(lang, "Fetching official e-Certificate..."),
                     1.0f to AppStrings.get(lang, "Encrypting and locking in Dukaan Vault...")
                 )
                 for ((progress, text) in steps) {
-                    delay(1000)
+                    delay(600)
                     fetchProgress = progress
                     currentStepText = text
                 }
-                delay(800)
-                val formatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-                val today = Date()
-                val expiryCal = Calendar.getInstance().apply { add(Calendar.YEAR, 5) }
-                isFetching = false
-                onSuccess(regInput.uppercase(), formatter.format(today), formatter.format(expiryCal.time))
+                onFetchMsme(doc.businessId, regInput.trim().uppercase(), msmeSessionId, captchaInput.trim()) { success, response ->
+                    pendingMsmeResult = success to response
+                }
             }
         }
     }
@@ -146,6 +192,7 @@ fun FetchDocumentDialog(
                         }
                     }
 
+                    // GST verified details
                     if (gstResponse != null && gstResponse!!.success) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -163,21 +210,94 @@ fun FetchDocumentDialog(
                         }
                     }
 
+                    // MSME verified details
+                    if (msmeResponse != null && msmeResponse!!.success) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = colors.accent.copy(alpha = 0.1f)),
+                            border = BorderStroke(1.dp, colors.accent.copy(alpha = 0.3f)),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text("Udyam Verified!", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = colors.accent)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                msmeResponse!!.udyamNumber?.let { Text("Udyam No: $it", fontSize = 11.sp, color = colors.textSecondary) }
+                            }
+                        }
+                    }
+
+                    // Number input
                     OutlinedTextField(
                         value = regInput,
                         onValueChange = { regInput = it },
-                        label = { Text(labelText) },
+                        label = { Text(if (isMsme) "Udyam Reg. No. (UDYAM-XX-XX-XXXXXXX)" else labelText) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border),
                         shape = RoundedCornerShape(10.dp)
                     )
 
+                    // MSME captcha section
+                    if (isMsme) {
+                        if (isLoadingCaptcha) {
+                            CircularProgressIndicator(modifier = Modifier.size(32.dp), color = colors.primary, strokeWidth = 3.dp)
+                            Text("Loading captcha...", fontSize = 11.sp, color = colors.textSecondary)
+                        } else if (msmeCaptchaImage != null) {
+                            // Captcha image
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = colors.background),
+                                border = BorderStroke(1.dp, colors.border),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text("Enter the captcha below", fontSize = 11.sp, color = colors.textSecondary)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    CaptchaImage(base64 = msmeCaptchaImage!!)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    OutlinedTextField(
+                                        value = captchaInput,
+                                        onValueChange = { captchaInput = it },
+                                        label = { Text("Captcha") },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                }
+                            }
+                            // Refresh captcha button
+                            TextButton(onClick = {
+                                captchaLoaded = false
+                                isLoadingCaptcha = true
+                                captchaInput = ""
+                                onInitMsmeCaptcha?.invoke { sessionId, captchaBase64 ->
+                                    msmeSessionId = sessionId
+                                    msmeCaptchaImage = captchaBase64
+                                    isLoadingCaptcha = false
+                                    captchaLoaded = true
+                                }
+                            }) {
+                                Text("Refresh Captcha", fontSize = 11.sp, color = colors.primary)
+                            }
+                        }
+                    }
+
+                    // Buttons
+                    val canSubmit = if (isMsme) {
+                        regInput.isNotBlank() && captchaInput.isNotBlank() && msmeSessionId.isNotBlank()
+                    } else {
+                        regInput.isNotBlank()
+                    }
+
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text(AppStrings.get(lang, "Cancel"), color = colors.textPrimary) }
                         Button(
-                            onClick = { if (regInput.isNotBlank()) isFetching = true },
-                            enabled = regInput.isNotBlank(),
+                            onClick = { if (canSubmit) isFetching = true },
+                            enabled = canSubmit,
                             modifier = Modifier.weight(1.5f),
                             colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = colors.background)
                         ) { Text(AppStrings.get(lang, "Confirm Fetch"), fontWeight = FontWeight.Bold) }
@@ -190,5 +310,31 @@ fun FetchDocumentDialog(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CaptchaImage(base64: String) {
+    val colors = LocalAppColors.current
+    val bitmap = remember(base64) {
+        try {
+            val cleaned = if (base64.contains(",")) base64.substringAfter(",") else base64
+            val bytes = Base64.decode(cleaned, Base64.DEFAULT)
+            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        } catch (e: Exception) {
+            null
+        }
+    }
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = "Captcha",
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(60.dp),
+            contentScale = ContentScale.Fit
+        )
+    } else {
+        Text("Failed to load captcha", fontSize = 11.sp, color = colors.error)
     }
 }
