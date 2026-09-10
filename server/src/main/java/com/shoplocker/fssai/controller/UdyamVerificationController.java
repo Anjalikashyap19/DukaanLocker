@@ -5,8 +5,11 @@ import com.shoplocker.fssai.dto.UdyamFetchRequest;
 import com.shoplocker.fssai.dto.UdyamInitResponse;
 import com.shoplocker.fssai.dto.UdyamVerifyRequest;
 import com.shoplocker.fssai.dto.UdyamVerifyResponse;
+import com.shoplocker.fssai.entity.Document;
 import com.shoplocker.fssai.entity.DocumentType;
+import com.shoplocker.fssai.entity.Shop;
 import com.shoplocker.fssai.entity.User;
+import com.shoplocker.fssai.repository.DocumentRepository;
 import com.shoplocker.fssai.service.ShopAccessService;
 import com.shoplocker.fssai.service.ShopService;
 import com.shoplocker.fssai.service.UdyamVerificationService;
@@ -33,13 +36,16 @@ public class UdyamVerificationController {
     private final UdyamVerificationService udyamService;
     private final ShopService shopService;
     private final ShopAccessService shopAccessService;
+    private final DocumentRepository documentRepository;
 
     public UdyamVerificationController(UdyamVerificationService udyamService,
                                        ShopService shopService,
-                                       ShopAccessService shopAccessService) {
+                                       ShopAccessService shopAccessService,
+                                       DocumentRepository documentRepository) {
         this.udyamService = udyamService;
         this.shopService = shopService;
         this.shopAccessService = shopAccessService;
+        this.documentRepository = documentRepository;
     }
 
     @Operation(
@@ -102,6 +108,17 @@ public class UdyamVerificationController {
             return ResponseEntity.status(403).body(UdyamVerifyResponse.error("Access denied: you do not own this shop"));
         }
 
+        // Duplicacy check: ensure this Udyam number isn't already linked to a different shop
+        String normalizedUdyam = request.getUdyamNumber().toUpperCase().trim();
+        java.util.Optional<Document> existingDoc = documentRepository.findByDocumentNumberAndDocumentType(normalizedUdyam, DocumentType.MSME_CERTIFICATE);
+        if (existingDoc.isPresent()) {
+            Document doc = existingDoc.get();
+            if (!doc.getShop().getId().equals(shopId)) {
+                return ResponseEntity.ok(UdyamVerifyResponse.error("Udyam already linked to another business."));
+            }
+            // Same shop — allow re-upload (will increment version)
+        }
+
         // Verify against government portal
         UdyamVerifyRequest verifyReq = new UdyamVerifyRequest();
         verifyReq.setSessionId(request.getSessionId());
@@ -120,6 +137,16 @@ public class UdyamVerificationController {
             try {
                 MsmeParsedData parsedData = MsmeDataParser.parse(verifyResult.getCertificateHtml());
                 if (parsedData != null) {
+                    // Name validation: ensure certificate belongs to this shop
+                    Shop shop = shopService.getShopById(shopId);
+                    String enterpriseName = parsedData.getEnterpriseName();
+                    if (enterpriseName != null && !enterpriseName.isBlank()) {
+                        boolean nameMatches = namesMatch(shop.getShopName(), enterpriseName);
+                        if (!nameMatches) {
+                            return ResponseEntity.ok(UdyamVerifyResponse.error("This certificate does not belong to your business."));
+                        }
+                    }
+
                     String regeneratedPdfUrl = udyamService.generatePdfFromParsedData(parsedData, request.getUdyamNumber());
                     if (regeneratedPdfUrl != null) {
                         finalPdfUrl = regeneratedPdfUrl;
@@ -143,5 +170,25 @@ public class UdyamVerificationController {
 
         verifyResult.setPdfUrl(finalPdfUrl);
         return ResponseEntity.ok(verifyResult);
+    }
+
+    /**
+     * Fuzzy name matching: normalizes both names and checks containment both ways.
+     * Handles suffixes like "Private Limited", "Pvt Ltd", "LLP", etc.
+     */
+    private boolean namesMatch(String shopName, String enterpriseName) {
+        if (shopName == null || enterpriseName == null) return true; // can't validate, allow
+        String a = normalizeName(shopName);
+        String b = normalizeName(enterpriseName);
+        if (a.isEmpty() || b.isEmpty()) return true;
+        return a.contains(b) || b.contains(a);
+    }
+
+    private String normalizeName(String name) {
+        return name.toLowerCase()
+                .replaceAll("\\b(private limited|pvt ltd|pvt\\. ltd\\.?|ltd\\.?|llp|inc\\.?|co\\.?|company|enterprise|enterprises|trading|traders)\\b", "")
+                .replaceAll("[^a-z0-9 ]", "")
+                .replaceAll("\\s+", " ")
+                .trim();
     }
 }
