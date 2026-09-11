@@ -469,6 +469,9 @@ fun AddBusinessScreen(
             Button(
                 onClick = {
                     if (formValid) {
+                        if (onManagerSelected != null) {
+                            onManagerSelected(selectedManagerId)
+                        }
                         onSave(
                             BusinessProfile(
                                 id = initial?.id ?: java.util.UUID.randomUUID().toString(),
@@ -477,10 +480,6 @@ fun AddBusinessScreen(
                                 state = state, city = city, branchName = branchName
                             )
                         )
-                        // Notify parent about selected manager
-                        if (onManagerSelected != null) {
-                            onManagerSelected(selectedManagerId)
-                        }
                     }
                 },
                 enabled = formValid,

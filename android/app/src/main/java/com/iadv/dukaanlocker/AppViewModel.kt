@@ -717,17 +717,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     scale = biz.scale, state = biz.state, city = biz.city,
                     branchName = biz.branchName.ifBlank { null }
                 ))
-                if (pendingManagerId != null) {
-                    try {
-                        val assignResp = api.assignShopToManager(pendingManagerId.toLong(), shopId)
-                        if (!assignResp.isSuccessful) {
-                            Toast.makeText(context, "Shop updated but manager assignment failed", Toast.LENGTH_SHORT).show()
-                        }
-                        loadManagers()
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "Shop updated but manager assignment failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                try {
+                    val currentManagerId = _uiState.value.managerShopAssignments.entries.find { shopId.toString() in it.value }?.key
+                    if (currentManagerId != null) {
+                        api.deactivateAssignment(currentManagerId, shopId)
                     }
+                    if (pendingManagerId != null) {
+                        api.assignShopToManager(pendingManagerId.toLong(), shopId)
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Shop updated but manager assignment failed: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
+                loadManagers()
                 Toast.makeText(context, "${biz.name} updated!", Toast.LENGTH_SHORT).show()
                 loadShops()
                 updateState { it.copy(editShopTarget = null, currentScreen = Screen.OwnerHome) }

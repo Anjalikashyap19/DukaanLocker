@@ -227,9 +227,6 @@ private fun ManagerCard(
                             Icon(Icons.Default.VpnKey, contentDescription = "Enable", tint = Color(0xFF22C55E))
                         }
                     }
-                    IconButton(onClick = onDelete) {
-                        Icon(Icons.Default.Delete, contentDescription = AppStrings.get(lang, "Delete"), tint = Color.Red.copy(alpha = 0.7f))
-                    }
                 }
             }
 

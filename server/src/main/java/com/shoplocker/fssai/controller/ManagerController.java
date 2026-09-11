@@ -18,6 +18,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+
+import java.util.Optional;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
@@ -151,9 +153,22 @@ public class ManagerController {
         shopAccessService.validateShopOwner(admin, shopId);
 
         // Prevent duplicate
-        if (assignmentRepository.existsByManagerIdAndShopIdAndActiveTrue(managerId, shopId)) {
-            throw new FssaiException("Manager is already assigned to this shop",
-                    FailureCode.DUPLICATE_ASSIGNMENT);
+        Optional<ManagerShopAssignment> existing = assignmentRepository.findByManagerIdAndShopId(managerId, shopId);
+        if (existing.isPresent()) {
+            if (existing.get().isActive()) {
+                throw new FssaiException("Manager is already assigned to this shop",
+                        FailureCode.DUPLICATE_ASSIGNMENT);
+            } else {
+                existing.get().setActive(true);
+                assignmentRepository.save(existing.get());
+
+                ManagerResponse response = new ManagerResponse(
+                        manager.getId(), manager.getUserName(), manager.getMobileNumber(), manager.getEmailId(),
+                        manager.getManagerCode(), manager.getRole(), manager.isEnabled(),
+                        admin.getId(), manager.getCreatedAt(), manager.getUpdatedAt()
+                );
+                return ResponseEntity.status(HttpStatus.CREATED).body(response);
+            }
         }
 
         com.shoplocker.fssai.entity.Shop shop = shopAccessService.getOwnedShop(shopId, admin);
