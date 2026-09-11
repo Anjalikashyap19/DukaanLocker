@@ -184,6 +184,13 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
+        <!-- Firebase Admin SDK for FCM push notifications -->
+        <dependency>
+            <groupId>com.google.firebase</groupId>
+            <artifactId>firebase-admin</artifactId>
+            <version>9.2.0</version>
+        </dependency>
+
         <!-- Flyway — versioned DB migrations. Prod runs spring.jpa.hibernate.ddl-auto=validate,
              so schema changes MUST be applied via Flyway before Hibernate validates the model. -->
         <dependency>

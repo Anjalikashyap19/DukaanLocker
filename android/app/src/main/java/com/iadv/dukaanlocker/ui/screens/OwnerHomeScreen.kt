@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.StoreMallDirectory
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -64,7 +65,9 @@ fun OwnerHomeScreen(
     showAddBusiness: Boolean = true,
     showManageManagers: Boolean = true,
     isLoadingShops: Boolean = false,
-    isLoadingDocuments: Boolean = false
+    isLoadingDocuments: Boolean = false,
+    unreadNotificationCount: Long = 0,
+    onNotifications: () -> Unit = {}
 ) {
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
@@ -119,10 +122,35 @@ fun OwnerHomeScreen(
                                      else "${businesses.size} ${AppStrings.get(lang, "Businesses")} • ${AppStrings.get(lang, "Owner")}",
                                      fontSize = 12.sp, color = colors.textSecondary
                                  )
-                            }
+                             }
                         }
-                        IconButton(onClick = { showSettings = true }) {
-                             Icon(Icons.Default.Settings, contentDescription = AppStrings.get(lang, "Settings"), tint = colors.textSecondary)
+                        Row {
+                            Box {
+                                IconButton(onClick = onNotifications) {
+                                    Icon(Icons.Default.Notifications, contentDescription = "Notifications", tint = colors.textSecondary)
+                                }
+                                if (unreadNotificationCount > 0) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(end = 4.dp, top = 4.dp)
+                                            .size(16.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.Red),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            if (unreadNotificationCount > 9) "9+" else "$unreadNotificationCount",
+                                            fontSize = 9.sp,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                            IconButton(onClick = { showSettings = true }) {
+                                 Icon(Icons.Default.Settings, contentDescription = AppStrings.get(lang, "Settings"), tint = colors.textSecondary)
+                            }
                         }
                     }
                 }

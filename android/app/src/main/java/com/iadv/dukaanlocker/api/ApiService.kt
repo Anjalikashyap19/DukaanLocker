@@ -129,4 +129,18 @@ interface ApiService {
 
     @POST("api/gst/fetch")
     suspend fun fetchGst(@Body request: GstFetchRequest): Response<GstVerificationResponse>
+
+    // ── Notifications ───────────────────────────────────────────────────────
+
+    @GET("api/notifications")
+    suspend fun getNotifications(): Response<List<NotificationItem>>
+
+    @GET("api/notifications/unread-count")
+    suspend fun getUnreadNotificationCount(): Response<UnreadCountResponse>
+
+    @PUT("api/notifications/mark-read")
+    suspend fun markNotificationsAsRead(): Response<Map<String, String>>
+
+    @POST("api/device-token")
+    suspend fun registerDeviceToken(@Body body: Map<String, String>): Response<Map<String, String>>
 }

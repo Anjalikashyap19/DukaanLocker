@@ -125,6 +125,9 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.PUT, "/api/shops/*/documents/**").authenticated()
                     // ── Document streaming endpoints (JWT required, access checked in service) ──
                     .requestMatchers("/api/documents/**").authenticated()
+                    // ── Notification & device token endpoints (JWT required) ──
+                    .requestMatchers("/api/notifications/**").authenticated()
+                    .requestMatchers("/api/device-token/**").authenticated()
                     // Default: any other application endpoint requires authentication
                     .anyRequest().authenticated();
             })

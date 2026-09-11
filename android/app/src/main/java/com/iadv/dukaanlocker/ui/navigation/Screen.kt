@@ -13,6 +13,7 @@ sealed class Screen(val route: String) {
     data object AddBusiness : Screen("add_business")
     data object OwnerHome : Screen("owner_home")
     data object ManagerHome : Screen("manager_home")
+    data object Notifications : Screen("notifications")
 }
 
 /**

@@ -121,6 +121,9 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         
+        createNotificationChannel()
+        registerFcmToken()
+        
         googleSignInHelper = GoogleSignInHelper(this)
         biometricAuthManager = BiometricAuthManager(this)
         
@@ -211,6 +214,40 @@ class MainActivity : FragmentActivity() {
                     }
                 }
             )
+        }
+    }
+
+    private fun createNotificationChannel() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(
+                "dukaan_notifications",
+                "Dukaan Notifications",
+                android.app.NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Notifications for document expiry, missing documents, and more"
+                enableVibration(true)
+            }
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun registerFcmToken() {
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                val token = task.result
+                if (token != null) {
+                    lifecycleScope.launch {
+                        try {
+                            val api = com.iadv.dukaanlocker.api.ApiClient.getApiService(this@MainActivity)
+                            api.registerDeviceToken(mapOf("token" to token, "platform" to "ANDROID"))
+                            android.util.Log.d("FCM", "Token registered with server")
+                        } catch (e: Exception) {
+                            android.util.Log.e("FCM", "Failed to register token: ${e.message}")
+                        }
+                    }
+                }
+            }
         }
     }
 

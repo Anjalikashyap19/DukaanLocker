@@ -293,3 +293,19 @@ data class UdyamFetchRequest(
     @SerializedName("sessionId") val sessionId: String,
     @SerializedName("captchaText") val captchaText: String
 )
+
+// ── Notifications ─────────────────────────────────────────────────────────
+
+data class NotificationItem(
+    @SerializedName("id") val id: Long,
+    @SerializedName("title") val title: String,
+    @SerializedName("body") val body: String,
+    @SerializedName("type") val type: String,
+    @SerializedName("referenceId") val referenceId: Long?,
+    @SerializedName("read") val isRead: Boolean,
+    @SerializedName("createdAt") val createdAt: String?
+)
+
+data class UnreadCountResponse(
+    @SerializedName("count") val count: Long
+)

@@ -56,7 +56,10 @@ data class AppUiState(
     val showBiometricLoginFailedDialog: Boolean = false,
     val showBiometricLoginPrompt: Boolean = false,
     val biometricLoginFailed: Boolean = false,
-    val showAppUnlockPrompt: Boolean = false
+    val showAppUnlockPrompt: Boolean = false,
+    val notifications: List<NotificationItem> = emptyList(),
+    val unreadNotificationCount: Long = 0,
+    val isLoadingNotifications: Boolean = false
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -175,6 +178,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         loadShops()
         if (role == "ADMIN") loadManagers()
+        loadNotifications()
     }
 
     fun navigateToLogin() {
@@ -481,6 +485,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     updateState { it.copy(currentScreen = Screen.OwnerHome) }
                     loadShops()
                     if (auth.role == "ADMIN") loadManagers()
+                    loadNotifications()
                     Toast.makeText(context, "MSME verified! Welcome, ${auth.userName}!", Toast.LENGTH_LONG).show()
                 } else {
                     Toast.makeText(context, "MSME registration failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
@@ -514,6 +519,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
                     loadShops()
+                    loadNotifications()
                     Toast.makeText(context, "Welcome, ${auth.userName}!", Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(context, "Login failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
@@ -557,6 +563,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     updateState { it.copy(currentScreen = Screen.OwnerHome) }
                     loadShops()
                     if (auth.role == "ADMIN") loadManagers()
+                    loadNotifications()
                     Toast.makeText(context, "Welcome back, ${auth.userName}!", Toast.LENGTH_LONG).show()
                     onResult(true, null)
                 } else {
@@ -926,6 +933,50 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
                     onResult(false, null)
                 }
+            }
+        }
+    }
+
+    fun loadNotifications() {
+        viewModelScope.launch {
+            updateState { it.copy(isLoadingNotifications = true) }
+            try {
+                val response = api.getNotifications()
+                if (response.isSuccessful) {
+                    val notifications = response.body() ?: emptyList()
+                    val unreadCount = notifications.count { !it.isRead }.toLong()
+                    updateState { it.copy(notifications = notifications, unreadNotificationCount = unreadCount) }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("Notifications", "Failed to load: ${e.message}")
+            }
+            updateState { it.copy(isLoadingNotifications = false) }
+        }
+    }
+
+    fun markNotificationsRead() {
+        viewModelScope.launch {
+            try {
+                api.markNotificationsAsRead()
+                updateState { state ->
+                    state.copy(
+                        notifications = state.notifications.map { it.copy(isRead = true) },
+                        unreadNotificationCount = 0
+                    )
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("Notifications", "Failed to mark as read: ${e.message}")
+            }
+        }
+    }
+
+    fun registerDeviceToken(token: String) {
+        viewModelScope.launch {
+            try {
+                api.registerDeviceToken(mapOf("token" to token, "platform" to "ANDROID"))
+                android.util.Log.d("Notifications", "Device token registered")
+            } catch (e: Exception) {
+                android.util.Log.e("Notifications", "Failed to register token: ${e.message}")
             }
         }
     }

@@ -315,7 +315,9 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                         onDeleteDoc = { doc -> Toast.makeText(context, "${doc.name} - delete via API", Toast.LENGTH_SHORT).show() },
                                         onLogout = { vm.logout() },
                                         isLoadingShops = state.isLoadingShops,
-                                        isLoadingDocuments = state.isLoadingDocuments
+                                        isLoadingDocuments = state.isLoadingDocuments,
+                                        unreadNotificationCount = state.unreadNotificationCount,
+                                        onNotifications = { vm.navigateTo(Screen.Notifications) }
                                     )
                                 }
                             }
@@ -343,6 +345,14 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                         isLoadingShops = state.isLoadingShops
                                     )
                                 }
+                            }
+
+                            is Screen.Notifications -> {
+                                NotificationScreen(
+                                    notifications = state.notifications,
+                                    onBack = { vm.goBack() },
+                                    onMarkAllRead = { vm.markNotificationsRead() }
+                                )
                             }
                         }
 
