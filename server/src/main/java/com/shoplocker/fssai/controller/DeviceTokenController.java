@@ -32,12 +32,13 @@ public class DeviceTokenController {
 
         String token = body.get("token");
         String platform = body.getOrDefault("platform", "ANDROID");
+        boolean sendWelcomePush = Boolean.parseBoolean(body.getOrDefault("sendWelcomePush", "false"));
 
         if (token == null || token.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Token is required"));
         }
 
-        notificationService.saveDeviceToken(user.getId(), token, platform);
+        notificationService.saveDeviceToken(user.getId(), token, platform, sendWelcomePush);
         return ResponseEntity.ok(Map.of("message", "Token registered successfully"));
     }
 

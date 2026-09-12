@@ -119,10 +119,18 @@ DukaanLocker/
 
 # API Documentation
 
-Swagger UI is available after running the backend.
+Swagger UI is available after running the backend. The backend listens on port `8081`.
+
+For local development, enable the dev-tools gate before starting the server:
+
+```bash
+EXPOSE_DEVTOOLS=true ./mvnw spring-boot:run
+```
+
+Then open:
 
 ```
-http://localhost:8080/swagger-ui/index.html
+http://localhost:8081/swagger-ui/index.html
 ```
 
 ---

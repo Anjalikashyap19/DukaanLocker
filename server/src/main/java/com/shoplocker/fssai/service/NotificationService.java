@@ -35,7 +35,10 @@ public class NotificationService {
     @Value("${firebase.credentials.path:}")
     private String firebaseCredentialsPath;
 
-    private boolean firebaseInitialized = false;
+    @Value("${firebase.project-id:}")
+    private String firebaseProjectId;
+
+    private volatile boolean firebaseInitialized = false;
 
     public NotificationService(NotificationRepository notificationRepository,
                                DeviceTokenRepository deviceTokenRepository,
@@ -47,20 +50,27 @@ public class NotificationService {
 
     @PostConstruct
     public void initFirebase() {
-        try {
-            if (firebaseCredentialsPath == null || firebaseCredentialsPath.isBlank()) {
-                log.warn("Firebase credentials path not set. Push notifications will be disabled.");
-                return;
+        if (firebaseCredentialsPath == null || firebaseCredentialsPath.isBlank()) {
+            log.warn("FCM disabled: FIREBASE_CREDENTIALS_PATH/firebase.credentials.path is not configured");
+            return;
+        }
+
+        try (InputStream serviceAccount = new FileInputStream(firebaseCredentialsPath)) {
+            FirebaseOptions.Builder optionsBuilder = FirebaseOptions.builder()
+                    .setCredentials(GoogleCredentials.fromStream(serviceAccount));
+            if (firebaseProjectId != null && !firebaseProjectId.isBlank()) {
+                optionsBuilder.setProjectId(firebaseProjectId);
             }
-            InputStream serviceAccount = new FileInputStream(firebaseCredentialsPath);
-            FirebaseOptions options = FirebaseOptions.builder()
-                    .setCredentials(GoogleCredentials.fromStream(serviceAccount))
-                    .build();
-            FirebaseApp.initializeApp(options);
+
+            if (FirebaseApp.getApps().isEmpty()) {
+                FirebaseApp.initializeApp(optionsBuilder.build());
+            }
             firebaseInitialized = true;
-            log.info("Firebase initialized successfully for push notifications");
-        } catch (IOException e) {
-            log.error("Failed to initialize Firebase: {}", e.getMessage());
+            log.info("Firebase Admin initialized for FCM (projectId={})", firebaseProjectId);
+        } catch (Exception e) {
+            firebaseInitialized = false;
+            log.error("FCM disabled: Firebase Admin initialization failed for credentials path {}: {}",
+                    firebaseCredentialsPath, e.getMessage(), e);
         }
     }
 
@@ -81,16 +91,18 @@ public class NotificationService {
     @Transactional
     public void sendPushNotification(Long userId, String title, String body, Map<String, String> data) {
         if (!firebaseInitialized) {
-            log.debug("Firebase not initialized. Skipping push notification.");
+            log.warn("Skipping FCM push for user {}: Firebase Admin is not initialized", userId);
             return;
         }
 
         List<DeviceToken> tokens = deviceTokenRepository.findByUserId(userId);
         if (tokens.isEmpty()) {
-            log.debug("No device tokens for user {}. Skipping push.", userId);
+            log.warn("Skipping FCM push for user {}: no registered device tokens", userId);
             return;
         }
 
+        log.info("Sending FCM push to user {} on {} device token(s), type={}", userId, tokens.size(),
+                data == null ? "GENERAL" : data.getOrDefault("type", "GENERAL"));
         for (DeviceToken deviceToken : tokens) {
             try {
                 Message message = Message.builder()
@@ -103,19 +115,33 @@ public class NotificationService {
                         .setAndroidConfig(AndroidConfig.builder()
                                 .setPriority(AndroidConfig.Priority.HIGH)
                                 .setTtl(86400000L)
+                                .setNotification(AndroidNotification.builder()
+                                        .setChannelId("dukaan_notifications_v2")
+                                        .build())
                                 .build())
                         .build();
 
                 String response = FirebaseMessaging.getInstance().send(message);
-                log.debug("Push notification sent to token {}: {}", deviceToken.getToken().substring(0, 10) + "...", response);
+                log.info("FCM push accepted for user {} and token {}...: messageId={}", userId,
+                        tokenPrefix(deviceToken.getToken()), response);
             } catch (FirebaseMessagingException e) {
-                log.error("Failed to send push notification: {}", e.getMessage());
-                if (e.getMessagingErrorCode() == MessagingErrorCode.UNREGISTERED || e.getMessagingErrorCode() == MessagingErrorCode.INVALID_ARGUMENT) {
-                    log.info("Removing invalid token for user {}", userId);
+                log.error("FCM push failed for user {} and token {}...: code={}, message={}",
+                        userId, tokenPrefix(deviceToken.getToken()), e.getMessagingErrorCode(), e.getMessage(), e);
+                if (e.getMessagingErrorCode() == MessagingErrorCode.UNREGISTERED
+                        || e.getMessagingErrorCode() == MessagingErrorCode.INVALID_ARGUMENT) {
+                    log.info("Removing invalid FCM token for user {}", userId);
                     deviceTokenRepository.delete(deviceToken);
                 }
+            } catch (Exception e) {
+                log.error("Unexpected FCM push failure for user {} and token {}...: {}",
+                        userId, tokenPrefix(deviceToken.getToken()), e.getMessage(), e);
             }
         }
+    }
+
+    private static String tokenPrefix(String token) {
+        if (token == null || token.isBlank()) return "empty";
+        return token.substring(0, Math.min(10, token.length()));
     }
 
     @Transactional
@@ -141,18 +167,37 @@ public class NotificationService {
 
     @Transactional
     public void saveDeviceToken(Long userId, String token, String platform) {
+        saveDeviceToken(userId, token, platform, false);
+    }
+
+    @Transactional
+    public void saveDeviceToken(Long userId, String token, String platform, boolean sendWelcomePush) {
         Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) return;
 
         Optional<DeviceToken> existing = deviceTokenRepository.findByToken(token);
         if (existing.isPresent()) {
-            existing.get().setLastUsedAt(LocalDateTime.now());
-            deviceTokenRepository.save(existing.get());
+            DeviceToken deviceToken = existing.get();
+            // FCM tokens are device-install identifiers, not user identifiers.
+            // Re-associate the token when another authenticated user logs in on
+            // the same device instead of leaving it attached to the old user.
+            deviceToken.setUser(userOpt.get());
+            deviceToken.setPlatform(platform);
+            deviceToken.setLastUsedAt(LocalDateTime.now());
+            deviceTokenRepository.save(deviceToken);
+            log.info("Existing FCM device token re-associated with user {}", userId);
         } else {
             DeviceToken deviceToken = new DeviceToken(userOpt.get(), token, platform);
             deviceTokenRepository.save(deviceToken);
+            log.info("New FCM device token saved for user {}", userId);
         }
-        log.info("Device token saved for user {}", userId);
+
+        if (sendWelcomePush) {
+            sendPushNotification(userId,
+                    "Welcome back!",
+                    "You have successfully logged in to DukaanLocker.",
+                    Map.of("type", "WELCOME"));
+        }
     }
 
     @Transactional

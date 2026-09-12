@@ -2,9 +2,12 @@ package com.shoplocker.fssai;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.shoplocker.fssai.entity.Notification;
 import com.shoplocker.fssai.entity.Role;
 import com.shoplocker.fssai.entity.User;
+import com.shoplocker.fssai.repository.DeviceTokenRepository;
 import com.shoplocker.fssai.repository.DocumentRepository;
+import com.shoplocker.fssai.repository.NotificationRepository;
 import com.shoplocker.fssai.repository.ManagerShopAssignmentRepository;
 import com.shoplocker.fssai.repository.ShopRepository;
 import com.shoplocker.fssai.repository.UserRepository;
@@ -21,6 +24,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MvcResult;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -43,6 +48,8 @@ class AuthIntegrationTest {
     @Autowired private MockMvc mockMvc;
     @Autowired private ObjectMapper objectMapper;
     @Autowired private UserRepository userRepository;
+    @Autowired private NotificationRepository notificationRepository;
+    @Autowired private DeviceTokenRepository deviceTokenRepository;
     @Autowired private ShopRepository shopRepository;
     @Autowired private DocumentRepository documentRepository;
     @Autowired private ManagerShopAssignmentRepository assignmentRepository;
@@ -73,6 +80,8 @@ class AuthIntegrationTest {
 
     @BeforeEach
     void clean() {
+        deviceTokenRepository.deleteAll();
+        notificationRepository.deleteAll();
         assignmentRepository.deleteAll();
         documentRepository.deleteAll();
         shopRepository.deleteAll();
@@ -228,7 +237,30 @@ class AuthIntegrationTest {
     }
 
     @Test
-    @DisplayName("7. Login with wrong password returns 401 + invalid_credentials")
+    @DisplayName("6a. Successful password login creates an unread WELCOME notification")
+    void loginCreatesWelcomeNotification() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_REGISTER_BODY))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "emailId": "anjali@example.com",
+                                  "password": "Strong@123"
+                                }"""))
+                .andExpect(status().isOk());
+
+        User user = userRepository.findByEmailId("anjali@example.com").orElseThrow();
+        List<Notification> notifications = notificationRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
+        assertThat(notifications).hasSize(1);
+        assertThat(notifications.get(0).getType()).isEqualTo("WELCOME");
+        assertThat(notifications.get(0).getTitle()).isEqualTo("Welcome back, Anjali Kashyap!");
+        assertThat(notifications.get(0).isRead()).isFalse();
+    }
+
     void wrongPasswordReturns401() throws Exception {
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)

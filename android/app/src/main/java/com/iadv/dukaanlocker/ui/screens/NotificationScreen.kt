@@ -100,6 +100,7 @@ fun NotificationScreen(
 @Composable
 private fun NotificationCard(notification: NotificationItem, colors: com.iadv.dukaanlocker.ui.theme.AppColors) {
     val icon = when (notification.type) {
+        "WELCOME" -> Icons.Default.CheckCircle
         "EXPIRING_SOON" -> Icons.Default.Warning
         "EXPIRED" -> Icons.Default.Warning
         "MISSING_DOCUMENT" -> Icons.Default.Info
@@ -108,6 +109,7 @@ private fun NotificationCard(notification: NotificationItem, colors: com.iadv.du
     }
 
     val iconTint = when (notification.type) {
+        "WELCOME" -> Color(0xFF4CAF50)
         "EXPIRED" -> Color.Red
         "EXPIRING_SOON" -> Color(0xFFFF9800)
         "MISSING_DOCUMENT" -> Color(0xFF2196F3)

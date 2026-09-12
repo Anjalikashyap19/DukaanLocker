@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">DukaanLocker</string>
+    <!-- Versioned so existing installs receive a fresh high-importance channel. -->
+    <string name="default_notification_channel_id">dukaan_notifications_v2</string>
 </resources>

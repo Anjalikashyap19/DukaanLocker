@@ -115,6 +115,37 @@ object ApiClient {
         securePrefs(context).edit().clear().apply()
     }
 
+    suspend fun registerDeviceToken(
+        context: Context,
+        token: String,
+        sendWelcomePush: Boolean = false
+    ): Boolean {
+        if (!isLoggedIn(context)) {
+            android.util.Log.w("FCM", "Skipping device-token registration because the user is not authenticated")
+            return false
+        }
+
+        return try {
+            val body = mutableMapOf(
+                "token" to token,
+                "platform" to "ANDROID"
+            )
+            if (sendWelcomePush) body["sendWelcomePush"] = "true"
+
+            val response = getApiService(context).registerDeviceToken(body)
+            if (response.isSuccessful) {
+                android.util.Log.d("FCM", "Device token registered successfully (HTTP ${response.code()})")
+                true
+            } else {
+                android.util.Log.e("FCM", "Device-token registration failed (HTTP ${response.code()})")
+                false
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("FCM", "Device-token registration request failed: ${e.message}", e)
+            false
+        }
+    }
+
     // ── Retrofit Setup ────────────────────────────────────────────────────────
 
     private fun provideOkHttpClient(context: Context): OkHttpClient {

@@ -254,7 +254,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun saveAuth(auth: AuthResponse) {
+    fun saveAuth(auth: AuthResponse, sendWelcomePush: Boolean = false) {
         ApiClient.saveAuth(context, auth)
         updateState {
             it.copy(
@@ -267,6 +267,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 isLoggedIn = true
             )
         }
+        registerCurrentFcmToken(sendWelcomePush)
+    }
+
+    /**
+     * Registers the current FCM token only after auth has been persisted. Token
+     * generation can complete before login, so registration from Activity startup
+     * alone is not sufficient.
+     */
+    private fun registerCurrentFcmToken(sendWelcomePush: Boolean) {
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+            .addOnCompleteListener { task ->
+                if (!task.isSuccessful) {
+                    android.util.Log.e("FCM", "Unable to obtain FCM token", task.exception)
+                    return@addOnCompleteListener
+                }
+                val token = task.result
+                if (token.isNullOrBlank()) {
+                    android.util.Log.e("FCM", "Firebase returned an empty FCM token")
+                    return@addOnCompleteListener
+                }
+                viewModelScope.launch {
+                    ApiClient.registerDeviceToken(context, token, sendWelcomePush = sendWelcomePush)
+                }
+            }
     }
 
     fun openDocument(doc: DocumentItem) {
@@ -433,7 +457,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val response = api.login(LoginRequest(emailId = email, password = password))
                 if (response.isSuccessful) {
                     val auth = response.body() ?: return@launch
-                    saveAuth(auth)
+                    saveAuth(auth, sendWelcomePush = true)
                     navigateToHome()
                     Toast.makeText(context, "Welcome, ${_uiState.value.currentUserName}!", Toast.LENGTH_SHORT).show()
                 } else {
@@ -454,7 +478,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val response = api.register(RegisterRequest(userName = name, mobileNumber = mobile, emailId = email, password = password))
                 if (response.isSuccessful) {
                     val auth = response.body() ?: return@launch
-                    saveAuth(auth)
+                    saveAuth(auth, sendWelcomePush = false)
                     updateState { it.copy(currentScreen = Screen.Wizard) }
                     Toast.makeText(context, "Account created! Welcome, ${_uiState.value.currentUserName}!", Toast.LENGTH_SHORT).show()
                 } else {
@@ -481,7 +505,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         role = auth.role, certificatePdfUrl = auth.certificatePdfUrl,
                         shopId = auth.shopId, shopName = auth.shopName
                     )
-                    saveAuth(authResponse)
+                    saveAuth(authResponse, sendWelcomePush = false)
                     updateState { it.copy(currentScreen = Screen.OwnerHome) }
                     loadShops()
                     if (auth.role == "ADMIN") loadManagers()
@@ -505,19 +529,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val response = api.loginByCode(ManagerCodeLoginRequest(managerCode = code))
                 if (response.isSuccessful) {
                     val auth = response.body() ?: return@launch
-                    ApiClient.saveAuth(context, auth)
-                    updateState {
-                        it.copy(
-                            authToken = auth.token,
-                            currentUserId = auth.userId,
-                            currentUserName = auth.userName,
-                            currentUserEmail = auth.emailId,
-                            currentUserRole = auth.role,
-                            currentUserManagerCode = auth.managerCode ?: code,
-                            isLoggedIn = true,
-                            currentScreen = Screen.ManagerHome
-                        )
-                    }
+                    saveAuth(auth, sendWelcomePush = true)
+                    updateState { it.copy(currentScreen = Screen.ManagerHome) }
                     loadShops()
                     loadNotifications()
                     Toast.makeText(context, "Welcome, ${auth.userName}!", Toast.LENGTH_SHORT).show()
@@ -559,7 +572,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         role = auth.role, certificatePdfUrl = auth.certificatePdfUrl,
                         shopId = auth.shopId, shopName = auth.shopName
                     )
-                    saveAuth(authResponse)
+                    saveAuth(authResponse, sendWelcomePush = true)
                     updateState { it.copy(currentScreen = Screen.OwnerHome) }
                     loadShops()
                     if (auth.role == "ADMIN") loadManagers()
@@ -583,7 +596,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val response = api.biometricLogin(BiometricLoginRequest(userId = credentials.userId, emailId = credentials.email, token = credentials.token))
                 if (response.isSuccessful) {
                     val auth = response.body() ?: return@launch
-                    saveAuth(auth)
+                    saveAuth(auth, sendWelcomePush = true)
                     navigateToHome()
                     Toast.makeText(context, "Welcome back, ${_uiState.value.currentUserName}!", Toast.LENGTH_SHORT).show()
                     onResult(true, null)
@@ -972,12 +985,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun registerDeviceToken(token: String) {
         viewModelScope.launch {
-            try {
-                api.registerDeviceToken(mapOf("token" to token, "platform" to "ANDROID"))
-                android.util.Log.d("Notifications", "Device token registered")
-            } catch (e: Exception) {
-                android.util.Log.e("Notifications", "Failed to register token: ${e.message}")
-            }
+            ApiClient.registerDeviceToken(context, token)
         }
     }
 }

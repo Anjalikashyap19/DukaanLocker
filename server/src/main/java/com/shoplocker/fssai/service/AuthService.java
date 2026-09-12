@@ -83,6 +83,7 @@ public class AuthService {
     private final GoogleOAuthService googleOAuthService;
     private final LoginAttemptService loginAttemptService;
     private final OtpService otpService;
+    private final NotificationService notificationService;
 
     /**
      * Self-reference (via the Spring proxy) so the DB-creation phase can run
@@ -104,7 +105,8 @@ public class AuthService {
                        RequiredDocumentService requiredDocumentService,
                        GoogleOAuthService googleOAuthService,
                        LoginAttemptService loginAttemptService,
-                       OtpService otpService) {
+                       OtpService otpService,
+                       NotificationService notificationService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -115,6 +117,7 @@ public class AuthService {
         this.googleOAuthService = googleOAuthService;
         this.loginAttemptService = loginAttemptService;
         this.otpService = otpService;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -210,7 +213,20 @@ public class AuthService {
         }
 
         String token = jwtService.generateToken(user);
+        createLoginWelcomeNotification(user);
         return AuthResponse.from(user, token);
+    }
+
+    private void createLoginWelcomeNotification(User user) {
+        String name = user.getUserName() == null || user.getUserName().isBlank()
+                ? "there"
+                : user.getUserName().trim();
+        notificationService.createNotification(
+                user.getId(),
+                "Welcome back, " + name + "!",
+                "You have successfully logged in to DukaanLocker.",
+                "WELCOME",
+                null);
     }
 
     /**
@@ -245,6 +261,7 @@ public class AuthService {
             // User already exists — just log them in
             User user = existingUser.get();
             String token = jwtService.generateToken(user);
+            createLoginWelcomeNotification(user);
             log.info("Google login: existing user email={}", email);
             return AuthResponse.from(user, token);
         }
@@ -285,6 +302,7 @@ public class AuthService {
                         FailureCode.USER_NOT_FOUND));
 
         String token = jwtService.generateToken(user);
+        createLoginWelcomeNotification(user);
         log.info("Google login: existing user email={}", email);
         return AuthResponse.from(user, token);
     }
@@ -369,6 +387,7 @@ public class AuthService {
         loginAttemptService.reset(ipKey);
 
         String token = jwtService.generateToken(user);
+        createLoginWelcomeNotification(user);
         log.info("Manager logged in via code: userId={}", user.getId());
         return AuthResponse.from(user, token);
     }
@@ -759,7 +778,7 @@ public class AuthService {
      * @param request contains userId and emailId from decrypted biometric credentials
      * @return AuthResponse with fresh JWT token
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public AuthResponse biometricLogin(BiometricLoginRequest request) {
         Long userId = request.getUserId();
         String email = normalizeEmail(request.getEmailId());
@@ -823,6 +842,7 @@ public class AuthService {
 
         // Issue fresh JWT token
         String token = jwtService.generateToken(user);
+        createLoginWelcomeNotification(user);
         log.info("Biometric login successful: userId={} email={}", userId, email);
         return AuthResponse.from(user, token);
     }
@@ -888,6 +908,7 @@ public class AuthService {
 
         loginAttemptService.reset(lockKey);
         String token = jwtService.generateToken(user);
+        createLoginWelcomeNotification(user);
         log.info("MSME login successful: userId={} udyam={}", user.getId(), udyamNumber);
         return AuthResponse.from(user, token);
     }

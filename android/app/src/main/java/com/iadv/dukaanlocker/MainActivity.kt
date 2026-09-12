@@ -1,10 +1,14 @@
 package com.iadv.dukaanlocker
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -30,6 +34,12 @@ class MainActivity : FragmentActivity() {
     // Callbacks for Google Sign-Up result
     private var onGoogleSignUpSuccess: ((token: String, userId: Long, userName: String, email: String, mobileNumber: String, role: String) -> Unit)? = null
     private var onGoogleSignUpError: ((Exception) -> Unit)? = null
+
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        android.util.Log.d("FCM", "POST_NOTIFICATIONS permission granted=$granted")
+    }
 
     private val googleSignInLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -122,7 +132,8 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         
         createNotificationChannel()
-        registerFcmToken()
+        requestNotificationPermissionIfNeeded()
+        registerFcmTokenIfAuthenticated()
         
         googleSignInHelper = GoogleSignInHelper(this)
         biometricAuthManager = BiometricAuthManager(this)
@@ -217,15 +228,62 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+            && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    /**
+     * Re-register the current token on launch when an existing authenticated
+     * session is restored. New login flows register it from AppViewModel after
+     * the JWT has been saved.
+     */
+    private fun registerFcmTokenIfAuthenticated() {
+        if (!ApiClient.isLoggedIn(this)) {
+            android.util.Log.d("FCM", "Deferring token registration until login")
+            return
+        }
+
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+            .addOnCompleteListener { task ->
+                if (!task.isSuccessful) {
+                    android.util.Log.e("FCM", "Unable to obtain FCM token", task.exception)
+                    return@addOnCompleteListener
+                }
+                val token = task.result
+                if (token.isNullOrBlank()) {
+                    android.util.Log.e("FCM", "Firebase returned an empty FCM token")
+                    return@addOnCompleteListener
+                }
+                lifecycleScope.launch {
+                    ApiClient.registerDeviceToken(this@MainActivity, token)
+                }
+            }
+    }
+
     private fun createNotificationChannel() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             val channel = android.app.NotificationChannel(
-                "dukaan_notifications",
+                "dukaan_notifications_v2",
                 "Dukaan Notifications",
                 android.app.NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Notifications for document expiry, missing documents, and more"
                 enableVibration(true)
+                vibrationPattern = longArrayOf(0, 250, 150, 250)
+                setSound(
+                    android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+                setShowBadge(true)
+                lockscreenVisibility = androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC
             }
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
             notificationManager.createNotificationChannel(channel)
@@ -233,22 +291,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun registerFcmToken() {
-        com.google.firebase.messaging.FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-            if (task.isSuccessful) {
-                val token = task.result
-                if (token != null) {
-                    lifecycleScope.launch {
-                        try {
-                            val api = com.iadv.dukaanlocker.api.ApiClient.getApiService(this@MainActivity)
-                            api.registerDeviceToken(mapOf("token" to token, "platform" to "ANDROID"))
-                            android.util.Log.d("FCM", "Token registered with server")
-                        } catch (e: Exception) {
-                            android.util.Log.e("FCM", "Failed to register token: ${e.message}")
-                        }
-                    }
-                }
-            }
-        }
+        registerFcmTokenIfAuthenticated()
     }
 
 }

@@ -20,14 +20,19 @@ class DukaanFirebaseMessagingService : FirebaseMessagingService() {
 
     companion object {
         private const val TAG = "FCMService"
-        private const val CHANNEL_ID = "dukaan_notifications"
+        private const val CHANNEL_ID = "dukaan_notifications_v2"
         private const val CHANNEL_NAME = "Dukaan Notifications"
     }
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         Log.d(TAG, "FCM token refreshed: ${token.take(20)}...")
-        sendTokenToServer(token)
+        // Token refresh may happen while logged out. ApiClient skips the
+        // request until a JWT exists; the next successful login/app launch
+        // registers the current token again.
+        CoroutineScope(Dispatchers.IO).launch {
+            com.iadv.dukaanlocker.api.ApiClient.registerDeviceToken(this@DukaanFirebaseMessagingService, token)
+        }
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
@@ -67,6 +72,9 @@ class DukaanFirebaseMessagingService : FirebaseMessagingService() {
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .build()
@@ -84,6 +92,16 @@ class DukaanFirebaseMessagingService : FirebaseMessagingService() {
             ).apply {
                 description = "Notifications for document expiry, missing documents, and more"
                 enableVibration(true)
+                vibrationPattern = longArrayOf(0, 250, 150, 250)
+                setSound(
+                    android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+                setShowBadge(true)
+                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
             }
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
@@ -92,13 +110,7 @@ class DukaanFirebaseMessagingService : FirebaseMessagingService() {
 
     private fun sendTokenToServer(token: String) {
         CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val api = com.iadv.dukaanlocker.api.ApiClient.getApiService(this@DukaanFirebaseMessagingService)
-                api.registerDeviceToken(mapOf("token" to token, "platform" to "ANDROID"))
-                Log.d(TAG, "Token sent to server successfully")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to send token to server: ${e.message}")
-            }
+            com.iadv.dukaanlocker.api.ApiClient.registerDeviceToken(this@DukaanFirebaseMessagingService, token)
         }
     }
 }

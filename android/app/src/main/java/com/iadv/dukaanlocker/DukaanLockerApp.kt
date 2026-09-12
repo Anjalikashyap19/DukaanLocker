@@ -68,7 +68,7 @@ fun DukaanLockerApp(
         registerGoogleAuthHandlers?.invoke(
             { token, userId, userName, email, mobileNumber, role ->
                 val auth = AuthResponse(token = token, tokenType = "Bearer", userId = userId, userName = userName, mobileNumber = mobileNumber, emailId = email, role = role)
-                vm.saveAuth(auth)
+                vm.saveAuth(auth, sendWelcomePush = true)
                 vm.navigateToHome()
                 Toast.makeText(context, "Welcome, $userName!", Toast.LENGTH_SHORT).show()
             },

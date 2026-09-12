@@ -38,10 +38,13 @@ public class ShopAccessService {
         if (authentication == null || !authentication.isAuthenticated()) {
             throw new FssaiException("Authentication is required", FailureCode.UNAUTHORIZED);
         }
-        String email = authentication.getName();
-        return userRepository.findByEmailId(email)
+        String principal = authentication.getName();
+        String normalized = principal == null ? "" : principal.trim().toLowerCase();
+        return userRepository.findByEmailId(normalized)
+                .or(() -> userRepository.findByEmailId(principal == null ? "" : principal.trim()))
+                .or(() -> userRepository.findByMobileNumber(principal == null ? "" : principal.trim()))
                 .orElseThrow(() -> new FssaiException(
-                        "Authenticated user not found: " + email,
+                        "Authenticated user not found: " + principal,
                         FailureCode.USER_NOT_FOUND));
     }
 
