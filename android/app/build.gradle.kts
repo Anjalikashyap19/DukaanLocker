@@ -5,6 +5,12 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+// Toggle between local and production backend via LOCAL_BACKEND in local.properties
+val localBackend = providers.gradleProperty("LOCAL_BACKEND")
+    .orNull?.toBoolean() == true
+val baseUrl = if (localBackend) "http://10.0.2.2:8081/"
+              else "https://api.dukaanlocker.com/"
+
 android {
     namespace = "com.iadv.dukaanlocker"
     compileSdk = 35
@@ -31,12 +37,12 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField("String", "BASE_URL", "\"https://api.dukaanlocker.com/\"")
+            buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
             buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"733563364874-v71tsg3phavb9b12oiu7vjhjnjtv8qg1.apps.googleusercontent.com\"")
             isMinifyEnabled = false
         }
         release {
-            buildConfigField("String", "BASE_URL", "\"https://api.dukaanlocker.com/\"")
+            buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
             buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"733563364874-v71tsg3phavb9b12oiu7vjhjnjtv8qg1.apps.googleusercontent.com\"")
             isMinifyEnabled = true
             isShrinkResources = true
