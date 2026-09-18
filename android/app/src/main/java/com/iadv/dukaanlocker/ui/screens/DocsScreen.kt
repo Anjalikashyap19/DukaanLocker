@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import com.iadv.dukaanlocker.ui.components.SkeletonDocumentCard
 import com.iadv.dukaanlocker.ui.components.ShimmerEffect
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -35,7 +36,8 @@ fun DocsScreen(
     onViewDoc: (DocumentItem) -> Unit,
     onDeleteDoc: (DocumentItem) -> Unit = {},
     businesses: List<ShopResponse> = emptyList(),
-    isLoadingDocuments: Boolean = false
+    isLoadingDocuments: Boolean = false,
+    onAddCustomDoc: (String) -> Unit = {}
 ) {
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
@@ -110,6 +112,20 @@ fun DocsScreen(
                          onViewDoc = onViewDoc,
                          onDeleteDoc = onDeleteDoc
                      )
+                }
+                if (businesses.isNotEmpty()) {
+                    item {
+                        OutlinedButton(
+                            onClick = { onAddCustomDoc(businesses.first().id.toString()) },
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.4f))
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(AppStrings.get(lang, "Add Custom Document"), color = colors.primary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        }
+                    }
                 }
                 item { Spacer(modifier = Modifier.height(72.dp)) }
             }

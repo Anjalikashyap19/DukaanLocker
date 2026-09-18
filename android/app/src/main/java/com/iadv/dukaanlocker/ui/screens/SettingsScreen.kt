@@ -16,6 +16,10 @@ import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,6 +45,8 @@ fun SettingsScreen(
 ) {
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
     Column(modifier = Modifier.fillMaxSize().background(colors.background)) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -184,7 +190,7 @@ fun SettingsScreen(
                         }
                         HorizontalDivider(color = colors.border)
                         TextButton(
-                            onClick = onLogout,
+                            onClick = { showLogoutDialog = true },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
@@ -202,5 +208,45 @@ fun SettingsScreen(
 
             item { Spacer(modifier = Modifier.height(24.dp)) }
         }
+    }
+
+    // Logout Confirmation Dialog
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            containerColor = colors.cardBg,
+            shape = RoundedCornerShape(16.dp),
+            title = {
+                Text(
+                    AppStrings.get(lang, "Logout"),
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textPrimary
+                )
+            },
+            text = {
+                Text(
+                    AppStrings.get(lang, "Are you sure you want to logout?"),
+                    color = colors.textSecondary,
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showLogoutDialog = false
+                        onLogout()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.error),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(AppStrings.get(lang, "Logout"), color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text(AppStrings.get(lang, "Cancel"), color = colors.primary)
+                }
+            }
+        )
     }
 }

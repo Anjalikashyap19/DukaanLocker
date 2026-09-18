@@ -86,12 +86,18 @@ public class User {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "last_active_at")
+    private LocalDateTime lastActiveAt;
+
 
 
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
+        if (lastActiveAt == null) {
+            lastActiveAt = LocalDateTime.now();
+        }
     }
 
 
@@ -214,5 +220,13 @@ public class User {
 
     public void setManagerCode(String managerCode) {
         this.managerCode = managerCode;
+    }
+
+    public LocalDateTime getLastActiveAt() {
+        return lastActiveAt;
+    }
+
+    public void setLastActiveAt(LocalDateTime lastActiveAt) {
+        this.lastActiveAt = lastActiveAt;
     }
 }

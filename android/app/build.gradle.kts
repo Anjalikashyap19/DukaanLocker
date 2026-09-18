@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -6,9 +8,12 @@ plugins {
 }
 
 // Toggle between local and production backend via LOCAL_BACKEND in local.properties
-val localBackend = providers.gradleProperty("LOCAL_BACKEND")
-    .orNull?.toBoolean() == true
-val baseUrl = if (localBackend) "http://10.0.2.2:8081/"
+val localProps = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+val localBackend = localProps.getProperty("LOCAL_BACKEND", "false").toBoolean()
+val baseUrl = if (localBackend) "http://10.176.2.52:8081/"
               else "https://api.dukaanlocker.com/"
 
 android {

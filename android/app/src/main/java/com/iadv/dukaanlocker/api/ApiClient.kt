@@ -50,16 +50,36 @@ object ApiClient {
     private fun securePrefs(context: Context): SharedPreferences {
         return cachedSecurePrefs ?: synchronized(this) {
             cachedSecurePrefs ?: run {
-                val masterKey = MasterKey.Builder(context.applicationContext)
-                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                    .build()
-                EncryptedSharedPreferences.create(
-                    context.applicationContext,
-                    SECURE_PREFS_NAME,
-                    masterKey,
-                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-                ).also { cachedSecurePrefs = it }
+                try {
+                    val masterKey = MasterKey.Builder(context.applicationContext)
+                        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                        .build()
+                    EncryptedSharedPreferences.create(
+                        context.applicationContext,
+                        SECURE_PREFS_NAME,
+                        masterKey,
+                        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                    ).also { cachedSecurePrefs = it }
+                } catch (e: Exception) {
+                    android.util.Log.e("ApiClient", "EncryptedSharedPreferences failed, deleting corrupted file and retrying", e)
+                    try { context.applicationContext.deleteFile(SECURE_PREFS_NAME) } catch (_: Exception) {}
+                    try {
+                        val masterKey = MasterKey.Builder(context.applicationContext)
+                            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                            .build()
+                        EncryptedSharedPreferences.create(
+                            context.applicationContext,
+                            SECURE_PREFS_NAME,
+                            masterKey,
+                            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                        ).also { cachedSecurePrefs = it }
+                    } catch (e2: Exception) {
+                        android.util.Log.e("ApiClient", "EncryptedSharedPreferences retry also failed, falling back to plain prefs", e2)
+                        prefs(context.applicationContext).also { cachedSecurePrefs = it }
+                    }
+                }
             }
         }
     }
@@ -70,7 +90,10 @@ object ApiClient {
             putString(KEY_MANAGER_CODE, response.managerCode ?: "")
             apply()
         }
+        // Also save token to plain prefs as backup — if EncryptedSharedPreferences
+        // gets corrupted after process kill, the app can still recover the session.
         prefs(context).edit().apply {
+            putString(KEY_TOKEN, response.token)
             putLong(KEY_USER_ID, response.userId)
             putString(KEY_USER_NAME, response.userName)
             putString(KEY_EMAIL, response.emailId)
@@ -80,7 +103,15 @@ object ApiClient {
         }
     }
 
-    fun getToken(context: Context): String? = securePrefs(context).getString(KEY_TOKEN, null)
+    fun getToken(context: Context): String? {
+        // Try encrypted prefs first
+        val secureToken = try {
+            securePrefs(context).getString(KEY_TOKEN, null)
+        } catch (_: Exception) { null }
+        if (secureToken != null) return secureToken
+        // Fallback: plain prefs backup (set during saveAuth)
+        return prefs(context).getString(KEY_TOKEN, null)
+    }
 
     fun getUserId(context: Context): Long = prefs(context).getLong(KEY_USER_ID, -1)
 
@@ -92,7 +123,12 @@ object ApiClient {
 
     fun getUserRole(context: Context): String = prefs(context).getString(KEY_ROLE, "") ?: ""
 
-    fun getManagerCode(context: Context): String = securePrefs(context).getString(KEY_MANAGER_CODE, "") ?: ""
+    fun getManagerCode(context: Context): String {
+        val secureCode = try {
+            securePrefs(context).getString(KEY_MANAGER_CODE, null)
+        } catch (_: Exception) { null }
+        return secureCode ?: ""
+    }
 
     fun isLoggedIn(context: Context): Boolean = getToken(context) != null
 

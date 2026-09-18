@@ -63,6 +63,47 @@ fun DukaanLockerApp(
         }
     }
 
+    // Custom document upload: file picker + dialog state
+    var customDocFileName by remember { mutableStateOf<String?>(null) }
+    var customDocFileUri by remember { mutableStateOf<Uri?>(null) }
+    var showCustomDocPicker by remember { mutableStateOf(false) }
+
+    val customDocFilePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            customDocFileUri = uri
+            customDocFileName = uri.lastPathSegment?.substringAfterLast("/") ?: "document.pdf"
+        }
+    }
+
+    LaunchedEffect(showCustomDocPicker) {
+        if (showCustomDocPicker) {
+            customDocFilePickerLauncher.launch("application/pdf")
+            showCustomDocPicker = false
+        }
+    }
+
+    if (state.showCustomDocDialog) {
+        CustomDocumentDialog(
+            onDismiss = {
+                vm.dismissCustomDocDialog()
+                customDocFileName = null
+                customDocFileUri = null
+            },
+            onUpload = { docName ->
+                val uri = customDocFileUri
+                if (uri != null && docName.isNotBlank()) {
+                    vm.uploadCustomDocument(docName, uri)
+                    customDocFileName = null
+                    customDocFileUri = null
+                }
+            },
+            selectedFileName = customDocFileName,
+            onChooseFile = { showCustomDocPicker = true }
+        )
+    }
+
     // ── GOOGLE SIGN-IN ──
     LaunchedEffect(Unit) {
         registerGoogleAuthHandlers?.invoke(
@@ -180,7 +221,8 @@ fun DukaanLockerApp(
                                 onUploadDoc = { doc -> vm.updateState { s -> s.copy(pendingUploadDoc = doc) } },
                                 onViewDoc = { doc -> vm.openDocument(doc) },
                                 businesses = state.shops,
-                                isLoadingDocuments = state.isLoadingDocuments
+                                isLoadingDocuments = state.isLoadingDocuments,
+                                onAddCustomDoc = { shopId -> vm.showCustomDocDialog(shopId.toLongOrNull() ?: return@DocsScreen) }
                             )
                         }
 
@@ -206,6 +248,7 @@ fun DukaanLockerApp(
                                 onDeleteManager = { managerId -> vm.deleteManager(managerId) },
                                 onDisableManager = { managerId -> vm.disableManager(managerId) },
                                 onEnableManager = { managerId -> vm.enableManager(managerId) },
+                                onAssignBusiness = { managerId, shopId -> vm.assignBusinessToManager(managerId, shopId) },
                                 onBack = { vm.setBottomTab(BottomTab.Business) },
                                 isLoadingManagers = state.isLoadingManagers
                             )
@@ -260,6 +303,7 @@ fun DukaanLockerApp(
 ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(), managerName = mgr.userName, assignedBusinessIds = state.managerShopAssignments[mgr.id] ?: emptyList(), enabled = mgr.enabled)
                                     },
                                     assignedManagerId = currentManagerId,
+                                    defaultOwnerName = state.currentUserName,
                                     onManagerSelected = { managerId -> pendingManagerId = managerId },
                                     onSave = { biz ->
                                         if (state.editShopTarget != null) {
@@ -314,6 +358,7 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                         onViewDoc = { doc -> vm.openDocument(doc) },
                                         onDeleteDoc = { doc -> Toast.makeText(context, "${doc.name} - delete via API", Toast.LENGTH_SHORT).show() },
                                         onLogout = { vm.logout() },
+                                        onAddCustomDoc = { shopId -> vm.showCustomDocDialog(shopId.toLongOrNull() ?: return@OwnerHomeScreen) },
                                         isLoadingShops = state.isLoadingShops,
                                         isLoadingDocuments = state.isLoadingDocuments,
                                         unreadNotificationCount = state.unreadNotificationCount,

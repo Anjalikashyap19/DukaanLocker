@@ -13,6 +13,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import com.iadv.dukaanlocker.ui.components.SkeletonManagerCard
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.People
@@ -46,6 +49,7 @@ fun ManageManagersScreen(
     onDeleteManager: (String) -> Unit,
     onDisableManager: (String) -> Unit,
     onEnableManager: (String) -> Unit,
+    onAssignBusiness: (String, String) -> Unit = { _, _ -> },
     onBack: () -> Unit,
     isLoadingManagers: Boolean = false
 ) {
@@ -133,9 +137,17 @@ fun ManageManagersScreen(
                     ManagerCard(
                         manager = manager,
                         businesses = businesses,
+                        assignedBusinessIds = manager.assignedBusinessIds,
+                        allManagerAssignments = managerShopAssignments,
                         onDelete = { onDeleteManager(manager.code) },
                         onDisable = { onDisableManager(manager.id ?: manager.code) },
                         onEnable = { onEnableManager(manager.id ?: manager.code) },
+                        onAssignBusiness = { shopId ->
+                            val managerId = manager.id?.toLongOrNull()
+                            if (managerId != null) {
+                                onAssignBusiness(managerId.toString(), shopId)
+                            }
+                        },
                         lang = lang
                     )
                 }
@@ -164,12 +176,23 @@ fun ManageManagersScreen(
 private fun ManagerCard(
     manager: ManagerAccess,
     businesses: List<BusinessProfile>,
+    assignedBusinessIds: List<String>,
+    allManagerAssignments: Map<String, List<String>> = emptyMap(),
     onDelete: () -> Unit,
     onDisable: () -> Unit,
     onEnable: () -> Unit,
+    onAssignBusiness: (String) -> Unit,
     lang: String
 ) {
     val colors = LocalAppColors.current
+    var showRevokeDialog by remember { mutableStateOf(false) }
+    var showAssignDropdown by remember { mutableStateOf(false) }
+
+    // Businesses already assigned to ANY manager
+    val allAssignedIds = allManagerAssignments.values.flatten().toSet()
+    // Unassigned businesses
+    val unassignedBusinesses = businesses.filter { it.id !in allAssignedIds }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = colors.cardBg),
@@ -219,8 +242,8 @@ private fun ManagerCard(
                 }
                 Row {
                     if (manager.enabled) {
-                        IconButton(onClick = onDisable) {
-                            Icon(Icons.Default.Lock, contentDescription = "Disable", tint = Color(0xFFFFA000))
+                        IconButton(onClick = { showRevokeDialog = true }) {
+                            Icon(Icons.Default.Lock, contentDescription = "Disable", tint = Color(0xFF837E7A))
                         }
                     } else {
                         IconButton(onClick = onEnable) {
@@ -234,10 +257,31 @@ private fun ManagerCard(
             HorizontalDivider(color = colors.border, thickness = 0.5.dp)
             Spacer(modifier = Modifier.height(10.dp))
 
-            Text(AppStrings.get(lang, "Assigned Businesses:"), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = colors.textSecondary)
+            // Assigned Businesses (clickable to expand dropdown)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showAssignDropdown = !showAssignDropdown }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    AppStrings.get(lang, "Assigned Businesses"),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.textSecondary,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    imageVector = if (showAssignDropdown) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                    contentDescription = null,
+                    tint = colors.textSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
             Spacer(modifier = Modifier.height(6.dp))
 
-            manager.assignedBusinessIds.forEach { bizId ->
+            assignedBusinessIds.forEach { bizId ->
                 val biz = businesses.find { it.id == bizId }
                 if (biz != null) {
                     Row(
@@ -248,11 +292,94 @@ private fun ManagerCard(
                     ) {
                         Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("${biz.name} • ${biz.category}", fontSize = 13.sp, color = colors.textPrimary)
+                        Text("${biz.name} \u2022 ${biz.category}", fontSize = 13.sp, color = colors.textPrimary)
+                    }
+                }
+            }
+
+            // Unassigned businesses dropdown
+            if (showAssignDropdown) {
+                Spacer(modifier = Modifier.height(6.dp))
+                HorizontalDivider(color = colors.border, thickness = 0.5.dp)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    AppStrings.get(lang, "Add Business"),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.primary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                if (unassignedBusinesses.isEmpty()) {
+                    Text(
+                        AppStrings.get(lang, "No unassigned businesses available"),
+                        fontSize = 12.sp,
+                        color = colors.textSecondary.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                } else {
+                    unassignedBusinesses.forEach { biz ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onAssignBusiness(biz.id)
+                                    showAssignDropdown = false
+                                }
+                                .padding(vertical = 6.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(biz.name, fontSize = 13.sp, color = colors.textPrimary, fontWeight = FontWeight.Medium)
+                                Text(biz.category, fontSize = 11.sp, color = colors.textSecondary)
+                            }
+                            Icon(Icons.Default.Check, contentDescription = null, tint = colors.primary, modifier = Modifier.size(16.dp))
+                        }
                     }
                 }
             }
         }
+    }
+
+    // Revoke Access Confirmation Dialog
+    if (showRevokeDialog) {
+        AlertDialog(
+            onDismissRequest = { showRevokeDialog = false },
+            containerColor = colors.cardBg,
+            shape = RoundedCornerShape(16.dp),
+            title = {
+                Text(
+                    AppStrings.get(lang, "Revoke Access?"),
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textPrimary
+                )
+            },
+            text = {
+                Text(
+                    AppStrings.get(lang, "Are you sure you want to revoke access for") + " ${manager.managerName}? " + AppStrings.get(lang, "They will no longer be able to access assigned businesses."),
+                    color = colors.textSecondary,
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showRevokeDialog = false
+                        onDisable()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.error),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(AppStrings.get(lang, "Revoke"), color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRevokeDialog = false }) {
+                    Text(AppStrings.get(lang, "Cancel"), color = colors.primary)
+                }
+            }
+        )
     }
 }
 

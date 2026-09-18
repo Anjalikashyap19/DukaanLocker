@@ -56,6 +56,7 @@ fun OwnerHomeScreen(
     onDeleteDoc: (DocumentItem) -> Unit,
     onLogout: () -> Unit,
     onBusinessSelected: (String) -> Unit = {},
+    onAddCustomDoc: (String) -> Unit = {},
     isDarkTheme: Boolean = true,
     onToggleTheme: () -> Unit = {},
     onBiometricLoginToggle: ((Boolean) -> Unit)? = null,
@@ -74,6 +75,7 @@ fun OwnerHomeScreen(
     var selectedBusinessId by remember { mutableStateOf<String?>(null) }
 
     var showSettings by remember { mutableStateOf(false) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
     var biometricLoginEnabled by remember { mutableStateOf(isBiometricLoginEnabled) }
     LaunchedEffect(isBiometricLoginEnabled) {
         biometricLoginEnabled = isBiometricLoginEnabled
@@ -245,7 +247,8 @@ fun OwnerHomeScreen(
                         onFetch = onFetchDoc,
                         onUpload = onUploadDoc,
                         onView = onViewDoc,
-                        onDelete = onDeleteDoc
+                        onDelete = onDeleteDoc,
+                        onAddCustomDoc = { onAddCustomDoc(selectedBusiness.id) }
                     )
                 }
             }
@@ -341,7 +344,7 @@ fun OwnerHomeScreen(
                         // Logout Button
                         TextButton(onClick = {
                             showSettings = false
-                            onLogout()
+                            showLogoutDialog = true
                         }) {
                             Icon(Icons.Default.Logout, contentDescription = null, tint = Color.Red, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
@@ -352,6 +355,46 @@ fun OwnerHomeScreen(
                 confirmButton = {
                     TextButton(onClick = { showSettings = false }) {
                         Text(AppStrings.get(lang, "Close"), color = colors.primary)
+                    }
+                }
+            )
+        }
+
+        // Logout Confirmation Dialog
+        if (showLogoutDialog) {
+            AlertDialog(
+                onDismissRequest = { showLogoutDialog = false },
+                containerColor = colors.cardBg,
+                shape = RoundedCornerShape(16.dp),
+                title = {
+                    Text(
+                        AppStrings.get(lang, "Logout"),
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textPrimary
+                    )
+                },
+                text = {
+                    Text(
+                        AppStrings.get(lang, "Are you sure want to logout?"),
+                        color = colors.textSecondary,
+                        fontSize = 14.sp
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showLogoutDialog = false
+                            onLogout()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(AppStrings.get(lang, "Logout"), color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showLogoutDialog = false }) {
+                        Text(AppStrings.get(lang, "Cancel"), color = colors.primary)
                     }
                 }
             )
@@ -543,7 +586,8 @@ private fun BusinessDetailView(
     onFetch: (DocumentItem) -> Unit,
     onUpload: (DocumentItem) -> Unit,
     onView: (DocumentItem) -> Unit,
-    onDelete: (DocumentItem) -> Unit
+    onDelete: (DocumentItem) -> Unit,
+    onAddCustomDoc: () -> Unit = {}
 ) {
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
@@ -651,6 +695,18 @@ private fun BusinessDetailView(
                     onView = { onView(doc) },
                     onDelete = { onDelete(doc) }
                 )
+            }
+            item {
+                OutlinedButton(
+                    onClick = onAddCustomDoc,
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.4f))
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(AppStrings.get(lang, "Add Custom Document"), color = colors.primary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                }
             }
             item { Spacer(modifier = Modifier.height(16.dp)) }
         }

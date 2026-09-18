@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -24,7 +26,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,6 +48,7 @@ fun AddBusinessScreen(
     initial: BusinessProfile? = null,
     managers: List<ManagerAccess> = emptyList(),
     assignedManagerId: String? = null,
+    defaultOwnerName: String = "",
     onSave: (BusinessProfile) -> Unit,
     onManagerSelected: ((managerId: String?) -> Unit)? = null,
     onCancel: () -> Unit
@@ -50,7 +56,7 @@ fun AddBusinessScreen(
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
     var name by remember { mutableStateOf(initial?.name ?: "") }
-    var ownerName by remember { mutableStateOf(initial?.ownerName ?: "") }
+    var ownerName by remember { mutableStateOf(initial?.ownerName ?: defaultOwnerName) }
     var category by remember { mutableStateOf(initial?.category ?: "") }
     var scale by remember { mutableStateOf(initial?.scale ?: "Micro") }
     var branchName by remember { mutableStateOf(initial?.branchName ?: "") }
@@ -67,6 +73,7 @@ fun AddBusinessScreen(
 
     val context = LocalContext.current
     val apiService = remember { ApiClient.getApiService(context) }
+    val focusManager = LocalFocusManager.current
 
     val categories = listOf(
         "Beauty, Salon & Personal Care",
@@ -102,7 +109,7 @@ fun AddBusinessScreen(
         "Construction Materials, Hardware & Industrial Goods",
         "Manufacturing, Workshops & Industrial Activities"
     )
-    val scales = listOf("Micro", "Small", "Medium", "Large")
+    val scales = listOf("Micro (turn over < 5 lac/year)", "Small ( < 20 lac/year)", "Medium ( < 50 lac/year)", "Large ( > 50 lac/year)")
     val states = listOf(
         "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
         "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand",
@@ -191,6 +198,7 @@ fun AddBusinessScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.background)
+            .imePadding()
             .verticalScroll(rememberScrollState())
     ) {
         // Header
@@ -239,6 +247,7 @@ fun AddBusinessScreen(
                 label = { Text(AppStrings.get(lang, "Business / Shop Name"), color = colors.textSecondary) },
                 leadingIcon = { Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary) },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Next),
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
@@ -254,6 +263,7 @@ fun AddBusinessScreen(
                 label = { Text(AppStrings.get(lang, "Owner / Proprietor Name"), color = colors.textSecondary) },
                 leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = colors.primary) },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Next),
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
@@ -338,6 +348,7 @@ fun AddBusinessScreen(
                         }
                     },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Next),
                     modifier = Modifier.menuAnchor().fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
@@ -412,6 +423,8 @@ fun AddBusinessScreen(
                 label = { Text(AppStrings.get(lang, "City / Town"), color = colors.textSecondary) },
                 leadingIcon = { Icon(Icons.Default.Place, contentDescription = null, tint = colors.primary) },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,

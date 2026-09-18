@@ -59,7 +59,9 @@ data class AppUiState(
     val showAppUnlockPrompt: Boolean = false,
     val notifications: List<NotificationItem> = emptyList(),
     val unreadNotificationCount: Long = 0,
-    val isLoadingNotifications: Boolean = false
+    val isLoadingNotifications: Boolean = false,
+    val showCustomDocDialog: Boolean = false,
+    val customDocShopId: Long? = null
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -72,18 +74,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         val isLoggedIn = ApiClient.isLoggedIn(application)
+        val role = ApiClient.getUserRole(application)
+        val homeScreen = when {
+            !isLoggedIn -> Screen.Onboarding
+            role == "MANAGER" -> Screen.ManagerHome
+            else -> Screen.OwnerHome
+        }
         _uiState.value = AppUiState(
             isLoggedIn = isLoggedIn,
+            currentScreen = homeScreen,
             authToken = ApiClient.getToken(application),
             currentUserId = ApiClient.getUserId(application),
             currentUserName = ApiClient.getUserName(application),
             currentUserEmail = ApiClient.getUserEmail(application),
-            currentUserRole = ApiClient.getUserRole(application),
+            currentUserRole = role,
             currentUserManagerCode = ApiClient.getManagerCode(application),
             isDarkTheme = LockerStorage.getTheme(application),
             language = LockerStorage.getLanguage(application),
             isBiometricLoginEnabled = LockerStorage.isBiometricLoginEnabled(application)
         )
+        if (isLoggedIn) {
+            loadShops()
+            if (role == "ADMIN") loadManagers()
+        }
     }
 
     fun updateState(update: (AppUiState) -> AppUiState) {
@@ -659,6 +672,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun assignBusinessToManager(managerId: String, shopId: String) {
+        viewModelScope.launch {
+            try {
+                val mgrId = managerId.toLongOrNull() ?: return@launch
+                val sId = shopId.toLongOrNull() ?: return@launch
+                val response = api.assignShopToManager(mgrId, sId)
+                if (response.isSuccessful) {
+                    Toast.makeText(context, "Business assigned to manager", Toast.LENGTH_SHORT).show()
+                    loadManagers()
+                } else {
+                    Toast.makeText(context, "Failed: ${response.parseErrorMessage()}", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     fun disableManager(managerId: String) {
         viewModelScope.launch {
             val id = managerId.toLongOrNull() ?: return@launch
@@ -855,6 +886,45 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val response = api.uploadDocument(shopId = shopId, documentType = urlDocType, file = filePart, documentNumber = null, issueDate = null, expiryDate = null)
                 if (response.isSuccessful) {
                     Toast.makeText(context, "${doc.name} uploaded!", Toast.LENGTH_SHORT).show()
+                    loadDocuments(shopId)
+                } else {
+                    Toast.makeText(context, "Upload failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Upload error: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+            updateState { it.copy(isLoading = false) }
+        }
+    }
+
+    fun showCustomDocDialog(shopId: Long) {
+        updateState { it.copy(showCustomDocDialog = true, customDocShopId = shopId) }
+    }
+
+    fun dismissCustomDocDialog() {
+        updateState { it.copy(showCustomDocDialog = false, customDocShopId = null) }
+    }
+
+    fun uploadCustomDocument(documentName: String, uri: Uri) {
+        val shopId = _uiState.value.customDocShopId ?: return
+        viewModelScope.launch {
+            updateState { it.copy(isLoading = true) }
+            try {
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@launch
+                if (bytes.size > 10 * 1024 * 1024) {
+                    Toast.makeText(context, "File too large (max 10MB)", Toast.LENGTH_LONG).show()
+                    updateState { it.copy(isLoading = false) }
+                    return@launch
+                }
+                val typeCode = "CUSTOM_" + documentName.uppercase().replace(" ", "_")
+                val urlDocType = typeCode.lowercase()
+                val mimeType = context.contentResolver.getType(uri) ?: "application/pdf"
+                val requestBody = bytes.toRequestBody(mimeType.toMediaTypeOrNull())
+                val filePart = MultipartBody.Part.createFormData("file", "${urlDocType}.pdf", requestBody)
+                val response = api.uploadDocument(shopId = shopId, documentType = urlDocType, file = filePart, documentNumber = null, issueDate = null, expiryDate = null)
+                if (response.isSuccessful) {
+                    Toast.makeText(context, "'$documentName' uploaded!", Toast.LENGTH_SHORT).show()
+                    dismissCustomDocDialog()
                     loadDocuments(shopId)
                 } else {
                     Toast.makeText(context, "Upload failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()

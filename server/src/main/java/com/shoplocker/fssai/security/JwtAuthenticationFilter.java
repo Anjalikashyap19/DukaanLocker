@@ -1,6 +1,8 @@
 package com.shoplocker.fssai.security;
 
 import com.shoplocker.fssai.dto.FssaiErrorResponse;
+import com.shoplocker.fssai.entity.User;
+import com.shoplocker.fssai.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -23,6 +25,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -36,22 +40,31 @@ import java.util.List;
  * IS present and is malformed/expired we still surface a clean
  * {@link FssaiErrorResponse} JSON shape via the entry point rather than
  * letting Spring's defaults return an empty 401.</p>
+ *
+ * <p>Also enforces a 15-day inactivity window: if the user's
+ * {@code lastActiveAt} is older than 15 days, the token is rejected even
+ * if it hasn't reached its absolute JWT expiry. Every successful
+ * authenticated request resets the inactivity clock.</p>
  */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
     private static final String BEARER_PREFIX = "Bearer ";
+    private static final Duration INACTIVITY_TIMEOUT = Duration.ofDays(15);
 
     private final JwtService jwtService;
     private final UserDetailsService userDetailsService;
+    private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
 
     public JwtAuthenticationFilter(JwtService jwtService,
                                    UserDetailsService userDetailsService,
+                                   UserRepository userRepository,
                                    ObjectMapper objectMapper) {
         this.jwtService = jwtService;
         this.userDetailsService = userDetailsService;
+        this.userRepository = userRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -108,6 +121,34 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     new UsernamePasswordAuthenticationToken(userDetails, null, authorities);
             authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(authToken);
+
+            // ── Sliding inactivity window ──────────────────────────────────
+            // If the user has been inactive for more than 15 days, reject the
+            // request even though the JWT itself hasn't expired. This gives
+            // active users an indefinite session while forcing re-login after
+            // prolonged inactivity.
+            try {
+                User user = userRepository.findByEmailId(email).orElse(null);
+                if (user == null) {
+                    // Fallback: for MSME users the subject is a mobile number
+                    user = userRepository.findByMobileNumber(email).orElse(null);
+                }
+                if (user != null) {
+                    LocalDateTime lastActive = user.getLastActiveAt();
+                    if (lastActive != null && Duration.between(lastActive, LocalDateTime.now()).compareTo(INACTIVITY_TIMEOUT) > 0) {
+                        log.info("User {} inactive for more than {} days, forcing re-login",
+                                email, INACTIVITY_TIMEOUT.toDays());
+                        writeJsonError(response, HttpServletResponse.SC_UNAUTHORIZED,
+                                "session_expired",
+                                "Your session has expired due to inactivity. Please login again.");
+                        return;
+                    }
+                    user.setLastActiveAt(LocalDateTime.now());
+                    userRepository.save(user);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to update lastActiveAt for user {}: {}", email, e.getMessage());
+            }
 
             chain.doFilter(request, response);
         } catch (JwtException ex) {
