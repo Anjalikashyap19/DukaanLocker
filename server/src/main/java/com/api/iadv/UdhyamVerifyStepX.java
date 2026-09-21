@@ -237,10 +237,10 @@ public class UdhyamVerifyStepX {
         logger.info("STEP 3 - VERIFY UDYAM");
         logger.info("==============================");
 
-        System.out.print("Enter Udyam Number : ");
+        logger.info("Enter Udyam Number : ");
         String udyamNo = scanner.nextLine();
 
-        System.out.print("Enter Captcha : ");
+        logger.info("Enter Captcha : ");
         String captcha = scanner.nextLine();
 
         HttpPost post = new HttpPost("https://www.udyamregistration.gov.in/Udyam_Verify.aspx");

@@ -107,7 +107,8 @@ fun AddBusinessScreen(
         "Hotels, Lodging & Hospitality",
         "Automobile, Transport & Travel",
         "Construction Materials, Hardware & Industrial Goods",
-        "Manufacturing, Workshops & Industrial Activities"
+        "Manufacturing, Workshops & Industrial Activities",
+        "Other (Not in the list)"
     )
     val scales = listOf("Micro (turn over < 5 lac/year)", "Small ( < 20 lac/year)", "Medium ( < 50 lac/year)", "Large ( > 50 lac/year)")
     val states = listOf(

@@ -28,6 +28,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.nio.file.Paths;
 
 @RestController
 @RequestMapping("/api/shops")
@@ -144,8 +145,10 @@ public class ShopController {
         // document type and not a mismatch (e.g. a PAN uploaded as GST).
         documentValidationService.validateContentWithOcr(docType, fileBytes, file.getOriginalFilename());
 
-        // Upload to S3
-        String fileKey = "documents/shop_" + shopId + "/" + docType.name().toLowerCase() + "/" + file.getOriginalFilename();
+        // Upload to S3 — sanitize filename to prevent path traversal
+        String safeFileName = Paths.get(file.getOriginalFilename()).getFileName().toString()
+                .replaceAll("[^a-zA-Z0-9._\\-]", "_");
+        String fileKey = "documents/shop_" + shopId + "/" + docType.name().toLowerCase() + "/" + safeFileName;
         String fileUrl = s3Service.uploadFile(fileBytes, file.getContentType(), fileKey);
 
         // Parse dates if provided

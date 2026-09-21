@@ -34,8 +34,10 @@ build/
 
 ### Environment ###
 .env
+.env.swp
 setup.txt
 *.log
+*.apk
 app.jar
 
 ### Local runtime databases ###

@@ -1,9 +1,9 @@
 services:
   localstack:
-    image: localstack/localstack:latest
+    image: localstack/localstack:3.8
     container_name: dukaanlocker-localstack
     ports:
-      - "4566:4566"
+      - "127.0.0.1:4566:4566"
     environment:
       - SERVICES=s3,textract
       - DEBUG=0
@@ -13,6 +13,11 @@ services:
     volumes:
       - "./localstack/init:/etc/localstack/init"
       - "localstack-data:/var/lib/localstack"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
       interval: 5s

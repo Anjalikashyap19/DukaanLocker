@@ -20,6 +20,7 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 
 /**
  * REST controller for secure document viewing with one-time view tokens.
@@ -135,7 +136,7 @@ public class DocumentStreamController {
         ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(result.getContentType()))
                 .header(HttpHeaders.CONTENT_DISPOSITION, 
-                        "inline; filename=\"" + result.getFileName() + "\"")
+                        "inline; filename=\"" + sanitizeFileName(result.getFileName()) + "\"")
                 .header(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate")
                 .header(HttpHeaders.PRAGMA, "no-cache")
                 .header(HttpHeaders.EXPIRES, "0")
@@ -149,5 +150,22 @@ public class DocumentStreamController {
         
         // Return the document as binary response
         return responseBuilder.body(streamingResponseBody);
+    }
+
+    /**
+     * Sanitize filename for Content-Disposition header.
+     * Strips control characters (CRLF, null bytes) and escapes double quotes
+     * to prevent HTTP response splitting and header injection.
+     */
+    private String sanitizeFileName(String fileName) {
+        if (fileName == null) {
+            return "document";
+        }
+        // Strip control characters (CRLF, LF, CR, null) and escape quotes
+        return fileName
+                .replaceAll("[\\r\\n\\x00]", "")
+                .replaceAll("\"", "\\\\\"")
+                .replaceAll("[^\\x20-\\x7E]", "")
+                .trim();
     }
 }

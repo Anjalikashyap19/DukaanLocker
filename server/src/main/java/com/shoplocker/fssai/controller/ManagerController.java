@@ -38,6 +38,7 @@ public class ManagerController {
 
     private static final String CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // No I, O, 0, 1 to avoid confusion
     private static final SecureRandom random = new SecureRandom();
+    private static final int MANAGER_CODE_LENGTH = 8;
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -186,14 +187,14 @@ public class ManagerController {
     }
 
     /**
-     * Generates a unique 6-character alphanumeric code for manager login.
+     * Generates a unique 8-character alphanumeric code for manager login.
      * Uses characters that are visually distinct (no I, O, 0, 1).
      */
     private String generateUniqueManagerCode() {
         String code;
         do {
-            StringBuilder sb = new StringBuilder(6);
-            for (int i = 0; i < 6; i++) {
+            StringBuilder sb = new StringBuilder(MANAGER_CODE_LENGTH);
+            for (int i = 0; i < MANAGER_CODE_LENGTH; i++) {
                 sb.append(CODE_CHARS.charAt(random.nextInt(CODE_CHARS.length())));
             }
             code = sb.toString();

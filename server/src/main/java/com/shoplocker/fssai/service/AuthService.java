@@ -73,6 +73,25 @@ public class AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
+    /**
+     * Mask email for logging: "j***@e***.com"
+     */
+    private static String maskEmail(String email) {
+        if (email == null || !email.contains("@")) return "***";
+        String[] parts = email.split("@");
+        String local = parts[0].length() > 2 ? parts[0].substring(0, 2) + "***" : "***";
+        String domain = parts[1].length() > 3 ? "***." + parts[1].substring(parts[1].lastIndexOf('.') + 1) : "***";
+        return local + "@" + domain;
+    }
+
+    /**
+     * Mask mobile for logging: "98***456"
+     */
+    private static String maskMobile(String mobile) {
+        if (mobile == null || mobile.length() < 4) return "***";
+        return mobile.substring(0, 2) + "***" + mobile.substring(mobile.length() - 3);
+    }
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
@@ -142,13 +161,13 @@ public class AuthService {
         }
 
         if (userRepository.existsByEmailId(email)) {
-            log.info("Registration rejected: duplicate email {}", email);
+            log.info("Registration rejected: duplicate email {}", maskEmail(email));
             throw new FssaiException(
                     "An account already exists with this email address",
                     FailureCode.DUPLICATE_EMAIL);
         }
         if (userRepository.existsByMobileNumber(mobile)) {
-            log.info("Registration rejected: duplicate mobile {}", mobile);
+            log.info("Registration rejected: duplicate mobile {}", maskMobile(mobile));
             throw new FssaiException(
                     "An account already exists with this mobile number",
                     FailureCode.DUPLICATE_MOBILE);
@@ -165,7 +184,7 @@ public class AuthService {
         User saved = userRepository.save(user);
         String token = jwtService.generateToken(saved);
 
-        log.info("User registered: id={} email={} role={}", saved.getId(), saved.getEmailId(), saved.getRole());
+        log.info("User registered: id={} email={} role={}", saved.getId(), maskEmail(saved.getEmailId()), saved.getRole());
         return AuthResponse.from(saved, token);
     }
 
@@ -176,18 +195,18 @@ public class AuthService {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(email, request.getPassword()));
         } catch (BadCredentialsException bce) {
-            log.info("Login failed (bad credentials) for {}", email);
+            log.info("Login failed (bad credentials) for {}", maskEmail(email));
             throw new FssaiException(
                     "Invalid email or password",
                     FailureCode.INVALID_CREDENTIALS);
         } catch (DisabledException de) {
-            log.info("Login failed (disabled) for {}", email);
+            log.info("Login failed (disabled) for {}", maskEmail(email));
             throw new FssaiException(
                     "This account has been disabled. Please contact support.",
                     FailureCode.DISABLED_USER);
         } catch (AuthenticationException ae) {
             // Catch-all so we never leak internal Spring Security messages.
-            log.info("Login failed ({} ) for {}", ae.getClass().getSimpleName(), email);
+            log.info("Login failed ({} ) for {}", ae.getClass().getSimpleName(), maskEmail(email));
             throw new FssaiException(
                     "Invalid email or password",
                     FailureCode.INVALID_CREDENTIALS);
@@ -196,7 +215,7 @@ public class AuthService {
         User user = userRepository.findByEmailId(email)
                 .orElseThrow(() -> {
                     // Should be unreachable — authenticate() succeeded so the user must exist.
-                    log.warn("Authenticated principal {} not found in DB post-authenticate", email);
+                    log.warn("Authenticated principal {} not found in DB post-authenticate", maskEmail(email));
                     return new FssaiException(
                             "Invalid email or password",
                             FailureCode.INVALID_CREDENTIALS);
@@ -205,7 +224,7 @@ public class AuthService {
         // MSME-registered users are not permitted to log in with email + password.
         // They must authenticate via their Udyam number + OTP flow instead.
         if (user.isMsmeUser()) {
-            log.info("Login rejected: MSME user {} attempted email+password login", email);
+            log.info("Login rejected: MSME user {} attempted email+password login", maskEmail(email));
             throw new FssaiException(
                     "MSME-registered accounts cannot log in with email and password. " +
                     "Please sign in with your Udyam (MSME) number and OTP.",
@@ -262,7 +281,7 @@ public class AuthService {
             User user = existingUser.get();
             String token = jwtService.generateToken(user);
             createLoginWelcomeNotification(user);
-            log.info("Google login: existing user email={}", email);
+            log.info("Google login: existing user email={}", maskEmail(email));
             return AuthResponse.from(user, token);
         }
 
@@ -279,7 +298,7 @@ public class AuthService {
         User saved = userRepository.save(user);
         String token = jwtService.generateToken(saved);
 
-        log.info("Google registration: userId={} email={}", saved.getId(), email);
+        log.info("Google registration: userId={} email={}", saved.getId(), maskEmail(email));
         return AuthResponse.from(saved, token);
     }
 
@@ -303,7 +322,7 @@ public class AuthService {
 
         String token = jwtService.generateToken(user);
         createLoginWelcomeNotification(user);
-        log.info("Google login: existing user email={}", email);
+        log.info("Google login: existing user email={}", maskEmail(email));
         return AuthResponse.from(user, token);
     }
 
@@ -323,7 +342,7 @@ public class AuthService {
             throw new FssaiException("Google authentication failed", FailureCode.INVALID_REQUEST);
         }
         if (!email.equals(normalizeEmail(request.getEmailId()))) {
-            log.warn("Google token email mismatch: token={} request={}", email, request.getEmailId());
+            log.warn("Google token email mismatch: token={} request={}", maskEmail(email), maskEmail(request.getEmailId()));
             throw new FssaiException("Google authentication failed", FailureCode.INVALID_REQUEST);
         }
         return verified;
@@ -420,7 +439,7 @@ public class AuthService {
         }
 
         if (userRepository.existsByMobileNumber(mobile)) {
-            log.info("MSME registration rejected: duplicate mobile {}", mobile);
+            log.info("MSME registration rejected: duplicate mobile {}", maskMobile(mobile));
             throw new FssaiException(
                     "An account already exists with this mobile number",
                     FailureCode.DUPLICATE_MOBILE);
@@ -512,7 +531,7 @@ public class AuthService {
         User savedUser = persisted.user();
         Shop savedShop = persisted.shop();
         log.info("MSME user created: id={} mobile={} name={}",
-                savedUser.getId(), mobile, savedUser.getUserName());
+                savedUser.getId(), maskMobile(mobile), savedUser.getUserName());
         log.info("MSME shop created: id={} name={}", savedShop.getId(), savedShop.getShopName());
         log.info("Required documents created for shop {}", savedShop.getId());
 
@@ -843,7 +862,7 @@ public class AuthService {
         // Issue fresh JWT token
         String token = jwtService.generateToken(user);
         createLoginWelcomeNotification(user);
-        log.info("Biometric login successful: userId={} email={}", userId, email);
+        log.info("Biometric login successful: userId={} email={}", userId, maskEmail(email));
         return AuthResponse.from(user, token);
     }
 
@@ -868,6 +887,7 @@ public class AuthService {
         }
 
         OtpService.OtpRequestResult result = otpService.requestOtp(udyamNumber, user.getMobileNumber());
+
         log.info("MSME login-request: OTP requested for Udyam {} mobile {}", udyamNumber, user.getMobileNumber());
         String message = result.devOtp() != null
                 ? "DEV MODE — your OTP is " + result.devOtp()

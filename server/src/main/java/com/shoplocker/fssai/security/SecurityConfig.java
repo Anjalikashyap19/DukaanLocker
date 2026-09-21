@@ -88,9 +88,10 @@ public class SecurityConfig {
                     List<String> publicPaths = new ArrayList<>(List.of(
                             "/api/auth/**",
                             "/api/udyam/**",
-                            "/api/location/**",
-                            "/api/gst/**"
+                            "/api/location/**"
                     ));
+                    // GST endpoints: only /api/gst/fetch is public; /api/gst/verify requires auth
+                    publicPaths.add("/api/gst/fetch");
                     // Swagger UI / OpenAPI, H2 console and actuator are ONLY exposed
                     // when app.security.expose-devtools=true (default false). Even with
                     // the dev profile active, production must never run with these open.
@@ -109,6 +110,8 @@ public class SecurityConfig {
 
                     auth
                     .requestMatchers(publicPaths.toArray(new String[0])).permitAll()
+                    // ── GST verify requires authentication ──
+                    .requestMatchers(HttpMethod.GET, "/api/gst/verify/**").authenticated()
                     // ── Udyam fetch requires authentication (other /api/udyam/** are public) ──
                     .requestMatchers(HttpMethod.POST, "/api/udyam/fetch").authenticated()
                     // ── MANAGER-only (must be BEFORE the ADMIN /api/managers/** catch-all) ──
@@ -140,7 +143,13 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of(externalUrl, "http://localhost:8081"));
+        List<String> origins = new ArrayList<>();
+        origins.add(externalUrl);
+        // Only include localhost in non-production (when external URL is not the production domain)
+        if (!externalUrl.contains("dukaanlocker.com")) {
+            origins.add("http://localhost:8081");
+        }
+        config.setAllowedOrigins(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
         config.setAllowCredentials(true);

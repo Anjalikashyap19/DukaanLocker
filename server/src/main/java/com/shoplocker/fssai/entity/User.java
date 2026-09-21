@@ -48,9 +48,9 @@ public class User {
     private Role role = Role.MANAGER;
 
 
-    // Unique 6-character code for manager login (e.g., X7K9M2)
+    // Unique 8-character code for manager login (e.g., X7K9M2P4)
     // Only used when role = MANAGER
-    @Column(name = "manager_code", unique = true, length = 6)
+    @Column(name = "manager_code", unique = true, length = 8)
     private String managerCode;
 
 

@@ -357,7 +357,7 @@ private fun ManagerCard(
             },
             text = {
                 Text(
-                    AppStrings.get(lang, "Are you sure you want to revoke access for") + " ${manager.managerName}? " + AppStrings.get(lang, "They will no longer be able to access assigned businesses."),
+                    AppStrings.get(lang, "Are you sure  to revoke access for") + " ${manager.managerName}? " + AppStrings.get(lang, "They will no longer be able to access assigned businesses."),
                     color = colors.textSecondary,
                     fontSize = 14.sp
                 )
