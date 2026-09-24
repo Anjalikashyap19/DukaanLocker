@@ -191,7 +191,7 @@
         <dependency>
             <groupId>com.google.firebase</groupId>
             <artifactId>firebase-admin</artifactId>
-            <version>9.2.0</version>
+            <version>9.10.0</version>
         </dependency>
 
         <!-- Flyway — versioned DB migrations. Prod runs spring.jpa.hibernate.ddl-auto=validate,
