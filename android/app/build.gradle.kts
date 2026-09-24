@@ -114,7 +114,7 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging")
     
     // Google Sign-In
-    implementation("com.google.android.gms:play-services-auth:21.3.0")
+    implementation("com.google.android.gms:play-services-auth:22.0.0")
     
     // Biometric Authentication
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
