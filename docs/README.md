@@ -208,15 +208,22 @@ Configure the following environment variables before running in production.
 
 GitHub Actions automatically:
 
-- Builds the Spring Boot application
-- Runs tests
-- Packages the application
-- Uploads the generated artifact
+**CI** (`.github/workflows/ci.yml`) — on every PR / push to `main`:
+- Backend: compile, test, package (Maven, JDK 21), upload JAR
+- Android: unit tests + assemble debug APK
+- Docker: multi-stage image build (no push) with layer cache
+- OWASP: dependency-check report (non-blocking; set `NVD_API_KEY` secret to lift rate limits)
 
-Workflow configuration is available in:
+**CD** (`.github/workflows/cd.yml`) — on push to `main` (or manual dispatch):
+- Push backend image to GitHub Container Registry (`ghcr.io`)
+- Optional deploy when `ENABLE_DEPLOY=true` (SSH to EC2/VM or AWS ECS)
+- Assemble + upload Android APK artifact
+
+Workflow configuration:
 
 ```
 .github/workflows/ci.yml
+.github/workflows/cd.yml
 ```
 
 ---
@@ -225,8 +232,9 @@ Workflow configuration is available in:
 
 Production deployment supports:
 
-- Docker
-- AWS EC2
+- Docker (image published to GHCR by CD)
+- AWS EC2 (+ optional SSH deploy job)
+- AWS ECS Fargate (optional; configure `DEPLOY_TARGET=ecs`)
 - Nginx Reverse Proxy
 - Environment-based configuration
 

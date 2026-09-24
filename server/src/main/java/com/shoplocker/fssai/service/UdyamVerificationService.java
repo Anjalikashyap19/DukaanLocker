@@ -89,10 +89,10 @@ public class UdyamVerificationService {
                     "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36";
 
     private final ConcurrentHashMap<String, UdyamSession> sessions = new ConcurrentHashMap<>();
-    private final S3Service s3Service;
+    private final LocalFileStorageService localFileStorageService;
 
-    public UdyamVerificationService(S3Service s3Service) {
-        this.s3Service = s3Service;
+    public UdyamVerificationService(LocalFileStorageService localFileStorageService) {
+        this.localFileStorageService = localFileStorageService;
     }
 
     @PostConstruct
@@ -423,7 +423,7 @@ public class UdyamVerificationService {
 
                 String fileKey = "msme/verify/" + request.getUdyamNumber().toLowerCase()
                         .replace(" ", "_") + "/udyam_certificate.pdf";
-                pdfUrl = s3Service.uploadFile(pdfBytes, ContentType.APPLICATION_PDF.getMimeType(), fileKey);
+                pdfUrl = localFileStorageService.uploadFile(pdfBytes, ContentType.APPLICATION_PDF.getMimeType(), fileKey);
             } catch (Exception e) {
                 log.error("Udyam number {} was verified but PDF generation/S3 upload failed. " +
                         "Continuing registration without the certificate PDF; the HTML is retained " +
@@ -999,7 +999,7 @@ public class UdyamVerificationService {
             byte[] pdfBytes = baos.toByteArray();
             String fileKey = "msme/verify/" + udyamNumber.toLowerCase()
                     .replace(" ", "_") + "/udyam_certificate.pdf";
-            String pdfUrl = s3Service.uploadFile(pdfBytes,
+            String pdfUrl = localFileStorageService.uploadFile(pdfBytes,
                     org.apache.hc.core5.http.ContentType.APPLICATION_PDF.getMimeType(), fileKey);
 
             log.info("Generated MSME PDF from parsed data: {} bytes for Udyam {}", pdfBytes.length, udyamNumber);

@@ -49,19 +49,16 @@ public class DocumentStreamService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final DocumentRepository documentRepository;
     private final ShopAccessService shopAccessService;
-    private final S3Service s3Service;
-
-    @Value("${aws.bucketName}")
-    private String bucketName;
+    private final LocalFileStorageService localFileStorageService;
 
     public DocumentStreamService(RedisTemplate<String, Object> redisTemplate,
                                  DocumentRepository documentRepository,
                                  ShopAccessService shopAccessService,
-                                 S3Service s3Service) {
+                                 LocalFileStorageService localFileStorageService) {
         this.redisTemplate = redisTemplate;
         this.documentRepository = documentRepository;
         this.shopAccessService = shopAccessService;
-        this.s3Service = s3Service;
+        this.localFileStorageService = localFileStorageService;
     }
 
     /**
@@ -90,8 +87,8 @@ public class DocumentStreamService {
                     FailureCode.DOCUMENT_NOT_FOUND);
         }
 
-        // 4. Extract S3 object key from the file URL
-        String s3ObjectKey = s3Service.extractObjectKeyFromFileUrl(document.getFileUrl());
+        // 4. Extract local file key from the file URL
+        String s3ObjectKey = localFileStorageService.extractObjectKeyFromFileUrl(document.getFileUrl());
         if (s3ObjectKey == null || s3ObjectKey.isEmpty()) {
             throw new FssaiException(
                     "Invalid document URL format.",
@@ -105,7 +102,7 @@ public class DocumentStreamService {
         ViewTokenData tokenData = new ViewTokenData();
         tokenData.setUserId(authenticatedUser.getId());
         tokenData.setDocumentId(documentId);
-        tokenData.setS3ObjectKey(s3ObjectKey);
+        tokenData.setFileKey(s3ObjectKey);
         tokenData.setFileName(document.getFileName());
         tokenData.setDocumentType(document.getDocumentType().name());
         tokenData.setContentType(determineContentType(document.getFileName()));
@@ -176,10 +173,10 @@ public class DocumentStreamService {
                 tokenData.getDocumentId(), authenticatedUser.getId(), shopId);
 
         // 6. Get file size for Content-Length header (helps with nginx buffering)
-        long fileSize = s3Service.getObjectSize(tokenData.getS3ObjectKey());
+        long fileSize = localFileStorageService.getObjectSize(tokenData.getFileKey());
         
-        // 7. Stream the document from S3
-        InputStream inputStream = s3Service.getObject(tokenData.getS3ObjectKey());
+        // 7. Stream the document from local storage
+        InputStream inputStream = localFileStorageService.getObject(tokenData.getFileKey());
         
         return new DocumentStreamResult(inputStream, tokenData.getContentType(), tokenData.getFileName(), fileSize);
     }
@@ -233,7 +230,7 @@ public class DocumentStreamService {
     public static class ViewTokenData implements java.io.Serializable {
         private Long userId;
         private Long documentId;
-        private String s3ObjectKey;
+        private String fileKey;
         private String fileName;
         private String documentType;
         private String contentType;
@@ -246,8 +243,8 @@ public class DocumentStreamService {
         public Long getDocumentId() { return documentId; }
         public void setDocumentId(Long documentId) { this.documentId = documentId; }
 
-        public String getS3ObjectKey() { return s3ObjectKey; }
-        public void setS3ObjectKey(String s3ObjectKey) { this.s3ObjectKey = s3ObjectKey; }
+        public String getFileKey() { return fileKey; }
+        public void setFileKey(String fileKey) { this.fileKey = fileKey; }
 
         public String getFileName() { return fileName; }
         public void setFileName(String fileName) { this.fileName = fileName; }

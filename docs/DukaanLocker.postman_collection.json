@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "DukaanLocker API",
-    "description": "REST API for fetching and managing FSSAI license information\n\n## Swagger UI\n- **Swagger UI**: http://localhost:8081/swagger-ui.html\n- **OpenAPI Spec**: http://localhost:8081/api-docs",
+    "description": "REST API for fetching and managing FSSAI license information\n\n## Swagger UI\n- **Swagger UI**: http://localhost:8081/swagger-ui.html\n- **OpenAPI Spec**: http://localhost:8081/v3/api-docs",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "opencode"
   },

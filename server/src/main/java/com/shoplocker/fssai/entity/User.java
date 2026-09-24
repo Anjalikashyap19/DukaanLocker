@@ -20,6 +20,12 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // DL ID - 4 digit ascending number for document folder organization
+    // e.g., 0001, 0002, 0003, etc. Nullable: derived at use-time from user id
+    // (see ShopController / LocalFileStorageService); populated later if needed.
+    @Column(name = "dl_id", unique = true)
+    private String dlId;
+
 
     // User ke under jitni shops hain
     @OneToMany(mappedBy = "owner", fetch = FetchType.LAZY)

@@ -9,6 +9,8 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 
+import java.net.URI;
+
 @Configuration
 public class AwsS3Config {
 
@@ -21,20 +23,28 @@ public class AwsS3Config {
     @Value("${AWS_SECRET_ACCESS_KEY:}")
     private String secretAccessKey;
 
+    @Value("${aws.endpoint:}")
+    private String endpoint;
+
     @Bean
     public S3Client s3Client() {
+        var builder = S3Client.builder()
+                .region(Region.of(region));
+
         // Use explicit credentials from .env if available, otherwise fall back
         // to default credential chain (EC2 instance profile, ~/.aws/credentials, etc.)
         if (!accessKeyId.isEmpty() && !secretAccessKey.isEmpty()) {
             AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKeyId, secretAccessKey);
-            return S3Client.builder()
-                    .region(Region.of(region))
-                    .credentialsProvider(StaticCredentialsProvider.create(credentials))
-                    .build();
+            builder.credentialsProvider(StaticCredentialsProvider.create(credentials));
         }
 
-        return S3Client.builder()
-                .region(Region.of(region))
-                .build();
+        // MinIO / LocalStack / any S3-compatible endpoint
+        // When aws.endpoint is set, configure path-style access and custom endpoint
+        if (endpoint != null && !endpoint.isEmpty()) {
+            builder.endpointOverride(URI.create(endpoint))
+                   .forcePathStyle(true);
+        }
+
+        return builder.build();
     }
 }

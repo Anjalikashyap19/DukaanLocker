@@ -12,7 +12,7 @@ import com.shoplocker.fssai.entity.User;
 import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
 import com.shoplocker.fssai.service.DocumentValidationService;
-import com.shoplocker.fssai.service.S3Service;
+import com.shoplocker.fssai.service.LocalFileStorageService;
 import com.shoplocker.fssai.service.ShopAccessService;
 import com.shoplocker.fssai.service.ShopService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -39,16 +39,16 @@ public class ShopController {
     private final ShopService shopService;
     private final ShopAccessService shopAccessService;
     private final DocumentValidationService documentValidationService;
-    private final S3Service s3Service;
+    private final LocalFileStorageService localFileStorageService;
 
     public ShopController(ShopService shopService,
                           ShopAccessService shopAccessService,
                           DocumentValidationService documentValidationService,
-                          S3Service s3Service) {
+                          LocalFileStorageService localFileStorageService) {
         this.shopService = shopService;
         this.shopAccessService = shopAccessService;
         this.documentValidationService = documentValidationService;
-        this.s3Service = s3Service;
+        this.localFileStorageService = localFileStorageService;
     }
 
     @Operation(summary = "Create a shop", description = "ADMIN only. Creates a new shop and links it to " +
@@ -145,11 +145,21 @@ public class ShopController {
         // document type and not a mismatch (e.g. a PAN uploaded as GST).
         documentValidationService.validateContentWithOcr(docType, fileBytes, file.getOriginalFilename());
 
-        // Upload to S3 — sanitize filename to prevent path traversal
+        // Set DL ID and Shop ID context for local storage folder structure
+        // Folder structure: dl-id_shop-id/ (e.g., 0001_shop123)
+        localFileStorageService.setContext(user.getId(), shopId);
+        
+        // Sanitize filename to prevent directory traversal
         String safeFileName = Paths.get(file.getOriginalFilename()).getFileName().toString()
                 .replaceAll("[^a-zA-Z0-9._\\-]", "_");
-        String fileKey = "documents/shop_" + shopId + "/" + docType.name().toLowerCase() + "/" + safeFileName;
-        String fileUrl = s3Service.uploadFile(fileBytes, file.getContentType(), fileKey);
+        
+        // Build file key: documents/dl-id_shop-id/unique-filename
+        // The DL ID is 4-digit, shop ID is the numeric ID
+        String dlId = String.format("%04d", user.getId());
+        String fileKey = "documents/" + dlId + "_" + shopId + "/" + safeFileName;
+        
+        // Upload to local storage
+        String fileUrl = localFileStorageService.uploadFile(fileBytes, file.getContentType(), fileKey);
 
         // Parse dates if provided
         LocalDateTime issueDate = null;

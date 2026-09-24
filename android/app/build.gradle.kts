@@ -13,8 +13,11 @@ val localProps = Properties().apply {
     if (file.exists()) file.inputStream().use { load(it) }
 }
 val localBackend = localProps.getProperty("LOCAL_BACKEND", "false").toBoolean()
-val baseUrl = if (localBackend) "http://10.176.2.52:8081/"
-              else "https://api.dukaanlocker.com/"
+val localBaseUrl = "http://10.176.2.52:8081/"
+val prodBaseUrl = "https://api.dukaanlocker.iadv.cloud/"
+// Retrofit primary base: local when LOCAL_BACKEND=true, otherwise production.
+// LOCAL_FAILOVER_ENABLED lets the app retry against production when local is down.
+val baseUrl = if (localBackend) localBaseUrl else prodBaseUrl
 
 android {
     namespace = "com.iadv.dukaanlocker"
@@ -43,11 +46,17 @@ android {
     buildTypes {
         debug {
             buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
+            buildConfigField("String", "LOCAL_BASE_URL", "\"$localBaseUrl\"")
+            buildConfigField("String", "PROD_BASE_URL", "\"$prodBaseUrl\"")
+            buildConfigField("boolean", "LOCAL_FAILOVER_ENABLED", localBackend.toString())
             buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"733563364874-v71tsg3phavb9b12oiu7vjhjnjtv8qg1.apps.googleusercontent.com\"")
             isMinifyEnabled = false
         }
         release {
             buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
+            buildConfigField("String", "LOCAL_BASE_URL", "\"$localBaseUrl\"")
+            buildConfigField("String", "PROD_BASE_URL", "\"$prodBaseUrl\"")
+            buildConfigField("boolean", "LOCAL_FAILOVER_ENABLED", localBackend.toString())
             buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"733563364874-v71tsg3phavb9b12oiu7vjhjnjtv8qg1.apps.googleusercontent.com\"")
             isMinifyEnabled = true
             isShrinkResources = true

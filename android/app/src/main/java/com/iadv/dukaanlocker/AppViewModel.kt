@@ -205,6 +205,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logout() {
+        // Capture JWT before clearAuth; unregister runs async with this snapshot.
+        val jwtSnapshot = ApiClient.getToken(context)
+        viewModelScope.launch { ApiClient.unregisterDeviceToken(context, jwtSnapshot) }
         ApiClient.clearAuth(context)
         updateState {
             it.copy(
@@ -237,6 +240,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logoutManager() {
+        // Capture JWT before clearAuth; unregister runs async with this snapshot.
+        val jwtSnapshot = ApiClient.getToken(context)
+        viewModelScope.launch { ApiClient.unregisterDeviceToken(context, jwtSnapshot) }
         ApiClient.clearAuth(context)
         updateState {
             it.copy(
@@ -834,6 +840,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun skipWizardAndLogout() {
+        val jwtSnapshot = ApiClient.getToken(context)
+        viewModelScope.launch { ApiClient.unregisterDeviceToken(context, jwtSnapshot) }
         ApiClient.clearAuth(context)
         updateState {
             it.copy(

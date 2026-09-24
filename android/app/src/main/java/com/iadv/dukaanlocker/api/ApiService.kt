@@ -143,4 +143,10 @@ interface ApiService {
 
     @POST("api/device-token")
     suspend fun registerDeviceToken(@Body body: Map<String, String>): Response<Map<String, String>>
+
+    @HTTP(method = "DELETE", path = "api/device-token", hasBody = true)
+    suspend fun removeDeviceToken(
+        @Header("Authorization") authorization: String,
+        @Body body: Map<String, String>
+    ): Response<Map<String, String>>
 }

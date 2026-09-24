@@ -46,13 +46,6 @@
 		</dependency>
 
 		<dependency>
-			<groupId>com.microsoft.playwright</groupId>
-			<artifactId>playwright</artifactId>
-			<version>1.51.0</version>
-			<scope>test</scope>
-		</dependency>
-
-		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-devtools</artifactId>
 			<scope>runtime</scope>
@@ -99,6 +92,15 @@
 		<dependency>
 			<groupId>software.amazon.awssdk</groupId>
 			<artifactId>textract</artifactId>
+		</dependency>
+
+		<!-- Tess4J — Tesseract OCR wrapper for local document text extraction.
+			 Used as a self-hosted alternative to AWS Textract. Requires Tesseract
+			 binary installed on the host (apt install tesseract-ocr). -->
+		<dependency>
+			<groupId>net.sourceforge.tess4j</groupId>
+			<artifactId>tess4j</artifactId>
+			<version>5.11.0</version>
 		</dependency>
 
 
@@ -220,7 +222,44 @@
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 			</plugin>
+			<!-- OWASP Dependency-Check — run via: ./mvnw -P owasp dependency-check:check
+			     CI supplies NVD_API_KEY when available (rate-limit free). -->
+			<plugin>
+				<groupId>org.owasp</groupId>
+				<artifactId>dependency-check-maven</artifactId>
+				<version>12.1.9</version>
+				<configuration>
+					<failBuildOnCVSS>7</failBuildOnCVSS>
+					<nvdApiKey>${env.NVD_API_KEY}</nvdApiKey>
+					<skipTestScope>false</skipTestScope>
+					<ossindexUrl>https://ossindex.sonatype.org</ossindexUrl>
+					<format>HTML</format>
+					<outputDirectory>${project.build.directory}/dependency-check</outputDirectory>
+				</configuration>
+			</plugin>
 		</plugins>
 	</build>
+
+	<profiles>
+		<!-- Explicit profile so plain ./mvnw verify stays fast in local/dev. -->
+		<profile>
+			<id>owasp</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.owasp</groupId>
+						<artifactId>dependency-check-maven</artifactId>
+						<executions>
+							<execution>
+								<goals>
+									<goal>check</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
 
 </project>

@@ -5,9 +5,7 @@ RUN mvn dependency:go-offline -B
 COPY server/src ./src
 RUN mvn clean package -DskipTests -B
 
-# Runtime stage: pinned JRE image, non-root user. Playwright browsers are NOT
-# needed at runtime (no com.microsoft.playwright code paths), so the heavy
-# playwright base image is intentionally not used.
+# Runtime stage: pinned JRE image, non-root user.
 FROM eclipse-temurin:21-jre-noble
 RUN useradd -m -u 1001 appuser
 WORKDIR /app

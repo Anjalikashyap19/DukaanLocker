@@ -145,8 +145,8 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         List<String> origins = new ArrayList<>();
         origins.add(externalUrl);
-        // Only include localhost in non-production (when external URL is not the production domain)
-        if (!externalUrl.contains("dukaanlocker.com")) {
+        // Only include localhost in non-production (when external URL is not a production domain)
+        if (!externalUrl.contains("dukaanlocker.com") && !externalUrl.contains("iadv.cloud")) {
             origins.add("http://localhost:8081");
         }
         config.setAllowedOrigins(origins);

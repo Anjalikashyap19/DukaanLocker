@@ -170,14 +170,16 @@ public class S3Service {
     }
 
     /**
-     * Extracts the S3 object key from a full S3 URL, or returns the input as-is
-     * when it is already a bare object key.
+     * Extracts the S3 object key from a full S3/MinIO URL, or returns the input
+     * as-is when it is already a bare object key.
      *
-     * <p>Example URL: {@code "https://bucket.s3.amazonaws.com/pan/shop_1/pan_card.pdf"}
-     * -&gt; {@code "pan/shop_1/pan_card.pdf"}. A bare key such as
-     * {@code "pan/shop_1/pan_card.pdf"} is returned unchanged.</p>
+     * <p>Supported URL formats:
+     * <ul>
+     *   <li>AWS S3: {@code "https://bucket.s3.amazonaws.com/key"}</li>
+     *   <li>MinIO:  {@code "http://host:port/bucket/key"} or {@code "https://host/bucket/key"}</li>
+     * </ul>
      *
-     * @param fileUrl  Full S3 URL or an already-extracted object key
+     * @param fileUrl  Full S3/MinIO URL or an already-extracted object key
      * @return The S3 object key
      */
     public String extractObjectKeyFromFileUrl(String fileUrl) {
@@ -185,20 +187,28 @@ public class S3Service {
             return null;
         }
 
-        // Pattern: https://bucket.s3.amazonaws.com/key
-        String prefix = "https://" + bucketName + ".s3.amazonaws.com/";
-        if (fileUrl.startsWith(prefix)) {
-            return fileUrl.substring(prefix.length());
+        // AWS S3 path-style: https://bucket.s3.amazonaws.com/key
+        String awsPrefix = "https://" + bucketName + ".s3.amazonaws.com/";
+        if (fileUrl.startsWith(awsPrefix)) {
+            return fileUrl.substring(awsPrefix.length());
         }
 
-        // Fallback: try to extract key after bucket domain
-        String genericPrefix = ".s3.amazonaws.com/";
-        int idx = fileUrl.indexOf(genericPrefix);
-        if (idx > 0) {
-            return fileUrl.substring(idx + genericPrefix.length());
+        // AWS S3 virtual-hosted fallback
+        String genericAws = ".s3.amazonaws.com/";
+        int awsIdx = fileUrl.indexOf(genericAws);
+        if (awsIdx > 0) {
+            return fileUrl.substring(awsIdx + genericAws.length());
         }
 
-        // Already a bare object key (URL prefix stripped at upload time) — return as-is.
+        // MinIO / S3-compatible path-style: http://host:port/bucket/key or https://host/bucket/key
+        // Strip scheme, find the bucket name in the path, and return everything after it.
+        String bucketPrefix = "/" + bucketName + "/";
+        int bucketIdx = fileUrl.indexOf(bucketPrefix);
+        if (bucketIdx >= 0) {
+            return fileUrl.substring(bucketIdx + bucketPrefix.length());
+        }
+
+        // Already a bare object key — return as-is.
         return fileUrl;
     }
 }

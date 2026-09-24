@@ -45,10 +45,10 @@ public class GstVerificationService {
     private String clientId;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final S3Service s3Service;
+    private final LocalFileStorageService localFileStorageService;
 
-    public GstVerificationService(S3Service s3Service) {
-        this.s3Service = s3Service;
+    public GstVerificationService(LocalFileStorageService localFileStorageService) {
+        this.localFileStorageService = localFileStorageService;
     }
 
     /**
@@ -90,7 +90,7 @@ public class GstVerificationService {
                 byte[] pdfBytes = convertHtmlToPdf(certificateHtml, normalizedGst);
 
                 String fileKey = "gst/verify/" + normalizedGst.toLowerCase() + "/gst_certificate.pdf";
-                String pdfUrl = s3Service.uploadFile(pdfBytes, ContentType.APPLICATION_PDF.getMimeType(), fileKey);
+                String pdfUrl = localFileStorageService.uploadFile(pdfBytes, ContentType.APPLICATION_PDF.getMimeType(), fileKey);
 
                 parsed.setPdfUrl(pdfUrl);
                 parsed.setCertificateHtml(certificateHtml);

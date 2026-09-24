@@ -9,11 +9,14 @@ on:
 permissions:
   contents: read
 
-jobs:
-  build:
-    name: Build & Test
-    runs-on: ubuntu-latest
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
+jobs:
+  backend:
+    name: Backend (Maven)
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,15 +28,6 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('server/pom.xml') }}
-          restore-keys: |
-            playwright-${{ runner.os }}-
-
       - name: Ensure mvnw is executable
         working-directory: server
         run: chmod +x mvnw
@@ -42,10 +36,6 @@ jobs:
         working-directory: server
         run: ./mvnw -B verify
 
-      - name: OWASP Dependency Check
-        working-directory: server
-        run: ./mvnw -B dependency-check:check -Ddependency-check.failBuildOnCVSS=7 || true
-
       - name: Upload built JAR
         uses: actions/upload-artifact@v4
         with:
@@ -53,3 +43,115 @@ jobs:
           path: server/target/*.jar
           if-no-files-found: error
           retention-days: 7
+
+      - name: Upload Surefire reports (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: server/target/surefire-reports/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  android:
+    name: Android (Gradle)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Temurin JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Ensure gradlew is executable
+        working-directory: android
+        run: chmod +x gradlew
+
+      - name: Unit tests
+        working-directory: android
+        run: ./gradlew --no-daemon :app:testDebugUnitTest
+
+      - name: Assemble debug APK
+        working-directory: android
+        run: ./gradlew --no-daemon :app:assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload test reports (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-reports
+          path: |
+            android/app/build/reports/tests/
+            android/app/build/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    needs: backend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: server/Dockerfile
+          push: false
+          tags: dukaanlocker/backend:ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  owasp:
+    name: OWASP dependency check
+    runs-on: ubuntu-latest
+    # NVD API key is optional but strongly recommended (rate limits without it).
+    continue-on-error: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Temurin JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Ensure mvnw is executable
+        working-directory: server
+        run: chmod +x mvnw
+
+      - name: Run OWASP Dependency-Check
+        working-directory: server
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: ./mvnw -B -P owasp dependency-check:check
+
+      - name: Upload OWASP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: owasp-report
+          path: server/target/dependency-check/
+          retention-days: 14
+          if-no-files-found: ignore
