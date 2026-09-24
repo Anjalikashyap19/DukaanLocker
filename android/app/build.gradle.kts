@@ -117,7 +117,7 @@ dependencies {
     implementation("com.google.android.gms:play-services-auth:21.3.0")
     
     // Biometric Authentication
-    implementation("androidx.biometric:biometric:1.2.0-alpha05")
+    implementation("androidx.biometric:biometric:1.4.0-alpha07")
 
     // Splash Screen (system splash for Android 12+ and unified splash on older versions)
     implementation(libs.androidx.core.splashscreen)
