@@ -6,7 +6,7 @@ COPY server/src ./src
 RUN mvn clean package -DskipTests -B
 
 # Runtime stage: pinned JRE image, non-root user.
-FROM eclipse-temurin:21-jre-noble
+FROM eclipse-temurin:25-jre-noble
 RUN useradd -m -u 1001 appuser
 WORKDIR /app
 RUN mkdir -p /app/Documents && chown -R appuser:appuser /app/Documents
