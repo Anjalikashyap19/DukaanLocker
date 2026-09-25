@@ -103,6 +103,7 @@ public class DocumentMissingScheduler {
             case LABOUR_LICENSE -> "Labour License";
             case SHOP_INSURANCE -> "Shop Insurance";
             case AADHAAR -> "Aadhaar Card";
+            case CUSTOM -> "Custom Document";
         };
     }
 }

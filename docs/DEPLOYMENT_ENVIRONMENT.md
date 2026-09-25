@@ -15,7 +15,7 @@ This document lists all required environment variables for deploying DukaanLocke
 | `AWS_BUCKET_NAME` | S3 bucket name | `dukaanlocker-documents-prod` | `dukaanlocker-documents-local` |
 | `JWT_SECRET` | Secret key for JWT tokens (min 32 chars) | `your-super-secret-key-here...` | None |
 | `JWT_EXPIRATION_MS` | JWT token expiration in milliseconds | `86400000` (24 hours) | `86400000` |
-| `EXTERNAL_URL` | Public URL for the application | `https://api.dukaanlocker.com` | `http://localhost:8081` |
+| `EXTERNAL_URL` | Public URL for the application | `https://api.dukaanlocker.iadv.cloud` | `http://localhost:8081` |
 | `REDIS_HOST` | Redis/ElastiCache endpoint | `your-cluster.xxxxx.cache.amazonaws.com` | `localhost` |
 | `REDIS_PORT` | Redis port | `6379` | `6379` |
 | `REDIS_PASSWORD` | Redis authentication token | `your-auth-token` | None |
@@ -113,7 +113,7 @@ Create `task-definition.json`:
         {"name": "SPRING_PROFILES_ACTIVE", "value": "prod"},
         {"name": "AWS_REGION", "value": "us-east-1"},
         {"name": "AWS_BUCKET_NAME", "value": "dukaanlocker-documents-prod"},
-        {"name": "EXTERNAL_URL", "value": "https://api.dukaanlocker.com"},
+        {"name": "EXTERNAL_URL", "value": "https://api.dukaanlocker.iadv.cloud"},
         {"name": "REDIS_HOST", "value": "your-cluster.xxxxx.cache.amazonaws.com"},
         {"name": "REDIS_PORT", "value": "6379"},
         {"name": "REDIS_SSL_ENABLED", "value": "true"}

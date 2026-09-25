@@ -239,8 +239,12 @@ public class UdyamVerificationService {
     /**
      * STEP 3 + 4 — Verify a Udyam number + CAPTCHA, then fetch and convert
      * the certificate HTML to a PDF.
+     *
+     * @param request the Udyam verification request (session ID, Udyam number, CAPTCHA)
+     * @param userId  the DL user ID for folder structure
+     * @param shopId  the shop ID for folder structure
      */
-    public UdyamVerifyResponse verifyAndGeneratePdf(UdyamVerifyRequest request) {
+    public UdyamVerifyResponse verifyAndGeneratePdf(UdyamVerifyRequest request, Long userId, Long shopId) {
         UdyamSession session = sessions.remove(request.getSessionId());
         if (session == null) {
             throw new FssaiException(
@@ -410,9 +414,9 @@ public class UdyamVerificationService {
                                 "Please try again with a fresh CAPTCHA.");
             }
 
-            // ── Convert HTML to PDF + upload to S3 ──
+             // ── Convert HTML to PDF + upload to local storage ──
             // This step runs ONLY after the government portal has already confirmed
-            // the Udyam number is valid. A failure here (PDF rendering, S3 outage,
+            // the Udyam number is valid. A failure here (PDF rendering, storage outage,
             // missing fonts) must NOT abort an otherwise-successful verification —
             // that previously surfaced as a bare 500 (pdf_processing_error). Instead
             // we degrade gracefully: the registration still succeeds and we store the
@@ -423,9 +427,16 @@ public class UdyamVerificationService {
 
                 String fileKey = "msme/verify/" + request.getUdyamNumber().toLowerCase()
                         .replace(" ", "_") + "/udyam_certificate.pdf";
-                pdfUrl = localFileStorageService.uploadFile(pdfBytes, ContentType.APPLICATION_PDF.getMimeType(), fileKey);
+                if (userId != null && shopId != null) {
+                    pdfUrl = localFileStorageService.uploadFile(pdfBytes, ContentType.APPLICATION_PDF.getMimeType(), userId, shopId, fileKey);
+                } else {
+                    // Registration flow (no shop context yet) — use fallback IDs.
+                    // The caller is responsible for persisting the file path;
+                    // when used from the fetch endpoint, userId/shopId will be set.
+                    pdfUrl = localFileStorageService.uploadFile(pdfBytes, ContentType.APPLICATION_PDF.getMimeType(), 0L, 0L, fileKey);
+                }
             } catch (Exception e) {
-                log.error("Udyam number {} was verified but PDF generation/S3 upload failed. " +
+                log.error("Udyam number {} was verified but PDF generation/upload failed. " +
                         "Continuing registration without the certificate PDF; the HTML is retained " +
                         "for later regeneration.", request.getUdyamNumber(), e);
             }
@@ -964,11 +975,13 @@ public class UdyamVerificationService {
      * This uses {@link MsmeHtmlGenerator} which takes structured fields instead of
      * re-parsing raw HTML, making it more reliable than {@code convertHtmlToPdf()}.
      *
-     * @param data parsed MSME data from {@link com.shoplocker.fssai.util.MsmeDataParser}
+     * @param data       parsed MSME data from {@link com.shoplocker.fssai.util.MsmeDataParser}
      * @param udyamNumber the Udyam registration number
+     * @param userId     the DL user ID for folder structure
+     * @param shopId     the shop ID for folder structure
      * @return S3 URL of the uploaded PDF, or null if generation/upload failed
      */
-    public String generatePdfFromParsedData(MsmeParsedData data, String udyamNumber) {
+    public String generatePdfFromParsedData(MsmeParsedData data, String udyamNumber, Long userId, Long shopId) {
         try {
             String certificateHtml = MsmeHtmlGenerator.generateCertificateHtml(data);
 
@@ -999,8 +1012,11 @@ public class UdyamVerificationService {
             byte[] pdfBytes = baos.toByteArray();
             String fileKey = "msme/verify/" + udyamNumber.toLowerCase()
                     .replace(" ", "_") + "/udyam_certificate.pdf";
+            Long effectiveUserId = userId != null ? userId : 0L;
+            Long effectiveShopId = shopId != null ? shopId : 0L;
             String pdfUrl = localFileStorageService.uploadFile(pdfBytes,
-                    org.apache.hc.core5.http.ContentType.APPLICATION_PDF.getMimeType(), fileKey);
+                    org.apache.hc.core5.http.ContentType.APPLICATION_PDF.getMimeType(),
+                    effectiveUserId, effectiveShopId, fileKey);
 
             log.info("Generated MSME PDF from parsed data: {} bytes for Udyam {}", pdfBytes.length, udyamNumber);
             return pdfUrl;

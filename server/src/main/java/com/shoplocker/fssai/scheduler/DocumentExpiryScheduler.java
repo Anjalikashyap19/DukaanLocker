@@ -142,8 +142,9 @@ public class DocumentExpiryScheduler {
             case PROPERTY_TAX -> "Property Tax Receipt";
             case PROFESSIONAL_TAX -> "Professional Tax Certificate";
             case LABOUR_LICENSE -> "Labour License";
-            case SHOP_INSURANCE -> "Shop Insurance";
+             case SHOP_INSURANCE -> "Shop Insurance";
             case AADHAAR -> "Aadhaar Card";
+            case CUSTOM -> "Custom Document";
         };
     }
 }

@@ -465,7 +465,7 @@ public class AuthService {
         verifyReq.setUdyamNumber(udyamNumber);
         verifyReq.setCaptchaText(request.getCaptchaText());
 
-        UdyamVerifyResponse verifyResult = udyamService.verifyAndGeneratePdf(verifyReq);
+        UdyamVerifyResponse verifyResult = udyamService.verifyAndGeneratePdf(verifyReq, null, null);
 
         if (!verifyResult.isSuccess()) {
             throw new FssaiException(
@@ -504,7 +504,7 @@ public class AuthService {
         String finalPdfUrl = verifyResult.getPdfUrl();
         if (parsedData != null && udyamNumber != null) {
             try {
-                String regeneratedPdfUrl = udyamService.generatePdfFromParsedData(parsedData, udyamNumber);
+                String regeneratedPdfUrl = udyamService.generatePdfFromParsedData(parsedData, udyamNumber, null, null);
                 if (regeneratedPdfUrl != null && !regeneratedPdfUrl.isBlank()) {
                     finalPdfUrl = regeneratedPdfUrl;
                     log.info("Regenerated MSME PDF from parsed data for Udyam {}", udyamNumber);

@@ -52,13 +52,15 @@ public class GstVerificationService {
     }
 
     /**
-     * Verifies a GST number against the API Setu GSTN Taxpayers Verification API,
-     * generates a PDF certificate, and uploads it to S3.
+     * Verifies a GST number against the API Setu GSTN Taxpayer Verification API,
+     * generates a PDF certificate, and uploads it to local storage.
      *
      * @param gstNumber the GST number to verify (e.g., "27AAPFU0939F1ZV")
+     * @param userId    the DL user ID for folder structure
+     * @param shopId    the shop ID for folder structure
      * @return GstVerificationResponse with taxpayer details, PDF URL, and HTML certificate
      */
-    public GstVerificationResponse verifyGstNumber(String gstNumber) {
+    public GstVerificationResponse verifyGstNumber(String gstNumber, Long userId, Long shopId) {
         String normalizedGst = gstNumber.toUpperCase().trim();
 
         // Step 1: Call API Setu
@@ -90,7 +92,11 @@ public class GstVerificationService {
                 byte[] pdfBytes = convertHtmlToPdf(certificateHtml, normalizedGst);
 
                 String fileKey = "gst/verify/" + normalizedGst.toLowerCase() + "/gst_certificate.pdf";
-                String pdfUrl = localFileStorageService.uploadFile(pdfBytes, ContentType.APPLICATION_PDF.getMimeType(), fileKey);
+                String pdfUrl;
+                Long effectiveUserId = userId != null ? userId : 0L;
+                Long effectiveShopId = shopId != null ? shopId : 0L;
+                pdfUrl = localFileStorageService.uploadFile(pdfBytes, ContentType.APPLICATION_PDF.getMimeType(),
+                        effectiveUserId, effectiveShopId, fileKey);
 
                 parsed.setPdfUrl(pdfUrl);
                 parsed.setCertificateHtml(certificateHtml);

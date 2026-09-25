@@ -122,12 +122,14 @@ public class ShopController {
         User user = shopAccessService.getAuthenticatedUser(auth);
         shopAccessService.validateShopAccess(user, shopId);
 
-        // Parse document type
+        // Parse document type — normalize input to match enum names (uppercase, underscores)
         DocumentType docType;
         try {
-            docType = DocumentType.valueOf(documentType.toUpperCase());
+            String normalizedType = documentType.toUpperCase().replace("-", "_");
+            docType = DocumentType.valueOf(normalizedType);
         } catch (IllegalArgumentException e) {
-            throw new FssaiException("Invalid document type: " + documentType,
+            throw new FssaiException("Invalid document type: " + documentType
+                    + ". Valid types: " + java.util.Arrays.toString(DocumentType.values()),
                     FailureCode.INVALID_REQUEST);
         }
 
@@ -145,21 +147,16 @@ public class ShopController {
         // document type and not a mismatch (e.g. a PAN uploaded as GST).
         documentValidationService.validateContentWithOcr(docType, fileBytes, file.getOriginalFilename());
 
-        // Set DL ID and Shop ID context for local storage folder structure
-        // Folder structure: dl-id_shop-id/ (e.g., 0001_shop123)
-        localFileStorageService.setContext(user.getId(), shopId);
-        
-        // Sanitize filename to prevent directory traversal
+        // Build file key: relative path within the shop folder
+        // Structure: {doc-type}/{sanitized-filename}
+        // e.g., "gst/gst_certificate.pdf" or "fssai_food_license/my_license.pdf"
         String safeFileName = Paths.get(file.getOriginalFilename()).getFileName().toString()
                 .replaceAll("[^a-zA-Z0-9._\\-]", "_");
-        
-        // Build file key: documents/dl-id_shop-id/unique-filename
-        // The DL ID is 4-digit, shop ID is the numeric ID
-        String dlId = String.format("%04d", user.getId());
-        String fileKey = "documents/" + dlId + "_" + shopId + "/" + safeFileName;
-        
+        String fileKey = docType.name().toLowerCase().replace("_", "/") + "/" + safeFileName;
+
         // Upload to local storage
-        String fileUrl = localFileStorageService.uploadFile(fileBytes, file.getContentType(), fileKey);
+        // Use the new overload with explicit userId/shopId for thread-safety
+        String fileUrl = localFileStorageService.uploadFile(fileBytes, file.getContentType(), user.getId(), shopId, fileKey);
 
         // Parse dates if provided
         LocalDateTime issueDate = null;

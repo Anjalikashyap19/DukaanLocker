@@ -3,12 +3,16 @@ package com.shoplocker.fssai.controller;
 import com.shoplocker.fssai.dto.GstFetchRequest;
 import com.shoplocker.fssai.dto.GstVerificationResponse;
 import com.shoplocker.fssai.entity.DocumentType;
+import com.shoplocker.fssai.entity.User;
 import com.shoplocker.fssai.service.GstVerificationService;
+import com.shoplocker.fssai.service.ShopAccessService;
 import com.shoplocker.fssai.service.ShopService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -22,10 +26,14 @@ public class GstVerificationController {
 
     private final GstVerificationService gstService;
     private final ShopService shopService;
+    private final ShopAccessService shopAccessService;
 
-    public GstVerificationController(GstVerificationService gstService, ShopService shopService) {
+    public GstVerificationController(GstVerificationService gstService,
+                                     ShopService shopService,
+                                     ShopAccessService shopAccessService) {
         this.gstService = gstService;
         this.shopService = shopService;
+        this.shopAccessService = shopAccessService;
     }
 
     @Operation(
@@ -36,26 +44,34 @@ public class GstVerificationController {
     )
     @GetMapping("/verify/{gstNumber}")
     public ResponseEntity<GstVerificationResponse> verifyGstNumber(@PathVariable String gstNumber) {
-        GstVerificationResponse response = gstService.verifyGstNumber(gstNumber);
+        GstVerificationResponse response = gstService.verifyGstNumber(gstNumber, null, null);
         return ResponseEntity.ok(response);
     }
 
     @Operation(
             summary = "Fetch and persist GST document",
             description = "Verifies a GSTIN against the government portal via API Setu, " +
-                          "generates a PDF certificate, uploads it to S3, " +
+                          "generates a PDF certificate, uploads it to local storage, " +
                           "and persists it as a GST document for the given shop. " +
                           "Returns the verification details including the PDF URL."
     )
     @PostMapping("/fetch")
-    public ResponseEntity<GstVerificationResponse> fetchAndPersistGst(@Valid @RequestBody GstFetchRequest request) {
-        GstVerificationResponse verification = gstService.verifyGstNumber(request.getGstin());
+    @SecurityRequirement(name = "bearer-jwt")
+    public ResponseEntity<GstVerificationResponse> fetchAndPersistGst(
+            @Valid @RequestBody GstFetchRequest request,
+            Authentication authentication) {
+
+        // Validate shop ownership
+        User user = shopAccessService.getAuthenticatedUser(authentication);
+        Long shopId = Long.parseLong(request.getShopId());
+        shopAccessService.validateShopAccess(user, shopId);
+
+        GstVerificationResponse verification = gstService.verifyGstNumber(request.getGstin(), user.getId(), shopId);
 
         if (!verification.isSuccess()) {
             return ResponseEntity.ok(verification);
         }
 
-        Long shopId = Long.parseLong(request.getShopId());
         shopService.uploadOrReuploadDocument(
                 shopId,
                 DocumentType.GST,

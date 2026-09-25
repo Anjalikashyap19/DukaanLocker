@@ -244,6 +244,8 @@ public class DocumentValidationService {
             case DRUG_LICENSE:       validateDrugLicense(extractedText, originalFileName); break;
             case FSSAI_FOOD_LICENSE: validateFssaiFoodLicense(extractedText, originalFileName); break;
             case AADHAAR:            validateAadhaar(extractedText, originalFileName); break;
+            case CUSTOM:             // Custom documents bypass content validation — no standard format to check
+                break;
             default: throw new FssaiException("Unknown document type: " + type, FailureCode.INTERNAL_ERROR);
         }
     }

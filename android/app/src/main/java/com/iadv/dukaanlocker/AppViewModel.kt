@@ -890,7 +890,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val fileName = "${doc.type.lowercase()}.pdf"
                 val filePart = MultipartBody.Part.createFormData("file", fileName, requestBody)
                 val shopId = doc.businessId.toLongOrNull() ?: return@launch
-                val urlDocType = doc.type.lowercase().replace("_", "-")
+                // DocumentType enum on the backend expects uppercase with underscores (e.g., "SHOP_ESTABLISHMENT")
+                val urlDocType = doc.type.uppercase()
                 val response = api.uploadDocument(shopId = shopId, documentType = urlDocType, file = filePart, documentNumber = null, issueDate = null, expiryDate = null)
                 if (response.isSuccessful) {
                     Toast.makeText(context, "${doc.name} uploaded!", Toast.LENGTH_SHORT).show()
@@ -924,11 +925,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     updateState { it.copy(isLoading = false) }
                     return@launch
                 }
-                val typeCode = "CUSTOM_" + documentName.uppercase().replace(" ", "_")
-                val urlDocType = typeCode.lowercase()
+                val urlDocType = "CUSTOM"
                 val mimeType = context.contentResolver.getType(uri) ?: "application/pdf"
                 val requestBody = bytes.toRequestBody(mimeType.toMediaTypeOrNull())
-                val filePart = MultipartBody.Part.createFormData("file", "${urlDocType}.pdf", requestBody)
+                val filePart = MultipartBody.Part.createFormData("file", "${documentName.trim()}.pdf", requestBody)
                 val response = api.uploadDocument(shopId = shopId, documentType = urlDocType, file = filePart, documentNumber = null, issueDate = null, expiryDate = null)
                 if (response.isSuccessful) {
                     Toast.makeText(context, "'$documentName' uploaded!", Toast.LENGTH_SHORT).show()

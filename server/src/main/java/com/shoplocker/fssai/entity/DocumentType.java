@@ -16,5 +16,6 @@ public enum DocumentType {
     SHOP_INSURANCE,
     DRUG_LICENSE,
     FSSAI_FOOD_LICENSE,
-    AADHAAR
+    AADHAAR,
+    CUSTOM
 }

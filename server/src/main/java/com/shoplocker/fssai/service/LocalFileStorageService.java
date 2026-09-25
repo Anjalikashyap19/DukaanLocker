@@ -2,7 +2,6 @@ package com.shoplocker.fssai.service;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
 import java.nio.file.*;
@@ -13,6 +12,8 @@ public class LocalFileStorageService {
 
     private final String basePath;
 
+    // Legacy mutable state — used only by the deprecated 3-arg uploadFile overload.
+    // New code should use the 5-arg overload with explicit userId/shopId parameters.
     private Long currentUserId = null;
     private Long currentShopId = null;
 
@@ -27,9 +28,12 @@ public class LocalFileStorageService {
     }
 
     /**
-     * Sets the current user ID and shop ID for folder path generation.
-     * This should be called before uploadFile() to set the DL ID and shop context.
+     * Sets the current user ID and shop ID for the legacy uploadFile overload.
+     * Deprecated: pass userId and shopId explicitly to {@link #uploadFile(byte[], String, Long, Long, String)}.
+     *
+     * @deprecated Use {@link #uploadFile(byte[], String, Long, Long, String)} with explicit parameters.
      */
+    @Deprecated
     public void setContext(Long userId, Long shopId) {
         this.currentUserId = userId;
         this.currentShopId = shopId;
@@ -37,7 +41,10 @@ public class LocalFileStorageService {
 
     /**
      * Clears the context after upload is complete.
+     *
+     * @deprecated No longer needed when using the 5-arg uploadFile overload.
      */
+    @Deprecated
     public void clearContext() {
         this.currentUserId = null;
         this.currentShopId = null;
@@ -45,40 +52,65 @@ public class LocalFileStorageService {
 
     /**
      * Uploads file bytes to local folder structure based on DL ID and Shop ID:
-     * /basePath/dl-id/documents/dl-id_shop-id/
-     * 
-     * The file is stored with a unique UUID inside the shop-specific folder,
-     * and the fileUrl returned includes the DL ID and Shop ID for organized storage.
-     * 
+     * /basePath/documents/dl-id_shop-id/{fileKey-relative-path}
+     *
+     * <p>The folder structure is:
+     * <pre>
+     * documents/
+     *   └── {dl-id}_{shop-id}/
+     *       ├── udyam/
+     *       │   └── {udyam-number}/
+     *       │       └── udyam_certificate.pdf
+     *       ├── gst/
+     *       │   └── {gst-number}/
+     *       │       └── gst_certificate.pdf
+     *       └── {document-type}/
+     *           └── {original-filename}
+     * </pre>
+     *
      * @param fileBytes    The file content as byte array
      * @param contentType  MIME type of the file (e.g., "application/pdf")
-     * @param fileKey      Original file key/name from the request
+     * @param userId       The DL user ID (used as the 4-digit dl-id prefix)
+     * @param shopId       The shop ID
+     * @param fileKey      Relative path within the shop folder (e.g., "gst/verify/xyz/gst_certificate.pdf"
+     *                     or "udyam_certificate.pdf"). If null/empty, a UUID-based name is generated.
      * @return The stored file key (relative path) that includes dl-id and shop-id
      */
-    public String uploadFile(byte[] fileBytes, String contentType, String fileKey) {
+    public String uploadFile(byte[] fileBytes, String contentType, Long userId, Long shopId, String fileKey) {
         if (fileBytes == null || fileBytes.length == 0) {
             throw new IllegalArgumentException("File bytes cannot be null or empty");
         }
+        if (userId == null) {
+            throw new IllegalArgumentException("userId cannot be null");
+        }
+        if (shopId == null) {
+            throw new IllegalArgumentException("shopId cannot be null");
+        }
 
-        // Generate unique file name (UUID to prevent guessing)
-        String uniqueFileName = UUID.randomUUID().toString().replace("-", "") + ".pdf";
+         // Build folder path: dl-id_shop-id
+        // DL IDs start from 1111 to avoid collision with the reserved 0001-1110 range.
+        // The userId passed here is the User's database ID, offset by +1110 to produce
+        // the DL ID (e.g., user id 1 -> dl-id 1111, user id 2 -> 1112, etc.)
+        String dlId = String.format("%04d", userId + 1110);
+        String folderName = dlId + "_" + shopId;
 
-        // Build folder path: dl-id_shop-id
-        // e.g., 0001_shop123 or 0042_shop456
-        String dlId = String.format("%04d", currentUserId != null ? currentUserId : 1);
-        String shopIdStr = currentShopId != null ? String.valueOf(currentShopId) : "0";
-        String folderName = dlId + "_" + shopIdStr;
+        // Determine the relative path within the shop folder
+        String relativePath;
+        if (fileKey != null && !fileKey.isEmpty()) {
+            // Sanitize the file key to prevent directory traversal
+            relativePath = sanitizeFileKey(fileKey);
+        } else {
+            // Fallback: generate a UUID-based filename
+            String uniqueFileName = UUID.randomUUID().toString().replace("-", "") + ".pdf";
+            relativePath = uniqueFileName;
+        }
 
-        // Sanitize the original file key to prevent directory traversal
-        String sanitizedKey = sanitizeFileName(fileKey);
-
-        // Build stored path: documents/dl-id_shop-id/unique-filename
-        // The fileKey returned will be: documents/dl-id_shop-id/unique-filename
-        String storedPath = "documents/" + folderName + "/" + uniqueFileName;
+        // Build full stored path: documents/dl-id_shop-id/{relativePath}
+        String storedPath = "documents/" + folderName + "/" + relativePath;
 
         Path filePath = Paths.get(basePath, storedPath);
 
-        // Create parent directories (dl-id_shop-id folder)
+        // Create parent directories
         try {
             Files.createDirectories(filePath.getParent());
         } catch (Exception e) {
@@ -92,9 +124,23 @@ public class LocalFileStorageService {
             throw new RuntimeException("Failed to write file to: " + filePath, e);
         }
 
-        // Return file key that includes dl-id and shop-id in the path
-        // Format: documents/dl-id_shop-id/unique-filename
         return storedPath;
+    }
+
+    /**
+     * Backward-compatible overload that uses setContext() state.
+     * Deprecated: prefer {@link #uploadFile(byte[], String, Long, Long, String)}.
+     *
+     * @deprecated Use {@link #uploadFile(byte[], String, Long, Long, String)} instead.
+     */
+    @Deprecated
+    public String uploadFile(byte[] fileBytes, String contentType, String fileKey) {
+        if (currentUserId == null || currentShopId == null) {
+            throw new IllegalStateException(
+                "No context set. Either call setContext(userId, shopId) before uploadFile, " +
+                "or use the uploadFile(fileBytes, contentType, userId, shopId, fileKey) overload.");
+        }
+        return uploadFile(fileBytes, contentType, currentUserId, currentShopId, fileKey);
     }
 
     /**
@@ -157,10 +203,12 @@ public class LocalFileStorageService {
         }
 
         // If it's a full path, extract just the key portion
-        // Remove base path if present
+        // Remove base path if present (handles both default and Docker paths)
         String key = fileUrl;
         if (key.startsWith("/opt/dukaanlocker/Documents")) {
             key = key.substring("/opt/dukaanlocker/Documents".length());
+        } else if (key.startsWith("/app/Documents")) {
+            key = key.substring("/app/Documents".length());
         } else if (key.startsWith(basePath)) {
             key = key.substring(basePath.length());
         }
@@ -232,23 +280,65 @@ public class LocalFileStorageService {
     }
 
     /**
+     * Sanitizes a relative file key path to prevent directory traversal.
+     * Removes leading slashes, normalizes path separators, and strips
+     * dangerous sequences like "../".
+     *
+     * @param fileKey the raw relative path (e.g., "gst/verify/abc123/gst_certificate.pdf")
+     * @return a safe relative path
+     */
+    private String sanitizeFileKey(String fileKey) {
+        if (fileKey == null || fileKey.isEmpty()) {
+            String uniqueFileName = UUID.randomUUID().toString().replace("-", "") + ".pdf";
+            return uniqueFileName;
+        }
+
+        // Remove leading slashes to prevent absolute paths
+        String key = fileKey;
+        while (key.startsWith("/")) {
+            key = key.substring(1);
+        }
+
+        // Normalize backslashes to forward slashes
+        key = key.replace('\\', '/');
+
+        // Remove any ".." path traversal segments
+        String[] parts = key.split("/");
+        StringBuilder sb = new StringBuilder();
+        for (String part : parts) {
+            if (part.isEmpty() || "..".equals(part) || ".".equals(part)) {
+                continue;
+            }
+            // Sanitize each segment to safe characters
+            String sanitized = part.replaceAll("[^a-zA-Z0-9._-]", "_");
+            if (sb.length() > 0) {
+                sb.append('/');
+            }
+            sb.append(sanitized);
+        }
+        String result = sb.toString();
+
+        if (result.isEmpty()) {
+            // Fallback if everything was stripped
+            String uniqueFileName = UUID.randomUUID().toString().replace("-", "") + ".pdf";
+            return uniqueFileName;
+        }
+
+        // Ensure the final segment has an extension
+        int lastSlash = result.lastIndexOf('/');
+        String lastSegment = (lastSlash >= 0) ? result.substring(lastSlash + 1) : result;
+        if (!lastSegment.contains(".")) {
+            result = result + ".pdf";
+        }
+
+        return result;
+    }
+
+    /**
      * Sanitizes the file name to prevent directory traversal and ensure valid characters.
      */
     private String sanitizeFileName(String fileName) {
-        if (fileName == null || fileName.isEmpty()) {
-            return "unknown." + guessExtension("");
-        }
-        
-        // Remove any path separators or dangerous characters
-        String sanitized = fileName.replaceAll("[/\\\\]", "_");
-        sanitized = sanitized.replaceAll("[^a-zA-Z0-9._-]", "_");
-        
-        // Ensure it has an extension or add default
-        if (!sanitized.contains(".")) {
-            sanitized += ".pdf";
-        }
-        
-        return sanitized;
+        return sanitizeFileKey(fileName);
     }
 
     /**

@@ -87,11 +87,11 @@ public class SecurityConfig {
                     // ── Public (no JWT required) ──────────────────────────────
                     List<String> publicPaths = new ArrayList<>(List.of(
                             "/api/auth/**",
-                            "/api/udyam/**",
+                            "/api/udyam/init",
+                            "/api/udyam/captcha/**",
+                            "/api/udyam/verify",
                             "/api/location/**"
                     ));
-                    // GST endpoints: only /api/gst/fetch is public; /api/gst/verify requires auth
-                    publicPaths.add("/api/gst/fetch");
                     // Swagger UI / OpenAPI, H2 console and actuator are ONLY exposed
                     // when app.security.expose-devtools=true (default false). Even with
                     // the dev profile active, production must never run with these open.
@@ -110,11 +110,12 @@ public class SecurityConfig {
 
                     auth
                     .requestMatchers(publicPaths.toArray(new String[0])).permitAll()
-                    // ── GST verify requires authentication ──
-                    .requestMatchers(HttpMethod.GET, "/api/gst/verify/**").authenticated()
-                    // ── Udyam fetch requires authentication (other /api/udyam/** are public) ──
-                    .requestMatchers(HttpMethod.POST, "/api/udyam/fetch").authenticated()
-                    // ── MANAGER-only (must be BEFORE the ADMIN /api/managers/** catch-all) ──
+                     // ── GST endpoints: verify is public, fetch requires auth ──
+                     .requestMatchers(HttpMethod.GET, "/api/gst/verify/**").permitAll()
+                     .requestMatchers(HttpMethod.POST, "/api/gst/fetch").authenticated()
+                     // ── Udyam endpoints: init, captcha, verify are public; fetch requires auth ──
+                     .requestMatchers(HttpMethod.POST, "/api/udyam/fetch").authenticated()
+                     // ── MANAGER-only (must be BEFORE the ADMIN /api/managers/** catch-all) ──
                     .requestMatchers(HttpMethod.GET, "/api/managers/me/shops").hasRole("MANAGER")
                     // ── ADMIN-only endpoints ──────────────────────────────────
                     .requestMatchers(HttpMethod.POST, "/api/shops").hasRole("ADMIN")

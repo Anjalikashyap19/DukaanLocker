@@ -81,11 +81,11 @@ public class UdyamVerificationController {
             summary = "Verify Udyam number and generate PDF certificate",
             description = "Submits the Udyam number + CAPTCHA to the government portal. " +
                           "On success, fetches the certificate HTML, converts it to a PDF, " +
-                          "uploads to S3, and returns the PDF URL."
+                          "uploads to local storage, and returns the PDF URL."
     )
     @PostMapping("/verify")
     public ResponseEntity<UdyamVerifyResponse> verify(@Valid @RequestBody UdyamVerifyRequest request) {
-        UdyamVerifyResponse response = udyamService.verifyAndGeneratePdf(request);
+        UdyamVerifyResponse response = udyamService.verifyAndGeneratePdf(request, null, null);
         return ResponseEntity.ok(response);
     }
 
@@ -125,7 +125,7 @@ public class UdyamVerificationController {
         verifyReq.setUdyamNumber(request.getUdyamNumber());
         verifyReq.setCaptchaText(request.getCaptchaText());
 
-        UdyamVerifyResponse verifyResult = udyamService.verifyAndGeneratePdf(verifyReq);
+        UdyamVerifyResponse verifyResult = udyamService.verifyAndGeneratePdf(verifyReq, user.getId(), shopId);
 
         if (!verifyResult.isSuccess()) {
             return ResponseEntity.ok(verifyResult);
@@ -147,7 +147,7 @@ public class UdyamVerificationController {
                         }
                     }
 
-                    String regeneratedPdfUrl = udyamService.generatePdfFromParsedData(parsedData, request.getUdyamNumber());
+                    String regeneratedPdfUrl = udyamService.generatePdfFromParsedData(parsedData, request.getUdyamNumber(), user.getId(), shopId);
                     if (regeneratedPdfUrl != null) {
                         finalPdfUrl = regeneratedPdfUrl;
                     }
