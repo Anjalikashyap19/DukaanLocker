@@ -11,14 +11,14 @@ import java.util.UUID;
 @Service
 public class LocalFileStorageService {
 
-    @Value("${storage.base-path:/opt/dukaanlocker/Documents}")
-    private String basePath;
+    private final String basePath;
 
     private Long currentUserId = null;
     private Long currentShopId = null;
 
-    public LocalFileStorageService() {
-        this.basePath = System.getProperty("storage.base-path", "/opt/dukaanlocker/Documents");
+    public LocalFileStorageService(
+            @Value("${storage.base-path:/opt/dukaanlocker/Documents}") String basePath) {
+        this.basePath = basePath;
         try {
             Files.createDirectories(Paths.get(basePath));
         } catch (Exception e) {

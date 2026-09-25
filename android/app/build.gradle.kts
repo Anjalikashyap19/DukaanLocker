@@ -79,6 +79,7 @@ android {
         }
     }
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
@@ -107,6 +108,7 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring(libs.android.desugar.jdk.libs)
 
     implementation(platform("com.google.firebase:firebase-bom:34.17.0"))
     implementation("com.google.firebase:firebase-analytics")

@@ -9,6 +9,7 @@ RUN mvn clean package -DskipTests -B
 FROM eclipse-temurin:21-jre-noble
 RUN useradd -m -u 1001 appuser
 WORKDIR /app
+RUN mkdir -p /app/Documents && chown -R appuser:appuser /app/Documents
 COPY --from=build --chown=appuser:appuser /app/target/*.jar app.jar
 USER appuser
 EXPOSE 8081
