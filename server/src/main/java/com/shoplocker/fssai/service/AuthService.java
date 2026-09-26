@@ -873,8 +873,16 @@ public class AuthService {
      * {@link OtpService} to generate + SMS an OTP to the user's registered
      * mobile. If the Udyam number is unknown, a generic success message is
      * returned (no SMS sent) to avoid leaking which numbers are registered.</p>
+     *
+     * <p>NOTE: intentionally NOT {@code @Transactional}, for the same reason as
+     * {@link #registerWithMsme} — it makes an external HTTP call to the SMS
+     * gateway. If the gateway rejects the send, a transaction spanning that call
+     * would roll back the freshly created OTP challenge too, leaving the client
+     * with no record that a code was requested and defeating the resend cooldown
+     * in {@link OtpService#requestOtp} (the endpoint could then be spammed without
+     * limit whenever the gateway is failing). The challenge is therefore committed
+     * by its own transaction inside {@code OtpService} before the SMS is sent.</p>
      */
-    @Transactional
     public MsmeOtpResponse msmeLoginRequest(MsmeOtpRequest request) {
         String udyamNumber = request.getMsmeNumber().trim().toUpperCase();
         User user = resolveMsmeUser(udyamNumber);
