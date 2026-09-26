@@ -34,7 +34,7 @@ public class DocumentExpiryScheduler {
         this.notificationService = notificationService;
     }
 
-    @Scheduled(cron = "0 0 9 * * ?")
+    @Scheduled(trigger = "randomTimeTrigger")
     public void checkExpiringDocuments() {
         log.info("Running document expiry check scheduler...");
 

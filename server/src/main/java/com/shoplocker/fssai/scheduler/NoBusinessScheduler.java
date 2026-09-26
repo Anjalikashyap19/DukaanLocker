@@ -33,7 +33,7 @@ public class NoBusinessScheduler {
         this.notificationService = notificationService;
     }
 
-    @Scheduled(cron = "0 0 10 * * ?")
+    @Scheduled(trigger = "randomTimeTrigger")
     public void checkUsersWithoutBusiness() {
         log.info("Running no-business check scheduler...");
 
