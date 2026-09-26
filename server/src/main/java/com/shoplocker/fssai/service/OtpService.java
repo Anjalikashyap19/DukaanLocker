@@ -4,6 +4,7 @@ import com.shoplocker.fssai.config.Fast2SmsConfig;
 import com.shoplocker.fssai.entity.OtpChallenge;
 import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
+import com.shoplocker.fssai.exception.OtpRateLimitedException;
 import com.shoplocker.fssai.repository.OtpChallengeRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,6 +50,7 @@ public class OtpService {
     private final SmsService smsService;
     private final PasswordEncoder passwordEncoder;
     private final Fast2SmsConfig fast2SmsConfig;
+    private final OtpRateLimitService rateLimitService;
 
     @Value("${otp.max-attempts:5}")
     private int maxAttempts;
@@ -71,11 +73,13 @@ public class OtpService {
     public OtpService(OtpChallengeRepository otpRepository,
                       SmsService smsService,
                       PasswordEncoder passwordEncoder,
-                      Fast2SmsConfig fast2SmsConfig) {
+                      Fast2SmsConfig fast2SmsConfig,
+                      OtpRateLimitService rateLimitService) {
         this.otpRepository = otpRepository;
         this.smsService = smsService;
         this.passwordEncoder = passwordEncoder;
         this.fast2SmsConfig = fast2SmsConfig;
+        this.rateLimitService = rateLimitService;
     }
 
     /** Creates a fresh OTP for the mobile and delivers it via SMS. Returns the challenge id
@@ -85,8 +89,22 @@ public class OtpService {
      *  <p>Deliberately NOT {@code @Transactional}: the gateway call is external, and a
      *  transaction spanning it would roll the challenge back on failure. The challenge is
      *  committed first by {@link #persistChallenge}, so a rejected send still consumes the
-     *  resend cooldown and the endpoint cannot be spammed while the gateway is failing.</p> */
+     *  resend cooldown and the endpoint cannot be spammed while the gateway is failing.</p>
+     *
+     *  <p>{@link OtpRateLimitService} is consulted <i>first</i>, before the challenge row is
+     *  written and before the gateway is called, so a throttled request costs nothing and
+     *  sends no SMS.</p> */
     public OtpRequestResult requestOtp(String msmeNumber, String mobile) {
+        OtpRateLimitService.Decision rateLimit = rateLimitService.acquireSendSlot(mobile);
+        // Only fall back to the durable cooldown when Redis did not actually enforce
+        // anything. Running both unconditionally meant two overlapping 120s windows: the
+        // database check rejected the request after the Redis counter had already been
+        // incremented, so a user could burn all 5 sends without receiving a single SMS,
+        // and the rejection came back without retry metadata the client needs.
+        if (rateLimit.degraded()) {
+            self.assertDbCooldown(mobile);
+        }
+
         String otp = generateOtp();
         OtpChallenge challenge = new OtpChallenge();
         challenge.setMsmeNumber(msmeNumber);
@@ -100,8 +118,49 @@ public class OtpService {
         // Committed in its own transaction, so it survives a failed send below.
         OtpChallenge saved = self.persistChallenge(challenge);
 
-        smsService.sendOtp(mobile, otp);
-        return new OtpRequestResult(saved.getId().toString(), isDevMode() ? otp : null);
+        try {
+            smsService.sendOtp(mobile, otp);
+        } catch (OtpRateLimitedException e) {
+            // The gateway applied its own resend cooldown. The request was valid and no
+            // SMS was billed, so hand the send credit back instead of letting a timing
+            // race between our window and the gateway's eat into the user's 5-send cap.
+            rateLimitService.releaseSendSlot(mobile);
+            throw e;
+        }
+        return new OtpRequestResult(
+                saved.getId().toString(),
+                isDevMode() ? otp : null,
+                rateLimit.remainingSends(),
+                rateLimit.retryAfterSeconds());
+    }
+
+    /**
+     * Durable fallback for the resend cooldown, used when Redis is unavailable and
+     * {@link OtpRateLimitService} fails open.
+     *
+     * <p>Deliberately evaluated <i>before</i> {@code acquireSendSlot}: the Redis counter
+     * models real sends, so a request rejected here must not consume a send credit. When
+     * this check used to live inside {@link #persistChallenge} it ran after the counter
+     * had already been incremented, which burned the user's whole 5-send budget without
+     * ever delivering a single SMS.</p>
+     *
+     * <p>Throws {@link OtpRateLimitedException} rather than a bare
+     * {@link FssaiException} so this path returns the same retry metadata as the Redis
+     * path. A 429 without {@code retryAfterSeconds} leaves the client unable to render a
+     * countdown, which is precisely the case this feature exists to fix.</p>
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+    public void assertDbCooldown(String mobile) {
+        otpRepository.findTopByMobileAndPurposeOrderByCreatedAtDesc(mobile, OtpChallenge.PURPOSE_MSME_LOGIN)
+                .ifPresent(recent -> {
+                    long ageSeconds = Duration.between(recent.getCreatedAt(), LocalDateTime.now()).getSeconds();
+                    if (ageSeconds < resendCooldownSeconds) {
+                        int wait = (int) (resendCooldownSeconds - ageSeconds);
+                        throw new OtpRateLimitedException(
+                                "Please wait " + wait + " seconds before requesting a new OTP.",
+                                wait, rateLimitService.peekRemainingSends(mobile), false);
+                    }
+                });
     }
 
     /**
@@ -109,8 +168,9 @@ public class OtpService {
      * mobile/purpose. Runs in its own transaction (invoked via the self-proxy) so the
      * stored challenge is durable before {@link #requestOtp} attempts the SMS send.
      *
-     * <p>The cooldown lives here rather than in the caller so the read, the delete and
-     * the insert are evaluated against one consistent view.</p>
+     * <p>The cooldown check lives in {@link #assertDbCooldown} and runs before the rate
+     * limiter, so this method only needs to delete the previous challenge and insert the
+     * new one.</p>
      *
      * <p>{@code REQUIRES_NEW} keeps the challenge durable independently of whatever
      * transaction the caller may hold, so it cannot be rolled back by a later failure
@@ -120,19 +180,6 @@ public class OtpService {
     public OtpChallenge persistChallenge(OtpChallenge challenge) {
         String mobile = challenge.getMobile();
 
-        // Resend cooldown: throttle OTP generation to one per resendCooldownSeconds
-        // to prevent OTP bombing / SMS cost abuse.
-        otpRepository.findTopByMobileAndPurposeOrderByCreatedAtDesc(mobile, OtpChallenge.PURPOSE_MSME_LOGIN)
-                .ifPresent(recent -> {
-                    long ageSeconds = Duration.between(recent.getCreatedAt(), LocalDateTime.now()).getSeconds();
-                    if (ageSeconds < resendCooldownSeconds) {
-                        throw new FssaiException(
-                                "Please wait " + (resendCooldownSeconds - ageSeconds) +
-                                        " seconds before requesting a new OTP.",
-                                FailureCode.TOO_MANY_ATTEMPTS);
-                    }
-                });
-
         otpRepository.deleteByMobileAndPurpose(mobile, OtpChallenge.PURPOSE_MSME_LOGIN);
         return otpRepository.save(challenge);
     }
@@ -141,6 +188,14 @@ public class OtpService {
         String key = fast2SmsConfig.getApiKey();
         String tpl = fast2SmsConfig.getTemplateId();
         return (key == null || key.isBlank()) || (tpl == null || tpl.isBlank());
+    }
+
+    /**
+     * Clears cooldown/send-cap/lockout state for a mobile. Called after a successful
+     * verification so a legitimate owner is not punished for earlier resends.
+     */
+    public void clearRateLimit(String mobile) {
+        rateLimitService.reset(mobile);
     }
 
     /** Outcome of applying a single OTP verification attempt. */
@@ -242,6 +297,8 @@ public class OtpService {
         return String.format("%0" + length + "d", value);
     }
 
-    /** Result of {@link #requestOtp}: challenge id plus the plaintext OTP when in dev mode. */
-    public record OtpRequestResult(String requestId, String devOtp) {}
+    /** Result of {@link #requestOtp}: challenge id, the plaintext OTP when in dev mode,
+     *  and the post-send rate-limit state so the client can start its countdown. */
+    public record OtpRequestResult(String requestId, String devOtp,
+                                   int remainingSends, int resendAvailableInSeconds) {}
 }

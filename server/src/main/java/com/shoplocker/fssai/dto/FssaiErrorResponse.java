@@ -17,6 +17,10 @@ import java.util.List;
  *   "timestamp": "2026-07-08T08:00:00"
  * }
  * }</pre>
+ *
+ * <p>{@code retryAfterSeconds} / {@code remainingSends} are rate-limit metadata and are
+ * omitted (via {@code NON_NULL}) from every error that is not a throttle, so existing
+ * clients see byte-identical bodies for non-rate-limited failures.</p>
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class FssaiErrorResponse {
@@ -26,6 +30,9 @@ public class FssaiErrorResponse {
     private String message;
     private List<String> details;
     private LocalDateTime timestamp;
+    private Integer retryAfterSeconds;
+    private Integer remainingSends;
+    private Boolean otpLocked;
 
     public FssaiErrorResponse() {
         this.timestamp = LocalDateTime.now();
@@ -55,6 +62,15 @@ public class FssaiErrorResponse {
     public LocalDateTime getTimestamp() { return timestamp; }
     public void setTimestamp(LocalDateTime timestamp) { this.timestamp = timestamp; }
 
+    public Integer getRetryAfterSeconds() { return retryAfterSeconds; }
+    public void setRetryAfterSeconds(Integer retryAfterSeconds) { this.retryAfterSeconds = retryAfterSeconds; }
+
+    public Integer getRemainingSends() { return remainingSends; }
+    public void setRemainingSends(Integer remainingSends) { this.remainingSends = remainingSends; }
+
+    public Boolean getOtpLocked() { return otpLocked; }
+    public void setOtpLocked(Boolean otpLocked) { this.otpLocked = otpLocked; }
+
     public static FssaiErrorResponseBuilder builder() {
         return new FssaiErrorResponseBuilder();
     }
@@ -65,6 +81,9 @@ public class FssaiErrorResponse {
         private String message;
         private List<String> details;
         private LocalDateTime timestamp;
+        private Integer retryAfterSeconds;
+        private Integer remainingSends;
+        private Boolean otpLocked;
 
         FssaiErrorResponseBuilder() {}
 
@@ -73,10 +92,17 @@ public class FssaiErrorResponse {
         public FssaiErrorResponseBuilder message(String message)         { this.message = message; return this; }
         public FssaiErrorResponseBuilder details(List<String> details)  { this.details = details; return this; }
         public FssaiErrorResponseBuilder timestamp(LocalDateTime t)      { this.timestamp = t; return this; }
+        public FssaiErrorResponseBuilder retryAfterSeconds(Integer s)   { this.retryAfterSeconds = s; return this; }
+        public FssaiErrorResponseBuilder remainingSends(Integer s)      { this.remainingSends = s; return this; }
+        public FssaiErrorResponseBuilder otpLocked(Boolean locked)     { this.otpLocked = locked; return this; }
 
         public FssaiErrorResponse build() {
             if (timestamp == null) timestamp = LocalDateTime.now();
-            return new FssaiErrorResponse(status, code, message, details, timestamp);
+            FssaiErrorResponse response = new FssaiErrorResponse(status, code, message, details, timestamp);
+            response.setRetryAfterSeconds(retryAfterSeconds);
+            response.setRemainingSends(remainingSends);
+            response.setOtpLocked(otpLocked);
+            return response;
         }
     }
 }

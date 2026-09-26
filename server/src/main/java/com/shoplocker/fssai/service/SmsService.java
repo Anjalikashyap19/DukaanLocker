@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shoplocker.fssai.config.Fast2SmsConfig;
 import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
+import com.shoplocker.fssai.exception.OtpRateLimitedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -12,6 +13,8 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -90,10 +93,7 @@ public class SmsService {
                 int statusCode = node != null ? node.path("status_code").asInt(0) : 0;
                 String f2sMessage = node != null ? node.path("message").asText("") : "";
                 log.error("Fast2SMS OTP send rejected: status_code={} message={}", statusCode, f2sMessage);
-                throw new FssaiException(
-                        "We couldn't send the OTP right now. Fast2SMS error " + statusCode
-                                + (f2sMessage.isBlank() ? "." : ": " + f2sMessage + "."),
-                        FailureCode.SMS_FAILURE);
+                throw toSendException(statusCode, f2sMessage);
             }
 
             log.info("Fast2SMS OTP sent to {} (request_id={})",
@@ -111,5 +111,36 @@ public class SmsService {
     private static String mask(String mobile) {
         if (mobile == null || mobile.length() < 4) return "****";
         return "*******" + mobile.substring(mobile.length() - 3);
+    }
+
+    /**
+     * Matches the gateway's own resend-throttle wording, e.g.
+     * "Please wait 8 seconds before requesting a new OTP."
+     */
+    private static final Pattern RESEND_WAIT_PATTERN =
+            Pattern.compile("please wait (\\d+) second", Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Converts a gateway rejection into the most accurate exception we can express.
+     *
+     * <p>Fast2SMS enforces its own per-mobile resend cooldown and rejects an overlapping
+     * send with a 400. Our own cooldown window opens a moment before the gateway sees the
+     * request, so a user tapping near the end of the window can legitimately clear our
+     * check and still be rejected by the gateway. Reporting that as a 502
+     * {@code sms_failure} would tell the user "something went wrong, try again" with no
+     * countdown, which is both wrong and unactionable — so it is translated into the same
+     * 429 the rate limiter emits, letting the client start a timer.</p>
+     */
+    private static RuntimeException toSendException(int statusCode, String f2sMessage) {
+        Matcher matcher = RESEND_WAIT_PATTERN.matcher(f2sMessage == null ? "" : f2sMessage);
+        if (statusCode == 400 && matcher.find()) {
+            int wait = Integer.parseInt(matcher.group(1));
+            return new OtpRateLimitedException(
+                    "Please wait " + wait + " seconds before requesting a new OTP.", wait, 0, false);
+        }
+        return new FssaiException(
+                "We couldn't send the OTP right now. Fast2SMS error " + statusCode
+                        + (f2sMessage == null || f2sMessage.isBlank() ? "." : ": " + f2sMessage + "."),
+                FailureCode.SMS_FAILURE);
     }
 }

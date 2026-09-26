@@ -180,7 +180,11 @@ data class ErrorResponse(
     @SerializedName("code") val code: String? = null,
     @SerializedName("message") val message: String? = null,
     @SerializedName("details") val details: List<String>? = null,
-    @SerializedName("timestamp") val timestamp: String? = null
+    @SerializedName("timestamp") val timestamp: String? = null,
+    // Rate-limit metadata; absent on every non-throttled error.
+    @SerializedName("retryAfterSeconds") val retryAfterSeconds: Int? = null,
+    @SerializedName("remainingSends") val remainingSends: Int? = null,
+    @SerializedName("otpLocked") val otpLocked: Boolean? = null
 )
 
 // ── Udyam (MSME) Verification ──────────────────────────────────────────
@@ -246,6 +250,74 @@ fun <T> retrofit2.Response<T>.parseErrorMessage(): String {
     return message()
 }
 
+/**
+ * Rate-limit state carried by the OTP send endpoint.
+ *
+ * @property retryAfterSeconds seconds until another send is permitted; 0 when the
+ *           response carried no limit metadata (e.g. the wrong-OTP ceiling, which is
+ *           a different limit entirely and is not surfaced as a resend timer).
+ * @property remainingSends sends left before the hard lockout; 0 while locked.
+ * @property locked true for the 10-minute lockout, false for the 2-minute resend
+ *           cooldown. Sent explicitly by the server so the UI can use different copy
+ *           and styling for each state.
+ */
+data class RateLimitInfo(
+    val retryAfterSeconds: Int = 0,
+    val remainingSends: Int = 0,
+    val locked: Boolean = false
+)
+
+/**
+ * Extracts rate-limit metadata from a throttled response, falling back to a plain
+ * message parse. Returns null when the failure is not a rate limit, so callers can
+ * tell "wait" apart from "this was never going to work".
+ */
+fun <T> retrofit2.Response<T>.parseRateLimit(): RateLimitInfo? {
+    if (code() != 429) return null
+    val body = errorBody()?.string() ?: return null
+    return try {
+        val err = sharedGson.fromJson(body, ErrorResponse::class.java)
+        val retry = err.retryAfterSeconds ?: 0
+        if (retry <= 0) null
+        else RateLimitInfo(retry, err.remainingSends ?: 0, err.otpLocked ?: false)
+    } catch (_: Exception) {
+        null
+    }
+}
+
+/**
+ * Parses an error body exactly once into both the human-readable message and the
+ * rate-limit metadata.
+ *
+ * `errorBody()?.string()` drains and closes the underlying stream, so the message and
+ * the limit cannot be read by two separate parse calls — the second one would come back
+ * empty. This reads the body a single time and derives both values from it.
+ */
+fun <T> retrofit2.Response<T>.parseOtpError(): ParsedOtpError {
+    val body = errorBody()?.string()
+    val err = body?.let {
+        try {
+            sharedGson.fromJson(it, ErrorResponse::class.java)
+        } catch (_: Exception) {
+            null
+        }
+    }
+    val parsedMessage = err?.message?.takeIf { it.isNotBlank() } ?: message()
+    val limit = if (code() == 429) {
+        val retry = err?.retryAfterSeconds ?: 0
+        if (retry > 0) RateLimitInfo(retry, err?.remainingSends ?: 0, err?.otpLocked ?: false) else null
+    } else {
+        null
+    }
+    return ParsedOtpError(parsedMessage, limit)
+}
+
+/** An error body reduced to the two things the OTP screen needs to react to. */
+data class ParsedOtpError(
+    val message: String,
+    val limit: RateLimitInfo?
+)
+
 // ── MSME (Udyam) number + OTP login ───────────────────────────────────────
 
 data class MsmeOtpRequest(
@@ -259,7 +331,10 @@ data class MsmeOtpVerifyRequest(
 
 data class MsmeOtpResponse(
     @SerializedName("requestId") val requestId: String?,
-    @SerializedName("message") val message: String?
+    @SerializedName("message") val message: String?,
+    // Rate-limit state so the UI can run a countdown instead of guessing.
+    @SerializedName("resendAvailableInSeconds") val resendAvailableInSeconds: Int? = null,
+    @SerializedName("remainingSends") val remainingSends: Int? = null
 )
 
 // ── GST Verification ─────────────────────────────────────────────────────

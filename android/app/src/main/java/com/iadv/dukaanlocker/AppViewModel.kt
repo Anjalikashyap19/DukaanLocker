@@ -563,17 +563,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun msmeLoginRequest(msmeNumber: String, onResult: (Boolean, String?) -> Unit) {
+    /**
+     * Requests an OTP for the given Udyam number.
+     *
+     * [onResult] receives the outcome plus the server's rate-limit state, so the caller
+     * can start a countdown. On a 429 the state describes the retry wait; on success it
+     * carries the post-send cooldown and how many sends remain before the lockout.
+     */
+    fun msmeLoginRequest(
+        msmeNumber: String,
+        onResult: (Boolean, String?, RateLimitInfo?) -> Unit
+    ) {
         viewModelScope.launch {
             try {
                 val response = api.msmeLoginRequest(MsmeOtpRequest(msmeNumber = msmeNumber))
                 if (response.isSuccessful) {
-                    onResult(true, response.body()?.message)
+                    val body = response.body()
+                    onResult(
+                        true,
+                        body?.message,
+                        RateLimitInfo(
+                            retryAfterSeconds = body?.resendAvailableInSeconds ?: 0,
+                            remainingSends = body?.remainingSends ?: 0
+                        )
+                    )
                 } else {
-                    onResult(false, response.parseErrorMessage())
+                    val parsed = response.parseOtpError()
+                    onResult(false, parsed.message, parsed.limit)
                 }
             } catch (e: Exception) {
-                onResult(false, "Network error: ${e.message}")
+                onResult(false, "Network error: ${e.message}", null)
             }
         }
     }

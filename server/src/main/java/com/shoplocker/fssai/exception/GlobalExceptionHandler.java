@@ -31,6 +31,27 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    /**
+     * Rate-limit rejections. Handled before {@link FssaiException} so the structured
+     * retry metadata survives into the body; the status/code are identical, only the
+     * extra fields differ.
+     */
+    @ExceptionHandler(OtpRateLimitedException.class)
+    public ResponseEntity<FssaiErrorResponse> handleOtpRateLimited(OtpRateLimitedException ex) {
+        log.info("Rate limited: code={} status={} retryAfter={}s message=\"{}\"",
+                ex.getFailureCode().getCode(), ex.getFailureCode().getHttpStatus().value(),
+                ex.getRetryAfterSeconds(), ex.getMessage());
+
+        FssaiErrorResponse.FssaiErrorResponseBuilder builder = FssaiErrorResponse.builder()
+                .status(ex.getFailureCode().getHttpStatus().value())
+                .code(ex.getFailureCode().getCode())
+                .message(ex.getMessage())
+                .details(ex.getDetails());
+        ex.enrich(builder);
+
+        return ResponseEntity.status(ex.getFailureCode().getHttpStatus()).body(builder.build());
+    }
+
     @ExceptionHandler(FssaiException.class)
     public ResponseEntity<FssaiErrorResponse> handleFssaiException(FssaiException ex) {
         FailureCode failureCode = ex.getFailureCode();

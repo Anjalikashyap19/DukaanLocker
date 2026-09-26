@@ -900,7 +900,11 @@ public class AuthService {
         String message = result.devOtp() != null
                 ? "DEV MODE — your OTP is " + result.devOtp()
                 : "OTP sent to your registered mobile number.";
-        return new MsmeOtpResponse(result.requestId(), message);
+
+        MsmeOtpResponse response = new MsmeOtpResponse(result.requestId(), message);
+        response.setResendAvailableInSeconds(result.resendAvailableInSeconds());
+        response.setRemainingSends(result.remainingSends());
+        return response;
     }
 
     /**
@@ -935,6 +939,9 @@ public class AuthService {
         }
 
         loginAttemptService.reset(lockKey);
+        // A completed login clears the send budget, so a legitimate owner is not
+        // left locked out by their own earlier resends.
+        otpService.clearRateLimit(user.getMobileNumber());
         String token = jwtService.generateToken(user);
         createLoginWelcomeNotification(user);
         log.info("MSME login successful: userId={} udyam={}", user.getId(), udyamNumber);

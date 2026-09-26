@@ -14,6 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.iadv.dukaanlocker.api.RateLimitInfo
 import com.iadv.dukaanlocker.ui.components.LauncherLogo
 import com.iadv.dukaanlocker.ui.strings.AppStrings
 import com.iadv.dukaanlocker.ui.strings.LocalAppLanguage
@@ -26,7 +27,7 @@ fun LoginScreen(
     onRegister: (name: String, email: String, password: String, mobile: String, onDone: () -> Unit) -> Unit,
     onRegisterWithMsme: (msmeNumber: String, mobile: String, sessionId: String, captchaText: String, onDone: () -> Unit) -> Unit = { _, _, _, _, onDone -> onDone() },
     onInitMsmeCaptcha: (onResult: (sessionId: String, captchaImage: String) -> Unit) -> Unit = { onResult -> onResult("", "") },
-    onMsmeLoginRequest: (msmeNumber: String, onResult: (success: Boolean, message: String?) -> Unit) -> Unit = { _, _ -> },
+    onMsmeLoginRequest: (msmeNumber: String, onResult: (success: Boolean, message: String?, limit: RateLimitInfo?) -> Unit) -> Unit = { _, _ -> },
     onMsmeLoginVerify: (msmeNumber: String, otp: String, onResult: (success: Boolean, message: String?) -> Unit) -> Unit = { _, _, _ -> },
     onGoogleSignIn: () -> Unit = {},
     onBackToMain: () -> Unit,

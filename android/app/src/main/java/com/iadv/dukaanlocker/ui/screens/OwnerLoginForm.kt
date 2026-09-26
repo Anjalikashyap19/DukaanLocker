@@ -31,6 +31,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.iadv.dukaanlocker.api.RateLimitInfo
 import com.iadv.dukaanlocker.ui.strings.AppStrings
 import com.iadv.dukaanlocker.ui.theme.AppColors
 
@@ -45,7 +46,7 @@ fun OwnerLoginForm(
     isChecking: Boolean,
     onBack: () -> Unit,
     onLogin: () -> Unit,
-    onMsmeLoginRequest: (msmeNumber: String, onResult: (Boolean, String?) -> Unit) -> Unit = { _, _ -> },
+    onMsmeLoginRequest: (msmeNumber: String, onResult: (Boolean, String?, RateLimitInfo?) -> Unit) -> Unit = { _, _ -> },
     onMsmeLoginVerify: (msmeNumber: String, otp: String, onResult: (Boolean, String?) -> Unit) -> Unit = { _, _, _ -> }
 ) {
     var msmeMode by remember { mutableStateOf(false) }
