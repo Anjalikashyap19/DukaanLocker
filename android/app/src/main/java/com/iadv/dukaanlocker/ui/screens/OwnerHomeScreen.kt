@@ -118,11 +118,11 @@ fun OwnerHomeScreen(
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
-                                 Text("${AppStrings.get(lang, "Welcome,")} ${user.name}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                                 Text("${AppStrings.get(lang, "Welcome,")} ${user.name.take(7)}${if (user.name.length > 7) "..." else ""}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                  Text(
                                      if (businesses.size == 1) "1 ${AppStrings.get(lang, "Business")} • ${AppStrings.get(lang, "Owner")}"
                                      else "${businesses.size} ${AppStrings.get(lang, "Businesses")} • ${AppStrings.get(lang, "Owner")}",
-                                     fontSize = 12.sp, color = colors.textSecondary
+                                     fontSize = 12.sp, color = colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis
                                  )
                              }
                         }

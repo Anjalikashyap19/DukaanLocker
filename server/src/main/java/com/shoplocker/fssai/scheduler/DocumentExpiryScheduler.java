@@ -8,8 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.*;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
@@ -73,7 +72,7 @@ public class DocumentExpiryScheduler {
         // Check if we already sent an expired notification today
         Optional<Notification> existing = notificationService.getNotifications(ownerId).stream()
                 .filter(n -> "EXPIRED".equals(n.getType()) && doc.getId().equals(n.getReferenceId()))
-                .filter(n -> n.getCreatedAt().toLocalDate().equals(LocalDate.now()))
+                .filter(n -> n.getCreatedAt().atZone(ZoneId.systemDefault()).toLocalDate().equals(LocalDate.now()))
                 .findFirst();
 
         if (existing.isPresent()) return;
@@ -101,7 +100,7 @@ public class DocumentExpiryScheduler {
         // Check if we already sent this notification
         Optional<Notification> existing = notificationService.getNotifications(ownerId).stream()
                 .filter(n -> "EXPIRING_SOON".equals(n.getType()) && doc.getId().equals(n.getReferenceId()))
-                .filter(n -> n.getCreatedAt().toLocalDate().equals(LocalDate.now()))
+                .filter(n -> n.getCreatedAt().atZone(ZoneId.systemDefault()).toLocalDate().equals(LocalDate.now()))
                 .findFirst();
 
         if (existing.isPresent()) return;

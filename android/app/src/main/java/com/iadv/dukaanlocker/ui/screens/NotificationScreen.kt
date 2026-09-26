@@ -1,6 +1,7 @@
 package com.iadv.dukaanlocker.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,7 +12,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,9 +31,16 @@ import java.time.temporal.ChronoUnit
 fun NotificationScreen(
     notifications: List<NotificationItem>,
     onBack: () -> Unit,
+    onClearAll: () -> Unit,
+    onNotificationClick: (NotificationItem) -> Unit,
     onMarkAllRead: () -> Unit
 ) {
     val colors = LocalAppColors.current
+
+    // Auto-mark all as read when screen opens
+    LaunchedEffect(Unit) {
+        onMarkAllRead()
+    }
 
     Scaffold(
         topBar = {
@@ -46,8 +54,10 @@ fun NotificationScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = onMarkAllRead) {
-                        Text("Mark all read", color = colors.primary)
+                    if (notifications.isNotEmpty()) {
+                        TextButton(onClick = onClearAll) {
+                            Text("Clear all", color = colors.primary)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -90,7 +100,11 @@ fun NotificationScreen(
                 contentPadding = PaddingValues(vertical = 12.dp)
             ) {
                 items(notifications) { notification ->
-                    NotificationCard(notification = notification, colors = colors)
+                    NotificationCard(
+                        notification = notification,
+                        colors = colors,
+                        onClick = { onNotificationClick(notification) }
+                    )
                 }
             }
         }
@@ -98,7 +112,7 @@ fun NotificationScreen(
 }
 
 @Composable
-private fun NotificationCard(notification: NotificationItem, colors: com.iadv.dukaanlocker.ui.theme.AppColors) {
+private fun NotificationCard(notification: NotificationItem, colors: com.iadv.dukaanlocker.ui.theme.AppColors, onClick: () -> Unit) {
     val icon = when (notification.type) {
         "WELCOME" -> Icons.Default.CheckCircle
         "EXPIRING_SOON" -> Icons.Default.Warning
@@ -120,7 +134,9 @@ private fun NotificationCard(notification: NotificationItem, colors: com.iadv.du
     val bgAlpha = if (notification.isRead) 0.3f else 0.6f
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = colors.cardBg.copy(alpha = bgAlpha)
         ),
@@ -185,14 +201,15 @@ private fun NotificationCard(notification: NotificationItem, colors: com.iadv.du
 
 private fun formatTimeAgo(createdAt: String): String {
     return try {
-        val dateTime = LocalDateTime.parse(createdAt.replace("Z", ""), DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-        val now = LocalDateTime.now()
-        val minutes = ChronoUnit.MINUTES.between(dateTime, now)
+        // Parse as UTC Instant (server now stores timestamps as UTC)
+        val instant = java.time.Instant.parse(createdAt)
+        val now = java.time.Instant.now()
+        val seconds = java.time.Duration.between(instant, now).seconds
         when {
-            minutes < 1 -> "Just now"
-            minutes < 60 -> "${minutes}m ago"
-            minutes < 1440 -> "${minutes / 60}h ago"
-            else -> "${minutes / 1440}d ago"
+            seconds < 60 -> "Just now"
+            seconds < 3600 -> "${seconds / 60}m ago"
+            seconds < 86400 -> "${seconds / 3600}h ago"
+            else -> "${seconds / 86400}d ago"
         }
     } catch (e: Exception) {
         ""

@@ -61,7 +61,9 @@ data class AppUiState(
     val unreadNotificationCount: Long = 0,
     val isLoadingNotifications: Boolean = false,
     val showCustomDocDialog: Boolean = false,
-    val customDocShopId: Long? = null
+    val customDocShopId: Long? = null,
+    val selectedBusinessIdForDocs: String? = null,
+    val targetMissingDocumentType: String? = null
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -142,6 +144,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
         }
+    }
+
+    fun setSelectedBusinessForDocs(businessId: String?) {
+        updateState { it.copy(selectedBusinessIdForDocs = businessId) }
+    }
+
+    fun setTargetMissingDocument(documentType: String) {
+        updateState { it.copy(targetMissingDocumentType = documentType) }
+    }
+
+    fun clearTargetMissingDocument() {
+        updateState { it.copy(targetMissingDocumentType = null) }
     }
 
     fun goBackTab() {
@@ -1076,6 +1090,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } catch (e: Exception) {
                 android.util.Log.e("Notifications", "Failed to mark as read: ${e.message}")
+            }
+        }
+    }
+
+    fun clearNotifications() {
+        viewModelScope.launch {
+            try {
+                api.clearNotifications()
+                updateState { it.copy(notifications = emptyList(), unreadNotificationCount = 0) }
+            } catch (e: Exception) {
+                android.util.Log.e("Notifications", "Failed to clear: ${e.message}")
             }
         }
     }

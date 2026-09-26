@@ -231,7 +231,7 @@ fun MsmeLoginForm(
                         }
                     }
                 },
-                enabled = !isChecking && !isWaiting,
+                enabled = !isChecking,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = colors.primary,
                     contentColor = colors.background,
@@ -277,7 +277,7 @@ fun MsmeLoginForm(
                             }
                         }
                     },
-                    enabled = !isChecking && !isWaiting,
+enabled = !isChecking && !isWaiting,
                     border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.5f)),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = colors.primary,

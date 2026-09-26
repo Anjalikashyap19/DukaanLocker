@@ -215,14 +215,26 @@ fun DukaanLockerApp(
                         val handleLogout: () -> Unit = { vm.logout() }
 
                         val docsTabContent: @Composable () -> Unit = {
+                            val selectedBusinessId = state.selectedBusinessIdForDocs
+                            val filteredDocuments = if (selectedBusinessId != null) {
+                                vm.toDocumentItems(state.shopDocuments).filter { it.businessId == selectedBusinessId }
+                            } else {
+                                vm.toDocumentItems(state.shopDocuments)
+                            }
+                            val filteredBusinesses = if (selectedBusinessId != null) {
+                                state.shops.filter { it.id.toString() == selectedBusinessId }
+                            } else {
+                                state.shops
+                            }
                             DocsScreen(
-                                documents = vm.toDocumentItems(state.shopDocuments),
+                                documents = filteredDocuments,
                                 onFetchDoc = { doc -> vm.showFetchDialog(doc) },
                                 onUploadDoc = { doc -> vm.updateState { s -> s.copy(pendingUploadDoc = doc) } },
                                 onViewDoc = { doc -> vm.openDocument(doc) },
-                                businesses = state.shops,
+                                businesses = filteredBusinesses,
                                 isLoadingDocuments = state.isLoadingDocuments,
-                                onAddCustomDoc = { shopId -> vm.showCustomDocDialog(shopId.toLongOrNull() ?: return@DocsScreen) }
+                                onAddCustomDoc = { shopId -> vm.showCustomDocDialog(shopId.toLongOrNull() ?: return@DocsScreen) },
+                                targetMissingDocumentType = state.targetMissingDocumentType
                             )
                         }
 
@@ -396,6 +408,23 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                 NotificationScreen(
                                     notifications = state.notifications,
                                     onBack = { vm.goBack() },
+                                    onClearAll = { vm.clearNotifications() },
+                                    onNotificationClick = { notification ->
+                                        if (notification.type == "MISSING_DOCUMENT" && notification.referenceId != null) {
+                                            // Navigate to Docs tab and select the business with missing document
+                                            vm.setBottomTab(BottomTab.Docs)
+                                            // Store the target document type to auto-select it
+                                            notification.metadata?.let { docType ->
+                                                vm.setTargetMissingDocument(docType)
+                                            }
+                                            // Find the business/shop for this document reference and load documents
+                                            val shop = state.shops.find { it.id == notification.referenceId }
+                                            shop?.let { s ->
+                                                vm.loadDocuments(s.id)
+                                                vm.setSelectedBusinessForDocs(s.id.toString())
+                                            }
+                                        }
+                                    },
                                     onMarkAllRead = { vm.markNotificationsRead() }
                                 )
                             }
@@ -496,7 +525,18 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
 
                     // ── Bottom Navigation Bar ──
                     if (state.isLoggedIn && state.viewDocumentId == null && (state.currentScreen is Screen.OwnerHome || state.currentScreen is Screen.ManagerHome)) {
-                        BottomNavBar(currentTab = state.selectedBottomTab, onNavigate = { tab -> vm.setBottomTab(tab) }, isDarkTheme = state.isDarkTheme, showTeam = state.currentUserRole != "MANAGER")
+                        BottomNavBar(
+                            currentTab = state.selectedBottomTab,
+                            onNavigate = { tab ->
+                                if (state.selectedBottomTab == BottomTab.Docs && tab != BottomTab.Docs) {
+                                    vm.setSelectedBusinessForDocs(null)
+                                    vm.clearTargetMissingDocument()
+                                }
+                                vm.setBottomTab(tab)
+                            },
+                            isDarkTheme = state.isDarkTheme,
+                            showTeam = state.currentUserRole != "MANAGER"
+                        )
                     }
                 }
             }

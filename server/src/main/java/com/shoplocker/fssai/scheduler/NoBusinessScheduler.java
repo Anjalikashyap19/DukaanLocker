@@ -9,8 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.*;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
@@ -44,7 +43,7 @@ public class NoBusinessScheduler {
 
             // Skip users registered less than 2 days ago
             if (user.getCreatedAt() == null) continue;
-            long daysSinceRegistration = ChronoUnit.DAYS.between(user.getCreatedAt().toLocalDate(), LocalDate.now());
+            long daysSinceRegistration = ChronoUnit.DAYS.between(user.getCreatedAt().atZone(ZoneId.systemDefault()).toLocalDate(), LocalDate.now());
             if (daysSinceRegistration < 2) continue;
 
             // Check if user has any shops
@@ -54,7 +53,7 @@ public class NoBusinessScheduler {
             // Check if we already sent this notification today
             boolean alreadyNotified = notificationService.getNotifications(user.getId()).stream()
                     .filter(n -> "NO_BUSINESS".equals(n.getType()))
-                    .filter(n -> n.getCreatedAt().toLocalDate().equals(LocalDate.now()))
+                    .filter(n -> n.getCreatedAt().atZone(ZoneId.systemDefault()).toLocalDate().equals(LocalDate.now()))
                     .findFirst()
                     .isPresent();
 
@@ -63,7 +62,7 @@ public class NoBusinessScheduler {
             // Also check if we sent it in the last 7 days (don't spam)
             boolean recentlyNotified = notificationService.getNotifications(user.getId()).stream()
                     .filter(n -> "NO_BUSINESS".equals(n.getType()))
-                    .filter(n -> ChronoUnit.DAYS.between(n.getCreatedAt().toLocalDate(), LocalDate.now()) <= 7)
+                    .filter(n -> ChronoUnit.DAYS.between(n.getCreatedAt().atZone(ZoneId.systemDefault()).toLocalDate(), LocalDate.now()) <= 7)
                     .findFirst()
                     .isPresent();
 

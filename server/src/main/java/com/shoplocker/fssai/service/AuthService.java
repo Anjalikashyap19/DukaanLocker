@@ -245,6 +245,7 @@ public class AuthService {
                 "Welcome back, " + name + "!",
                 "You have successfully logged in to DukaanLocker.",
                 "WELCOME",
+                null,
                 null);
     }
 

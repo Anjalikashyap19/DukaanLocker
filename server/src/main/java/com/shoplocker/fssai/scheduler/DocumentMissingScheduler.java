@@ -11,8 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.*;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -54,7 +53,7 @@ public class DocumentMissingScheduler {
 
         List<Shop> allShops = shopRepository.findAll();
         int notificationsSent = 0;
-        LocalDateTime intervalStart = LocalDateTime.now().minusHours(minIntervalHours);
+        Instant intervalStart = Instant.now().minus(minIntervalHours, ChronoUnit.HOURS);
 
         for (Shop shop : allShops) {
             Long ownerId = shop.getOwner().getId();

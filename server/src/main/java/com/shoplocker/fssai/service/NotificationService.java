@@ -75,7 +75,7 @@ public class NotificationService {
     }
 
     @Transactional
-    public Notification createNotification(Long userId, String title, String body, String type, Long referenceId) {
+    public Notification createNotification(Long userId, String title, String body, String type, Long referenceId, String metadata) {
         Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) {
             log.warn("User not found for notification: {}", userId);
@@ -83,6 +83,7 @@ public class NotificationService {
         }
         User user = userOpt.get();
         Notification notification = new Notification(user, title, body, type, referenceId);
+        notification.setMetadata(metadata);
         notificationRepository.save(notification);
         log.info("Notification created for user {}: {}", userId, title);
         return notification;
@@ -146,7 +147,11 @@ public class NotificationService {
 
     @Transactional
     public void sendPushAndCreateNotification(Long userId, String title, String body, String type, Long referenceId, Map<String, String> data) {
-        createNotification(userId, title, body, type, referenceId);
+        String metadata = null;
+        if (data != null && data.containsKey("documentType")) {
+            metadata = data.get("documentType");
+        }
+        createNotification(userId, title, body, type, referenceId, metadata);
         sendPushNotification(userId, title, body, data);
     }
 

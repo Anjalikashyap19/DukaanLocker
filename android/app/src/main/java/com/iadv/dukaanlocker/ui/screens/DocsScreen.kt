@@ -2,6 +2,7 @@ package com.iadv.dukaanlocker.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -37,13 +38,20 @@ fun DocsScreen(
     onDeleteDoc: (DocumentItem) -> Unit = {},
     businesses: List<ShopResponse> = emptyList(),
     isLoadingDocuments: Boolean = false,
-    onAddCustomDoc: (String) -> Unit = {}
+    onAddCustomDoc: (String) -> Unit = {},
+    targetMissingDocumentType: String? = null
 ) {
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
     val shopNameById = businesses.associate { it.id.toString() to it.shopName }
     val grouped = documents.groupBy { it.type }
     val orderedTypes = grouped.keys.sortedBy { grouped[it]?.first()?.name ?: it }
+
+    // Auto-expand the section for the target missing document type
+    var expandedType by remember { mutableStateOf<String?>(targetMissingDocumentType) }
+    LaunchedEffect(targetMissingDocumentType) {
+        expandedType = targetMissingDocumentType
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(colors.background)) {
         Surface(
@@ -99,20 +107,24 @@ fun DocsScreen(
                 contentPadding = PaddingValues(vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(orderedTypes) { type ->
-                    val docs = grouped[type] ?: emptyList()
-                     DocTypeSection(
-                         title = docs.first().name,
-                         count = docs.size,
-                         docs = docs,
-                         shopNameById = shopNameById,
-                         lang = lang,
-                         onFetchDoc = onFetchDoc,
-                         onUploadDoc = onUploadDoc,
-                         onViewDoc = onViewDoc,
-                         onDeleteDoc = onDeleteDoc
-                     )
-                }
+items(orderedTypes) { type ->
+                        val docs = grouped[type] ?: emptyList()
+                        val isTargetMissing = targetMissingDocumentType != null && type == targetMissingDocumentType
+                         DocTypeSection(
+                            title = docs.first().name,
+                            count = docs.size,
+                            docs = docs,
+                            shopNameById = shopNameById,
+                            lang = lang,
+                            onFetchDoc = onFetchDoc,
+                            onUploadDoc = onUploadDoc,
+                            onViewDoc = onViewDoc,
+                            onDeleteDoc = onDeleteDoc,
+                            isExpanded = expandedType == type,
+                            onExpandChange = { expandedType = if (expandedType == type) null else type },
+                            isTargetMissing = isTargetMissing
+                        )
+                    }
                 if (businesses.isNotEmpty()) {
                     item {
                         OutlinedButton(
@@ -143,43 +155,60 @@ fun DocTypeSection(
     onFetchDoc: (DocumentItem) -> Unit,
     onUploadDoc: (DocumentItem) -> Unit,
     onViewDoc: (DocumentItem) -> Unit,
-    onDeleteDoc: (DocumentItem) -> Unit = {}
+    onDeleteDoc: (DocumentItem) -> Unit = {},
+    isExpanded: Boolean,
+    onExpandChange: (Boolean) -> Unit,
+    isTargetMissing: Boolean = false
 ) {
     val colors = LocalAppColors.current
-    var expanded by remember { mutableStateOf(false) }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-        border = BorderStroke(1.dp, colors.border),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                if (isTargetMissing) BorderStroke(2.dp, colors.error) else BorderStroke(1.dp, colors.border)
+            ),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isTargetMissing) colors.error.copy(alpha = 0.05f) else colors.cardBg
+        ),
         shape = RoundedCornerShape(14.dp)
     ) {
         Column {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { expanded = !expanded }
+                    .clickable { onExpandChange(!isExpanded) }
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Description, contentDescription = null, tint = colors.primary, modifier = Modifier.size(22.dp))
+                Icon(
+                    Icons.Default.Description,
+                    contentDescription = null,
+                    tint = if (isTargetMissing) colors.error else colors.primary,
+                    modifier = Modifier.size(22.dp)
+                )
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                     Text(
-                         "$count ${AppStrings.get(lang, "document")}${if (count == 1) "" else "s"}",
-                         fontSize = 12.sp,
-                         color = colors.textSecondary
-                     )
-                 }
-                 Icon(
-                     if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                     contentDescription = if (expanded) AppStrings.get(lang, "Collapse") else AppStrings.get(lang, "Expand"),
+                    Text(
+                        title,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isTargetMissing) colors.error else colors.textPrimary
+                    )
+                    Text(
+                        "$count ${AppStrings.get(lang, "document")}${if (count == 1) "" else "s"}",
+                        fontSize = 12.sp,
+                        color = colors.textSecondary
+                    )
+                }
+                Icon(
+                    if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (isExpanded) AppStrings.get(lang, "Collapse") else AppStrings.get(lang, "Expand"),
                     tint = colors.textSecondary
                 )
             }
 
-            if (expanded) {
+            if (isExpanded) {
                 Column(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)

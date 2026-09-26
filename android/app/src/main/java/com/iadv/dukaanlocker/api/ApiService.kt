@@ -141,6 +141,9 @@ interface ApiService {
     @PUT("api/notifications/mark-read")
     suspend fun markNotificationsAsRead(): Response<Map<String, String>>
 
+    @DELETE("api/notifications")
+    suspend fun clearNotifications(): Response<Map<String, String>>
+
     @POST("api/device-token")
     suspend fun registerDeviceToken(@Body body: Map<String, String>): Response<Map<String, String>>
 

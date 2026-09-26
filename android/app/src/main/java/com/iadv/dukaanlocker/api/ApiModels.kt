@@ -377,6 +377,7 @@ data class NotificationItem(
     @SerializedName("body") val body: String,
     @SerializedName("type") val type: String,
     @SerializedName("referenceId") val referenceId: Long?,
+    @SerializedName("metadata") val metadata: String?,
     @SerializedName("read") val isRead: Boolean,
     @SerializedName("createdAt") val createdAt: String?
 )
