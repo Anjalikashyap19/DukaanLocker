@@ -9,7 +9,6 @@ import com.shoplocker.fssai.service.RequiredDocumentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -50,7 +49,6 @@ public class DocumentMissingScheduler {
         this.notificationRepository = notificationRepository;
     }
 
-    @Scheduled(trigger = "randomTimeTrigger")
     public void checkMissingDocuments() {
         log.info("Running missing document check scheduler...");
 

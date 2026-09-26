@@ -6,7 +6,6 @@ import com.shoplocker.fssai.repository.ShopRepository;
 import com.shoplocker.fssai.service.NotificationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -34,7 +33,6 @@ public class DocumentExpiryScheduler {
         this.notificationService = notificationService;
     }
 
-    @Scheduled(trigger = "randomTimeTrigger")
     public void checkExpiringDocuments() {
         log.info("Running document expiry check scheduler...");
 

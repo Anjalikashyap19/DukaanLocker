@@ -7,7 +7,6 @@ import com.shoplocker.fssai.repository.UserRepository;
 import com.shoplocker.fssai.service.NotificationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -33,7 +32,6 @@ public class NoBusinessScheduler {
         this.notificationService = notificationService;
     }
 
-    @Scheduled(trigger = "randomTimeTrigger")
     public void checkUsersWithoutBusiness() {
         log.info("Running no-business check scheduler...");
 
