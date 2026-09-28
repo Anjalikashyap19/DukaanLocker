@@ -1097,12 +1097,57 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun clearNotifications() {
         viewModelScope.launch {
             try {
-                api.clearNotifications()
+                api.moveToBin()
                 updateState { it.copy(notifications = emptyList(), unreadNotificationCount = 0) }
             } catch (e: Exception) {
-                android.util.Log.e("Notifications", "Failed to clear: ${e.message}")
+                android.util.Log.e("Notifications", "Failed to move to bin: ${e.message}")
             }
         }
+    }
+
+    fun permanentDeleteAll() {
+        viewModelScope.launch {
+            try {
+                api.permanentDelete()
+                // Clear local state
+                updateState { it.copy(notifications = emptyList(), unreadNotificationCount = 0) }
+            } catch (e: Exception) {
+                android.util.Log.e("Notifications", "Failed to permanently delete: ${e.message}")
+            }
+        }
+    }
+
+    // Show popup for moving notification to bin
+    var showBinPopup by remember { mutableStateOf(false) }
+    var selectedNotificationForBin by remember { mutableStateOf<NotificationItem?>(null) }
+
+    fun showBinPopup(notification: NotificationItem) {
+        selectedNotificationForBin = notification
+        showBinPopup = true
+    }
+
+    fun confirmMoveToBin() {
+        viewModelScope.launch {
+            try {
+                if (selectedNotificationForBin != null) {
+                    // Move single notification to bin
+                    api.moveToBin()
+                } else {
+                    // Move all to bin
+                    api.moveToBin()
+                }
+                loadNotifications()
+                selectedNotificationForBin = null
+                showBinPopup = false
+            } catch (e: Exception) {
+                android.util.Log.e("Notifications", "Failed to move to bin: ${e.message}")
+            }
+        }
+    }
+
+    fun cancelBinPopup() {
+        selectedNotificationForBin = null
+        showBinPopup = false
     }
 
     fun registerDeviceToken(token: String) {

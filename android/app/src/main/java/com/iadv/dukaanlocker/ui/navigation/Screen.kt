@@ -14,6 +14,7 @@ sealed class Screen(val route: String) {
     data object OwnerHome : Screen("owner_home")
     data object ManagerHome : Screen("manager_home")
     data object Notifications : Screen("notifications")
+    data object Bin : Screen("bin")
 }
 
 /**

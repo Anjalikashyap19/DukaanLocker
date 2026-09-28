@@ -171,6 +171,16 @@ public class NotificationService {
     }
 
     @Transactional
+    public void moveNotificationsToBin(Long userId) {
+        notificationRepository.moveNotificationsToBin(userId);
+    }
+
+    @Transactional
+    public void permanentDeleteNotifications(Long userId) {
+        notificationRepository.permanentDeleteNotifications(userId);
+    }
+
+    @Transactional
     public void saveDeviceToken(Long userId, String token, String platform) {
         saveDeviceToken(userId, token, platform, false);
     }

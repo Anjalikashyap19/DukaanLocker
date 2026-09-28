@@ -138,8 +138,14 @@ interface ApiService {
     @GET("api/notifications/unread-count")
     suspend fun getUnreadNotificationCount(): Response<UnreadCountResponse>
 
-    @PUT("api/notifications/mark-read")
+@PUT("api/notifications/mark-read")
     suspend fun markNotificationsAsRead(): Response<Map<String, String>>
+
+    @PUT("api/notifications/move-to-bin")
+    suspend fun moveToBin(): Response<Map<String, String>>
+
+    @DELETE("api/notifications/permanent-delete")
+    suspend fun permanentDelete(): Response<Map<String, String>>
 
     @DELETE("api/notifications")
     suspend fun clearNotifications(): Response<Map<String, String>>

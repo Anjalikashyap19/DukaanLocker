@@ -33,6 +33,9 @@ public class Notification {
     @Column(name = "is_read", nullable = false)
     private boolean isRead = false;
 
+    @Column(name = "is_in_bin", nullable = false, columnDefinition = "boolean default false")
+    private boolean isInBin = false;
+
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
 

@@ -48,4 +48,20 @@ public class NotificationController {
         notificationService.markAllAsRead(user.getId());
         return ResponseEntity.ok(Map.of("message", "All notifications marked as read"));
     }
+
+    @PutMapping("/move-to-bin")
+    @Operation(summary = "Move all notifications to bin (soft delete)")
+    public ResponseEntity<?> moveToBin(Authentication authentication) {
+        User user = shopAccessService.getAuthenticatedUser(authentication);
+        notificationService.moveNotificationsToBin(user.getId());
+        return ResponseEntity.ok(Map.of("message", "All notifications moved to bin"));
+    }
+
+    @DeleteMapping("/permanent-delete")
+    @Operation(summary = "Permanently delete all notifications from bin")
+    public ResponseEntity<?> permanentDelete(Authentication authentication) {
+        User user = shopAccessService.getAuthenticatedUser(authentication);
+        notificationService.permanentDeleteNotifications(user.getId());
+        return ResponseEntity.ok(Map.of("message", "All notifications permanently deleted"));
+    }
 }

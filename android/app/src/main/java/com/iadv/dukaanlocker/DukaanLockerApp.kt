@@ -405,10 +405,11 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                             }
 
                             is Screen.Notifications -> {
+                                var binConfirm by remember { mutableStateOf(false) }
                                 NotificationScreen(
                                     notifications = state.notifications,
                                     onBack = { vm.goBack() },
-                                    onClearAll = { vm.clearNotifications() },
+                                    onClearAll = { vm.moveToBin() },
                                     onNotificationClick = { notification ->
                                         if (notification.type == "MISSING_DOCUMENT" && notification.referenceId != null) {
                                             // Navigate to Docs tab and select the business with missing document
@@ -425,8 +426,50 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                             }
                                         }
                                     },
+                                    onNotificationLongPress = { notification ->
+                                        // Show "Move to bin" popup on long press
+                                        vm.showBinPopup(notification)
+                                    },
                                     onMarkAllRead = { vm.markNotificationsRead() }
                                 )
+                                // Bin confirmation dialog
+                                if (binConfirm) {
+                                    AlertDialog(
+                                        onDismissRequest = { binConfirm = false },
+                                        properties = DialogProperties(
+                                            confirmButtonText = "Move to Bin",
+                                            cancelButtonText = "Cancel"
+                                        )
+                                    ) {
+                                        Text("All your notifications will move to bin. Are you sure?")
+                                    }
+                                }
+                            }
+                        is Screen.Bin -> {
+                            var deleteConfirm by remember { mutableStateOf(false) }
+                            BinScreen(
+                                onBack = { vm.setScreen(Screen.Notifications) },
+                                notifications = state.notifications?.filter { it.isInBin == true } ?: emptyList(),
+                                onDeletePermanent = {
+                                    deleteConfirm = true
+                                },
+                                onRestore = { notification ->
+                                    // Restore notification from bin
+                                    vm.moveToBin()
+                                    vm.loadNotifications()
+                                }
+                            )
+                            // Delete permanently confirmation
+                            if (deleteConfirm) {
+                                AlertDialog(
+                                    onDismissRequest { deleteConfirm = false },
+                                    properties = DialogProperties(
+                                        confirmButtonText = "Delete Permanently",
+                                        cancelButtonText = "Cancel"
+                                    )
+                                ) {
+                                    Text("Are you sure you want to delete all notifications permanently?")
+                                }
                             }
                         }
 

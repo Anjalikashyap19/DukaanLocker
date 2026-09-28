@@ -7,11 +7,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,27 +26,24 @@ import java.time.temporal.ChronoUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotificationScreen(
-    notifications: List<NotificationItem>,
+fun BinScreen(
     onBack: () -> Unit,
-    onClearAll: () -> Unit,
-    onNotificationClick: (NotificationItem) -> Unit,
-    onMarkAllRead: () -> Unit,
-    onNotificationLongPress: (NotificationItem) -> Unit
+    notifications: List<NotificationItem>,
+    onDeletePermanent: () -> Unit,
+    onRestore: (NotificationItem) -> Unit
 ) {
     val colors = LocalAppColors.current
-    val showBinOption by remember { mutableStateOf(false) }
 
-    // Auto-mark all as read when screen opens
+    // Auto-mark as read when screen opens
     LaunchedEffect(Unit) {
-        onMarkAllRead()
+        // Optional: mark bin notifications as read
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Text("Notifications", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Text("Bin", fontWeight = FontWeight.Bold, fontSize = 20.sp)
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -58,25 +52,10 @@ fun NotificationScreen(
                 },
                 actions = {
                     if (notifications.isNotEmpty()) {
-                        if (showBinOption) {
-                            // Show "Move to Bin" action when bin mode is active
-                            OutlinedButton(
-                                onClick = {
-                                    // This will be handled by the ViewModel - move all to bin
-                                    onClearAll()
-                                }
-                            ) {
-                                Text("Move to bin", color = Color.Red)
-                            }
-                        } else {
-                            // Show "Clear all" button normally
-                            TextButton(onClick = {
-                                // Show confirmation before moving to bin
-                                // The actual bin move happens after confirmation in ViewModel
-                                onClearAll()
-                            }) {
-                                Text("Clear all", color = colors.primary)
-                            }
+                        OutlinedButton(
+                            onClick = { onDeletePermanent() }
+                        ) {
+                            Text("Delete permanently", color = Color.Red)
                         }
                     }
                 },
@@ -104,9 +83,15 @@ fun NotificationScreen(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        "No notifications yet",
+                        "Bin is empty",
                         fontSize = 16.sp,
                         color = colors.textSecondary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "No notifications in bin",
+                        fontSize = 14.sp,
+                        color = colors.textSecondary.copy(alpha = 0.7f)
                     )
                 }
             }
@@ -120,11 +105,10 @@ fun NotificationScreen(
                 contentPadding = PaddingValues(vertical = 12.dp)
             ) {
                 items(notifications) { notification ->
-                    NotificationCard(
+                    BinNotificationCard(
                         notification = notification,
                         colors = colors,
-                        onClick = { onNotificationClick(notification) },
-                        onLongClick = { onNotificationLongPress(notification) }
+                        onRestore = { onRestore(notification) }
                     )
                 }
             }
@@ -134,11 +118,10 @@ fun NotificationScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun NotificationCard(
+private fun BinNotificationCard(
     notification: NotificationItem,
     colors: com.iadv.dukaanlocker.ui.theme.AppColors,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onRestore: () -> Unit
 ) {
     val icon = when (notification.type) {
         "WELCOME" -> Icons.Default.CheckCircle
@@ -163,8 +146,7 @@ private fun NotificationCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .longPressable(onLongClick = onLongClick),
+            .padding(8.dp),
         colors = CardDefaults.cardColors(
             containerColor = colors.cardBg.copy(alpha = bgAlpha)
         ),
@@ -228,7 +210,6 @@ private fun NotificationCard(
 
 private fun formatTimeAgo(createdAt: String): String {
     return try {
-        // Parse as UTC Instant (server now stores timestamps as UTC)
         val instant = java.time.Instant.parse(createdAt)
         val now = java.time.Instant.now()
         val seconds = java.time.Duration.between(instant, now).seconds
