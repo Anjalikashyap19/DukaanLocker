@@ -76,6 +76,28 @@ public class NotificationController {
         return ResponseEntity.ok(Map.of("message", "Notification restored"));
     }
 
+    @PutMapping("/{id}/move-to-bin")
+    @Operation(summary = "Move a single notification to bin")
+    public ResponseEntity<?> moveToBinSingle(@PathVariable Long id, Authentication authentication) {
+        User user = shopAccessService.getAuthenticatedUser(authentication);
+        if (!notificationService.moveNotificationToBin(user.getId(), id)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "Notification not found"));
+        }
+        return ResponseEntity.ok(Map.of("message", "Notification moved to bin"));
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Permanently delete a single notification from the bin")
+    public ResponseEntity<?> deleteNotification(@PathVariable Long id, Authentication authentication) {
+        User user = shopAccessService.getAuthenticatedUser(authentication);
+        if (!notificationService.deleteNotificationFromBin(user.getId(), id)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "Notification not found in bin"));
+        }
+        return ResponseEntity.ok(Map.of("message", "Notification deleted"));
+    }
+
     @PutMapping("/restore-all")
     @Operation(summary = "Restore all notifications from the bin")
     public ResponseEntity<?> restoreAllFromBin(Authentication authentication) {

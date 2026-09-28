@@ -429,9 +429,8 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                             }
                                         }
                                     },
-                                    onNotificationLongPress = { notification ->
-                                        // Show "Move to bin" popup on long press
-                                        vm.showBinPopup(notification)
+                                    onMoveToBin = { notification ->
+                                        vm.moveNotificationToBin(notification.id)
                                     },
                                     onMarkAllRead = { vm.markNotificationsRead() }
                                 )
@@ -500,6 +499,9 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                     },
                                     onRestoreAll = {
                                         restoreConfirm = true
+                                    },
+                                    onDeleteNotification = { notification ->
+                                        vm.deleteNotification(notification.id)
                                     }
                                 )
                                 // Restore all confirmation

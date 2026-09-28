@@ -147,11 +147,17 @@ interface ApiService {
     @PUT("api/notifications/move-to-bin")
     suspend fun moveToBin(): Response<Map<String, String>>
 
+    @PUT("api/notifications/{id}/move-to-bin")
+    suspend fun moveNotificationToBin(@Path("id") id: Long): Response<Map<String, String>>
+
     @PUT("api/notifications/{id}/restore")
     suspend fun restoreFromBin(@Path("id") id: Long): Response<Map<String, String>>
 
     @PUT("api/notifications/restore-all")
     suspend fun restoreAllFromBin(): Response<Map<String, String>>
+
+    @DELETE("api/notifications/{id}")
+    suspend fun deleteNotification(@Path("id") id: Long): Response<Map<String, String>>
 
     @DELETE("api/notifications/permanent-delete")
     suspend fun permanentDelete(): Response<Map<String, String>>

@@ -186,6 +186,16 @@ public class NotificationService {
     }
 
     @Transactional
+    public boolean moveNotificationToBin(Long userId, Long notificationId) {
+        return notificationRepository.moveNotificationToBin(userId, notificationId) > 0;
+    }
+
+    @Transactional
+    public boolean deleteNotificationFromBin(Long userId, Long notificationId) {
+        return notificationRepository.deleteFromBin(userId, notificationId) > 0;
+    }
+
+    @Transactional
     public boolean restoreFromBin(Long userId, Long notificationId) {
         return notificationRepository.restoreFromBin(userId, notificationId) > 0;
     }

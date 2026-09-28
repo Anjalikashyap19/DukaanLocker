@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,9 +35,10 @@ fun NotificationScreen(
     onOpenBin: () -> Unit,
     onNotificationClick: (NotificationItem) -> Unit,
     onMarkAllRead: () -> Unit,
-    onNotificationLongPress: (NotificationItem) -> Unit
+    onMoveToBin: (NotificationItem) -> Unit
 ) {
     val colors = LocalAppColors.current
+    var binTarget by remember { mutableStateOf<NotificationItem?>(null) }
 
     // Auto-mark all as read when screen opens
     LaunchedEffect(Unit) {
@@ -46,9 +48,7 @@ fun NotificationScreen(
     Scaffold(
         topBar = {
             Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding(),
+                modifier = Modifier.fillMaxWidth(),
                 color = colors.background,
                 shadowElevation = 4.dp
             ) {
@@ -136,11 +136,59 @@ fun NotificationScreen(
                         notification = notification,
                         colors = colors,
                         onClick = { onNotificationClick(notification) },
-                        onLongClick = { onNotificationLongPress(notification) }
+                        onLongClick = { binTarget = notification }
                     )
                 }
             }
         }
+    }
+
+    if (binTarget != null) {
+        AlertDialog(
+            onDismissRequest = { binTarget = null },
+            shape = RoundedCornerShape(20.dp),
+            icon = {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(48.dp)
+                )
+            },
+            title = {
+                Text(
+                    "Move to bin?",
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Text(
+                    "Do you want to move this notification to bin?",
+                    textAlign = TextAlign.Center
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        binTarget?.let(onMoveToBin)
+                        binTarget = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Move", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onError)
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = { binTarget = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Text("Cancel", fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+                }
+            }
+        )
     }
 }
 

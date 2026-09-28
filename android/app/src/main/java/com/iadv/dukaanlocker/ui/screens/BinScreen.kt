@@ -1,7 +1,9 @@
 package com.iadv.dukaanlocker.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,9 +34,11 @@ fun BinScreen(
     notifications: List<NotificationItem>,
     onDeletePermanent: () -> Unit,
     onRestore: (NotificationItem) -> Unit,
-    onRestoreAll: () -> Unit
+    onRestoreAll: () -> Unit,
+    onDeleteNotification: (NotificationItem) -> Unit
 ) {
     val colors = LocalAppColors.current
+    var deleteTarget by remember { mutableStateOf<NotificationItem?>(null) }
 
     // Auto-mark as read when screen opens
     LaunchedEffect(Unit) {
@@ -43,9 +48,7 @@ fun BinScreen(
     Scaffold(
         topBar = {
             Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding(),
+                modifier = Modifier.fillMaxWidth(),
                 color = colors.background,
                 shadowElevation = 4.dp
             ) {
@@ -143,20 +146,70 @@ fun BinScreen(
                     BinNotificationCard(
                         notification = notification,
                         colors = colors,
-                        onRestore = { onRestore(notification) }
+                        onRestore = { onRestore(notification) },
+                        onLongClick = { deleteTarget = notification }
                     )
                 }
             }
         }
     }
+
+    if (deleteTarget != null) {
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            shape = RoundedCornerShape(20.dp),
+            icon = {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(48.dp)
+                )
+            },
+            title = {
+                Text(
+                    "Delete notification?",
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Text(
+                    "Are you sure you want to delete this notification?",
+                    textAlign = TextAlign.Center
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        deleteTarget?.let(onDeleteNotification)
+                        deleteTarget = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onError)
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = { deleteTarget = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Text("Cancel", fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+                }
+            }
+        )
+    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BinNotificationCard(
     notification: NotificationItem,
     colors: com.iadv.dukaanlocker.ui.theme.AppColors,
-    onRestore: () -> Unit
+    onRestore: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     val icon = when (notification.type) {
         "WELCOME" -> Icons.Default.CheckCircle
@@ -181,7 +234,11 @@ private fun BinNotificationCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp),
+            .padding(8.dp)
+            .combinedClickable(
+                onClick = onRestore,
+                onLongClick = onLongClick
+            ),
         colors = CardDefaults.cardColors(
             containerColor = colors.cardBg.copy(alpha = bgAlpha)
         ),

@@ -1183,26 +1183,42 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Show popup for moving notification to bin - functions only, state managed in Composable
-    fun showBinPopup(notification: NotificationItem) {
-        // Signal to Composable layer via navigation or state
-        // The Bin popup UI is handled in DuaanLockerApp.kt
-    }
-
-    fun confirmMoveToBin() {
+    fun moveNotificationToBin(notificationId: Long) {
         viewModelScope.launch {
             try {
-                api.moveToBin()
-                // Notifications will be refreshed from server
-                loadNotifications()
+                val response = api.moveNotificationToBin(notificationId)
+                if (response.isSuccessful) {
+                    updateState { state ->
+                        val remaining = state.notifications.filterNot { it.id == notificationId }
+                        state.copy(
+                            notifications = remaining,
+                            unreadNotificationCount = remaining.count { !it.isRead }.toLong()
+                        )
+                    }
+                } else {
+                    android.util.Log.e("Notifications", "Failed to move notification to bin: ${response.code()}")
+                }
             } catch (e: Exception) {
-                android.util.Log.e("Notifications", "Failed to move to bin: ${e.message}")
+                android.util.Log.e("Notifications", "Failed to move notification to bin: ${e.message}")
             }
         }
     }
 
-    fun cancelBinPopup() {
-        // No-op: state managed in Composable layer
+    fun deleteNotification(notificationId: Long) {
+        viewModelScope.launch {
+            try {
+                val response = api.deleteNotification(notificationId)
+                if (response.isSuccessful) {
+                    updateState { state ->
+                        state.copy(binNotifications = state.binNotifications.filterNot { it.id == notificationId })
+                    }
+                } else {
+                    android.util.Log.e("Notifications", "Failed to delete notification: ${response.code()}")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("Notifications", "Failed to delete notification: ${e.message}")
+            }
+        }
     }
 
     fun registerDeviceToken(token: String) {
