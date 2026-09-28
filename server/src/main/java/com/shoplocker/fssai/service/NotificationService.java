@@ -191,6 +191,11 @@ public class NotificationService {
     }
 
     @Transactional
+    public void restoreAllFromBin(Long userId) {
+        notificationRepository.restoreAllFromBin(userId);
+    }
+
+    @Transactional
     public void permanentDeleteNotifications(Long userId) {
         notificationRepository.permanentDeleteNotifications(userId);
     }

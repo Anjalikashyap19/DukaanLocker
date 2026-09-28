@@ -34,6 +34,10 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     int restoreFromBin(Long userId, Long id);
 
     @Modifying
+    @Query("UPDATE Notification n SET n.isInBin = false WHERE n.user.id = :userId AND n.isInBin = true")
+    void restoreAllFromBin(Long userId);
+
+    @Modifying
     @Query("DELETE FROM Notification n WHERE n.user.id = :userId AND n.isInBin = true")
     void permanentDeleteNotifications(Long userId);
 

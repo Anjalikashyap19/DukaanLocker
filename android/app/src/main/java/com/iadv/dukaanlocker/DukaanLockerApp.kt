@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -486,6 +487,7 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
 
                             is Screen.Bin -> {
                                 var deleteConfirm by remember { mutableStateOf(false) }
+                                var restoreConfirm by remember { mutableStateOf(false) }
                                 LaunchedEffect(Unit) { vm.loadBinNotifications() }
                                 BinScreen(
                                     onBack = { vm.goBack() },
@@ -495,8 +497,58 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                     },
                                     onRestore = { notification ->
                                         vm.restoreNotification(notification.id)
+                                    },
+                                    onRestoreAll = {
+                                        restoreConfirm = true
                                     }
                                 )
+                                // Restore all confirmation
+                                if (restoreConfirm) {
+                                    AlertDialog(
+                                        onDismissRequest = { restoreConfirm = false },
+                                        shape = RoundedCornerShape(20.dp),
+                                        icon = {
+                                            Icon(
+                                                Icons.Default.Info,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(48.dp)
+                                            )
+                                        },
+                                        title = {
+                                            Text(
+                                                "Restore all notifications?",
+                                                fontWeight = FontWeight.Bold,
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        },
+                                        text = {
+                                            Text(
+                                                "Are you sure you want to restore all your notifications from the bin?",
+                                                textAlign = TextAlign.Center
+                                            )
+                                        },
+                                        confirmButton = {
+                                            Button(
+                                                onClick = {
+                                                    restoreConfirm = false
+                                                    vm.restoreAllFromBin()
+                                                }
+                                            ) {
+                                                Text("OK", fontWeight = FontWeight.Bold)
+                                            }
+                                        },
+                                        dismissButton = {
+                                            Button(
+                                                onClick = { restoreConfirm = false },
+                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
+                                            ) {
+                                                Text("Cancel", fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+                                            }
+                                        }
+                                    )
+                                }
                                 // Delete permanently confirmation
                                 if (deleteConfirm) {
                                     AlertDialog(

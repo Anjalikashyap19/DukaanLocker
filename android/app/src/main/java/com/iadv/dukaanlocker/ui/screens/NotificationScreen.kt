@@ -20,12 +20,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.iadv.dukaanlocker.api.NotificationItem
 import com.iadv.dukaanlocker.ui.theme.LocalAppColors
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationScreen(
     notifications: List<NotificationItem>,
@@ -45,16 +45,36 @@ fun NotificationScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text("Notifications", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                },
-                navigationIcon = {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding(),
+                color = colors.background,
+                shadowElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = colors.textPrimary
+                        )
                     }
-                },
-                actions = {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        "Notifications",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
                     IconButton(onClick = onOpenBin) {
                         Icon(
                             Icons.Default.Delete,
@@ -63,16 +83,20 @@ fun NotificationScreen(
                         )
                     }
                     if (notifications.isNotEmpty()) {
-                        TextButton(onClick = onClearAll) {
-                            Text("Clear all", color = colors.primary)
+                        TextButton(
+                            onClick = onClearAll,
+                            contentPadding = PaddingValues(horizontal = 12.dp)
+                        ) {
+                            Text(
+                                "Clear all",
+                                color = colors.primary,
+                                fontSize = 14.sp,
+                                maxLines = 1
+                            )
                         }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = colors.cardBg,
-                    titleContentColor = colors.textPrimary
-                )
-            )
+                }
+            }
         },
         containerColor = colors.background
     ) { padding ->

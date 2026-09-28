@@ -1152,6 +1152,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun restoreAllFromBin() {
+        viewModelScope.launch {
+            try {
+                val response = api.restoreAllFromBin()
+                if (response.isSuccessful) {
+                    updateState { it.copy(binNotifications = emptyList()) }
+                    loadNotifications()
+                } else {
+                    android.util.Log.e("Notifications", "Failed to restore all: ${response.code()}")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("Notifications", "Failed to restore all: ${e.message}")
+            }
+        }
+    }
+
     fun permanentDeleteAll() {
         viewModelScope.launch {
             try {

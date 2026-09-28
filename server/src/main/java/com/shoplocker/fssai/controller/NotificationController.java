@@ -76,6 +76,14 @@ public class NotificationController {
         return ResponseEntity.ok(Map.of("message", "Notification restored"));
     }
 
+    @PutMapping("/restore-all")
+    @Operation(summary = "Restore all notifications from the bin")
+    public ResponseEntity<?> restoreAllFromBin(Authentication authentication) {
+        User user = shopAccessService.getAuthenticatedUser(authentication);
+        notificationService.restoreAllFromBin(user.getId());
+        return ResponseEntity.ok(Map.of("message", "All notifications restored from bin"));
+    }
+
     @DeleteMapping("/permanent-delete")
     @Operation(summary = "Permanently delete all notifications from bin")
     public ResponseEntity<?> permanentDelete(Authentication authentication) {
