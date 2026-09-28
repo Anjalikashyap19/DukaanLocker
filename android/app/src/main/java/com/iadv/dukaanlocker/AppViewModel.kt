@@ -817,9 +817,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                     Toast.makeText(context, "${biz.name} created!", Toast.LENGTH_SHORT).show()
+                    loadShops()
+                    updateState { it.copy(currentScreen = Screen.OwnerHome) }
+                } else {
+                    // Surface the server error (e.g. "Invalid scale") instead of
+                    // bouncing back to Home as if the save had succeeded.
+                    Toast.makeText(context, response.parseErrorMessage(), Toast.LENGTH_LONG).show()
                 }
-                loadShops()
-                updateState { it.copy(currentScreen = Screen.OwnerHome) }
             } catch (e: Exception) {
                 Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
             }
@@ -832,26 +836,31 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             updateState { it.copy(isLoading = true) }
             try {
-                api.updateShop(shopId, UpdateShopRequest(
+                val response = api.updateShop(shopId, UpdateShopRequest(
                     shopName = biz.name, ownerName = biz.ownerName, category = biz.category,
                     scale = biz.scale, state = biz.state, city = biz.city,
                     branchName = biz.branchName.ifBlank { null }
                 ))
-                try {
-                    val currentManagerId = _uiState.value.managerShopAssignments.entries.find { shopId.toString() in it.value }?.key
-                    if (currentManagerId != null) {
-                        api.deactivateAssignment(currentManagerId, shopId)
+                if (!response.isSuccessful) {
+                    // e.g. invalid scale — stay on the edit screen and show why
+                    Toast.makeText(context, response.parseErrorMessage(), Toast.LENGTH_LONG).show()
+                } else {
+                    try {
+                        val currentManagerId = _uiState.value.managerShopAssignments.entries.find { shopId.toString() in it.value }?.key
+                        if (currentManagerId != null) {
+                            api.deactivateAssignment(currentManagerId, shopId)
+                        }
+                        if (pendingManagerId != null) {
+                            api.assignShopToManager(pendingManagerId.toLong(), shopId)
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Shop updated but manager assignment failed: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
-                    if (pendingManagerId != null) {
-                        api.assignShopToManager(pendingManagerId.toLong(), shopId)
-                    }
-                } catch (e: Exception) {
-                    Toast.makeText(context, "Shop updated but manager assignment failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    loadManagers()
+                    Toast.makeText(context, "${biz.name} updated!", Toast.LENGTH_SHORT).show()
+                    loadShops()
+                    updateState { it.copy(editShopTarget = null, currentScreen = Screen.OwnerHome) }
                 }
-                loadManagers()
-                Toast.makeText(context, "${biz.name} updated!", Toast.LENGTH_SHORT).show()
-                loadShops()
-                updateState { it.copy(editShopTarget = null, currentScreen = Screen.OwnerHome) }
             } catch (e: Exception) {
                 Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
             }

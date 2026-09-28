@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 
@@ -37,6 +38,24 @@ public class ShopService {
 
     @Autowired
     private LocalFileStorageService localFileStorageService;
+
+    /**
+     * Parses the scale field into a {@link BusinessScale}. Accepts the enum name
+     * ("SMALL") as well as older client payloads that send the dropdown label
+     * ("Small ( &lt; 20 lac/year)") — only the leading word is considered.
+     */
+    private BusinessScale parseScale(String raw) {
+        String key = raw.trim().toUpperCase(Locale.ROOT);
+        int firstSpace = key.indexOf(' ');
+        if (firstSpace > 0) {
+            key = key.substring(0, firstSpace);
+        }
+        try {
+            return BusinessScale.valueOf(key);
+        } catch (IllegalArgumentException e) {
+            throw new FssaiException("Invalid scale: " + raw, FailureCode.INVALID_REQUEST);
+        }
+    }
 
     @Transactional
     public ShopResponse updateShop(Long id, UpdateShopRequest request) {
@@ -60,11 +79,7 @@ public class ShopService {
             shop.setCategory(request.getCategory().toUpperCase());
         }
         if (request.getScale() != null) {
-            try {
-                shop.setScale(BusinessScale.valueOf(request.getScale().toUpperCase()));
-            } catch (IllegalArgumentException e) {
-                throw new FssaiException("Invalid scale: " + request.getScale(), FailureCode.INVALID_REQUEST);
-            }
+            shop.setScale(parseScale(request.getScale()));
         }
         if (request.getState() != null) {
             shop.setState(request.getState());
@@ -98,12 +113,7 @@ public class ShopService {
             throw new FssaiException("Only ADMIN users can create shops", FailureCode.FORBIDDEN);
         }
 
-        BusinessScale scale;
-        try {
-            scale = BusinessScale.valueOf(request.getScale().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new FssaiException("Invalid scale: " + request.getScale(), FailureCode.INVALID_REQUEST);
-        }
+        BusinessScale scale = parseScale(request.getScale());
 
         Shop shop = new Shop();
         shop.setShopName(request.getShopName());

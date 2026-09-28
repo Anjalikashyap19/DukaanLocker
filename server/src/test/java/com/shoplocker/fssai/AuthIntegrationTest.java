@@ -365,6 +365,49 @@ class AuthIntegrationTest {
                 .andExpect(jsonPath("$.ownerUserId").isNumber());
     }
 
+    // --- 11a. Older app builds send the scale dropdown label, not the enum ---
+    @Test
+    @DisplayName("11a. Shop is created when scale arrives as the dropdown label")
+    void shopCreatedWhenScaleIsDropdownLabel() throws Exception {
+        MvcResult reg = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_REGISTER_BODY))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String token = objectMapper.readTree(reg.getResponse().getContentAsString()).get("token").asText();
+
+        String labelBody = VALID_SHOP_BODY.replace(
+                "\"scale\": \"SMALL\"", "\"scale\": \"Small ( < 20 lac/year)\"");
+
+        mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(labelBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.scale").value("SMALL"));
+    }
+
+    // --- 11b. A genuinely unknown scale is still rejected ---
+    @Test
+    @DisplayName("11b. Shop creation returns 400 for an unknown scale")
+    void shopCreationRejectsUnknownScale() throws Exception {
+        MvcResult reg = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_REGISTER_BODY))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String token = objectMapper.readTree(reg.getResponse().getContentAsString()).get("token").asText();
+
+        String badBody = VALID_SHOP_BODY.replace("\"scale\": \"SMALL\"", "\"scale\": \"HUGE\"");
+
+        mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(badBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("invalid_request"));
+    }
+
     // --- 2. MANAGER cannot create shop ---
     @Test
     @DisplayName("12. MANAGER cannot create a shop")

@@ -42,6 +42,21 @@ import com.iadv.dukaanlocker.ui.strings.LocalAppLanguage
 import com.iadv.dukaanlocker.ui.theme.*
 import kotlinx.coroutines.delay
 
+// The server only accepts BusinessScale codes (MICRO/SMALL/MEDIUM/LARGE);
+// the dropdown shows descriptive labels, so state holds the code and the
+// label is rendered from it. Anything else makes POST /api/shops return 400.
+private val SCALE_OPTIONS = listOf(
+    "MICRO" to "Micro (turn over < 5 lac/year)",
+    "SMALL" to "Small ( < 20 lac/year)",
+    "MEDIUM" to "Medium ( < 50 lac/year)",
+    "LARGE" to "Large ( > 50 lac/year)"
+)
+
+private fun normalizeScaleCode(raw: String?): String {
+    val key = (raw ?: "MICRO").trim().uppercase(java.util.Locale.ROOT)
+    return SCALE_OPTIONS.firstOrNull { key.startsWith(it.first) }?.first ?: "MICRO"
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddBusinessScreen(
@@ -58,7 +73,7 @@ fun AddBusinessScreen(
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var ownerName by remember { mutableStateOf(initial?.ownerName ?: defaultOwnerName) }
     var category by remember { mutableStateOf(initial?.category ?: "") }
-    var scale by remember { mutableStateOf(initial?.scale ?: "Micro") }
+    var scale by remember { mutableStateOf(normalizeScaleCode(initial?.scale)) }
     var branchName by remember { mutableStateOf(initial?.branchName ?: "") }
     var state by remember { mutableStateOf(initial?.state ?: "Maharashtra") }
     var city by remember { mutableStateOf(initial?.city ?: "") }
@@ -110,7 +125,7 @@ fun AddBusinessScreen(
         "Manufacturing, Workshops & Industrial Activities",
         "Other (Not in the list)"
     )
-    val scales = listOf("Micro (turn over < 5 lac/year)", "Small ( < 20 lac/year)", "Medium ( < 50 lac/year)", "Large ( > 50 lac/year)")
+    val scales = SCALE_OPTIONS
     val states = listOf(
         "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
         "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand",
@@ -307,7 +322,7 @@ fun AddBusinessScreen(
                 onExpandedChange = { showScaleDropdown = !showScaleDropdown }
             ) {
                 OutlinedTextField(
-                    value = scale,
+                    value = scales.firstOrNull { it.first == scale }?.second?.let { AppStrings.get(lang, it) } ?: scale,
                     onValueChange = {},
                     readOnly = true,
                     label = { Text(AppStrings.get(lang, "Business Scale"), color = colors.textSecondary) },
@@ -320,10 +335,10 @@ fun AddBusinessScreen(
                     shape = RoundedCornerShape(12.dp)
                 )
                 ExposedDropdownMenu(expanded = showScaleDropdown, onDismissRequest = { showScaleDropdown = false }) {
-                    scales.forEach { item ->
+                    scales.forEach { (code, label) ->
                         DropdownMenuItem(
-                            text = { Text(AppStrings.get(lang, item)) },
-                            onClick = { scale = item; showScaleDropdown = false }
+                            text = { Text(AppStrings.get(lang, label)) },
+                            onClick = { scale = code; showScaleDropdown = false }
                         )
                     }
                 }
