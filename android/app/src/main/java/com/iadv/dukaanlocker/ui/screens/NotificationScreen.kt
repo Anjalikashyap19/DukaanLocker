@@ -1,13 +1,14 @@
 package com.iadv.dukaanlocker.ui.screens
 
-import androidx.compose.foundation.Background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
@@ -23,9 +24,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.iadv.dukaanlocker.api.NotificationItem
 import com.iadv.dukaanlocker.ui.theme.LocalAppColors
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,12 +31,12 @@ fun NotificationScreen(
     notifications: List<NotificationItem>,
     onBack: () -> Unit,
     onClearAll: () -> Unit,
+    onOpenBin: () -> Unit,
     onNotificationClick: (NotificationItem) -> Unit,
     onMarkAllRead: () -> Unit,
     onNotificationLongPress: (NotificationItem) -> Unit
 ) {
     val colors = LocalAppColors.current
-    val showBinOption by remember { mutableStateOf(false) }
 
     // Auto-mark all as read when screen opens
     LaunchedEffect(Unit) {
@@ -53,30 +51,20 @@ fun NotificationScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
+                    IconButton(onClick = onOpenBin) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Bin",
+                            tint = colors.textPrimary
+                        )
+                    }
                     if (notifications.isNotEmpty()) {
-                        if (showBinOption) {
-                            // Show "Move to Bin" action when bin mode is active
-                            OutlinedButton(
-                                onClick = {
-                                    // This will be handled by the ViewModel - move all to bin
-                                    onClearAll()
-                                }
-                            ) {
-                                Text("Move to bin", color = Color.Red)
-                            }
-                        } else {
-                            // Show "Clear all" button normally
-                            TextButton(onClick = {
-                                // Show confirmation before moving to bin
-                                // The actual bin move happens after confirmation in ViewModel
-                                onClearAll()
-                            }) {
-                                Text("Clear all", color = colors.primary)
-                            }
+                        TextButton(onClick = onClearAll) {
+                            Text("Clear all", color = colors.primary)
                         }
                     }
                 },
@@ -132,7 +120,7 @@ fun NotificationScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NotificationCard(
     notification: NotificationItem,
@@ -163,8 +151,10 @@ private fun NotificationCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .longPressable(onLongClick = onLongClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         colors = CardDefaults.cardColors(
             containerColor = colors.cardBg.copy(alpha = bgAlpha)
         ),
@@ -225,6 +215,7 @@ private fun NotificationCard(
             }
         }
     }
+}
 
 private fun formatTimeAgo(createdAt: String): String {
     return try {

@@ -58,6 +58,7 @@ data class AppUiState(
     val biometricLoginFailed: Boolean = false,
     val showAppUnlockPrompt: Boolean = false,
     val notifications: List<NotificationItem> = emptyList(),
+    val binNotifications: List<NotificationItem> = emptyList(),
     val unreadNotificationCount: Long = 0,
     val isLoadingNotifications: Boolean = false,
     val showCustomDocDialog: Boolean = false,
@@ -323,7 +324,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 viewModelScope.launch {
                     ApiClient.registerDeviceToken(context, token, sendWelcomePush = sendWelcomePush)
                 }
+}
+    }
+
+    fun moveToBin() {
+        viewModelScope.launch {
+            try {
+                val response = api.moveToBin()
+                if (response.isSuccessful) {
+                    updateState { it.copy(notifications = emptyList(), unreadNotificationCount = 0) }
+                    loadNotifications()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("Notifications", "Failed to move to bin: ${e.message}")
             }
+        }
     }
 
     fun openDocument(doc: DocumentItem) {
@@ -1097,10 +1112,42 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun clearNotifications() {
         viewModelScope.launch {
             try {
-                api.moveToBin()
+                api.clearNotifications()
                 updateState { it.copy(notifications = emptyList(), unreadNotificationCount = 0) }
             } catch (e: Exception) {
-                android.util.Log.e("Notifications", "Failed to move to bin: ${e.message}")
+                android.util.Log.e("Notifications", "Failed to clear: ${e.message}")
+            }
+        }
+    }
+
+    fun loadBinNotifications() {
+        viewModelScope.launch {
+            try {
+                val response = api.getBinNotifications()
+                if (response.isSuccessful) {
+                    val binNotifications = response.body() ?: emptyList()
+                    updateState { it.copy(binNotifications = binNotifications) }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("Notifications", "Failed to load bin: ${e.message}")
+            }
+        }
+    }
+
+    fun restoreNotification(notificationId: Long) {
+        viewModelScope.launch {
+            try {
+                val response = api.restoreFromBin(notificationId)
+                if (response.isSuccessful) {
+                    updateState { state ->
+                        state.copy(binNotifications = state.binNotifications.filterNot { it.id == notificationId })
+                    }
+                    loadNotifications()
+                } else {
+                    android.util.Log.e("Notifications", "Failed to restore: ${response.code()}")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("Notifications", "Failed to restore: ${e.message}")
             }
         }
     }
@@ -1108,37 +1155,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun permanentDeleteAll() {
         viewModelScope.launch {
             try {
-                api.permanentDelete()
-                // Clear local state
-                updateState { it.copy(notifications = emptyList(), unreadNotificationCount = 0) }
+                val response = api.permanentDelete()
+                if (response.isSuccessful) {
+                    updateState {
+                        it.copy(notifications = emptyList(), binNotifications = emptyList(), unreadNotificationCount = 0)
+                    }
+                }
             } catch (e: Exception) {
                 android.util.Log.e("Notifications", "Failed to permanently delete: ${e.message}")
             }
         }
     }
 
-    // Show popup for moving notification to bin
-    var showBinPopup by remember { mutableStateOf(false) }
-    var selectedNotificationForBin by remember { mutableStateOf<NotificationItem?>(null) }
-
+    // Show popup for moving notification to bin - functions only, state managed in Composable
     fun showBinPopup(notification: NotificationItem) {
-        selectedNotificationForBin = notification
-        showBinPopup = true
+        // Signal to Composable layer via navigation or state
+        // The Bin popup UI is handled in DuaanLockerApp.kt
     }
 
     fun confirmMoveToBin() {
         viewModelScope.launch {
             try {
-                if (selectedNotificationForBin != null) {
-                    // Move single notification to bin
-                    api.moveToBin()
-                } else {
-                    // Move all to bin
-                    api.moveToBin()
-                }
+                api.moveToBin()
+                // Notifications will be refreshed from server
                 loadNotifications()
-                selectedNotificationForBin = null
-                showBinPopup = false
             } catch (e: Exception) {
                 android.util.Log.e("Notifications", "Failed to move to bin: ${e.message}")
             }
@@ -1146,8 +1186,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun cancelBinPopup() {
-        selectedNotificationForBin = null
-        showBinPopup = false
+        // No-op: state managed in Composable layer
     }
 
     fun registerDeviceToken(token: String) {

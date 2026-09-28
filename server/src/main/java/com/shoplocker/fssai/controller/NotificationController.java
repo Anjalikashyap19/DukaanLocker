@@ -6,6 +6,7 @@ import com.shoplocker.fssai.service.NotificationService;
 import com.shoplocker.fssai.service.ShopAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -31,7 +32,14 @@ public class NotificationController {
     @Operation(summary = "Get all notifications for the current user")
     public ResponseEntity<List<Notification>> getNotifications(Authentication authentication) {
         User user = shopAccessService.getAuthenticatedUser(authentication);
-        return ResponseEntity.ok(notificationService.getNotifications(user.getId()));
+        return ResponseEntity.ok(notificationService.getActiveNotifications(user.getId()));
+    }
+
+    @GetMapping("/bin")
+    @Operation(summary = "Get notifications currently in the bin")
+    public ResponseEntity<List<Notification>> getBinNotifications(Authentication authentication) {
+        User user = shopAccessService.getAuthenticatedUser(authentication);
+        return ResponseEntity.ok(notificationService.getBinNotifications(user.getId()));
     }
 
     @GetMapping("/unread-count")
@@ -55,6 +63,17 @@ public class NotificationController {
         User user = shopAccessService.getAuthenticatedUser(authentication);
         notificationService.moveNotificationsToBin(user.getId());
         return ResponseEntity.ok(Map.of("message", "All notifications moved to bin"));
+    }
+
+    @PutMapping("/{id}/restore")
+    @Operation(summary = "Restore a single notification from the bin")
+    public ResponseEntity<?> restoreFromBin(@PathVariable Long id, Authentication authentication) {
+        User user = shopAccessService.getAuthenticatedUser(authentication);
+        if (!notificationService.restoreFromBin(user.getId(), id)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "Notification not found in bin"));
+        }
+        return ResponseEntity.ok(Map.of("message", "Notification restored"));
     }
 
     @DeleteMapping("/permanent-delete")

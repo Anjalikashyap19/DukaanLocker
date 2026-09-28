@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -409,7 +410,8 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                 NotificationScreen(
                                     notifications = state.notifications,
                                     onBack = { vm.goBack() },
-                                    onClearAll = { vm.moveToBin() },
+                                    onClearAll = { binConfirm = true },
+                                    onOpenBin = { vm.navigateTo(Screen.Bin) },
                                     onNotificationClick = { notification ->
                                         if (notification.type == "MISSING_DOCUMENT" && notification.referenceId != null) {
                                             // Navigate to Docs tab and select the business with missing document
@@ -436,39 +438,112 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                 if (binConfirm) {
                                     AlertDialog(
                                         onDismissRequest = { binConfirm = false },
-                                        properties = DialogProperties(
-                                            confirmButtonText = "Move to Bin",
-                                            cancelButtonText = "Cancel"
-                                        )
-                                    ) {
-                                        Text("All your notifications will move to bin. Are you sure?")
-                                    }
+                                        shape = RoundedCornerShape(20.dp),
+                                        icon = {
+                                            Icon(
+                                                Icons.Default.Warning,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(48.dp)
+                                            )
+                                        },
+                                        title = {
+                                            Text(
+                                                "Move to bin?",
+                                                fontWeight = FontWeight.Bold,
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        },
+                                        text = {
+                                            Text(
+                                                "All notifications will be moved to the bin. You can restore them later from Bin.",
+                                                textAlign = TextAlign.Center
+                                            )
+                                        },
+                                        confirmButton = {
+                                            Button(
+                                                onClick = {
+                                                    binConfirm = false
+                                                    vm.moveToBin()
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                            ) {
+                                                Text("OK", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onError)
+                                            }
+                                        },
+                                        dismissButton = {
+                                            Button(
+                                                onClick = { binConfirm = false },
+                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
+                                            ) {
+                                                Text("Cancel", fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+                                            }
+                                        }
+                                    )
                                 }
                             }
-                        is Screen.Bin -> {
-                            var deleteConfirm by remember { mutableStateOf(false) }
-                            BinScreen(
-                                onBack = { vm.setScreen(Screen.Notifications) },
-                                notifications = state.notifications?.filter { it.isInBin == true } ?: emptyList(),
-                                onDeletePermanent = {
-                                    deleteConfirm = true
-                                },
-                                onRestore = { notification ->
-                                    // Restore notification from bin
-                                    vm.moveToBin()
-                                    vm.loadNotifications()
-                                }
-                            )
-                            // Delete permanently confirmation
-                            if (deleteConfirm) {
-                                AlertDialog(
-                                    onDismissRequest { deleteConfirm = false },
-                                    properties = DialogProperties(
-                                        confirmButtonText = "Delete Permanently",
-                                        cancelButtonText = "Cancel"
+
+                            is Screen.Bin -> {
+                                var deleteConfirm by remember { mutableStateOf(false) }
+                                LaunchedEffect(Unit) { vm.loadBinNotifications() }
+                                BinScreen(
+                                    onBack = { vm.goBack() },
+                                    notifications = state.binNotifications,
+                                    onDeletePermanent = {
+                                        deleteConfirm = true
+                                    },
+                                    onRestore = { notification ->
+                                        vm.restoreNotification(notification.id)
+                                    }
+                                )
+                                // Delete permanently confirmation
+                                if (deleteConfirm) {
+                                    AlertDialog(
+                                        onDismissRequest = { deleteConfirm = false },
+                                        shape = RoundedCornerShape(20.dp),
+                                        icon = {
+                                            Icon(
+                                                Icons.Default.Warning,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(48.dp)
+                                            )
+                                        },
+                                        title = {
+                                            Text(
+                                                "Delete permanently?",
+                                                fontWeight = FontWeight.Bold,
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        },
+                                        text = {
+                                            Text(
+                                                "Are you sure you want to delete all notifications in the bin permanently? This cannot be undone.",
+                                                textAlign = TextAlign.Center
+                                            )
+                                        },
+                                        confirmButton = {
+                                            Button(
+                                                onClick = {
+                                                    deleteConfirm = false
+                                                    vm.permanentDeleteAll()
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                            ) {
+                                                Text("OK", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onError)
+                                            }
+                                        },
+                                        dismissButton = {
+                                            Button(
+                                                onClick = { deleteConfirm = false },
+                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
+                                            ) {
+                                                Text("Cancel", fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+                                            }
+                                        }
                                     )
-                                ) {
-                                    Text("Are you sure you want to delete all notifications permanently?")
                                 }
                             }
                         }

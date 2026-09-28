@@ -15,15 +15,23 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 
     List<Notification> findByUserIdOrderByCreatedAtDesc(Long userId);
 
-    long countByUserIdAndIsReadFalse(Long userId);
+    List<Notification> findByUserIdAndIsInBinFalseOrderByCreatedAtDesc(Long userId);
+
+    List<Notification> findByUserIdAndIsInBinTrueOrderByCreatedAtDesc(Long userId);
+
+    long countByUserIdAndIsReadFalseAndIsInBinFalse(Long userId);
 
     @Modifying
-    @Query("UPDATE Notification n SET n.isRead = true WHERE n.user.id = :userId AND n.isRead = false")
+    @Query("UPDATE Notification n SET n.isRead = true WHERE n.user.id = :userId AND n.isRead = false AND n.isInBin = false")
     void markAllAsReadByUserId(Long userId);
 
     @Modifying
     @Query("UPDATE Notification n SET n.isInBin = true WHERE n.user.id = :userId")
     void moveNotificationsToBin(Long userId);
+
+    @Modifying
+    @Query("UPDATE Notification n SET n.isInBin = false WHERE n.id = :id AND n.user.id = :userId AND n.isInBin = true")
+    int restoreFromBin(Long userId, Long id);
 
     @Modifying
     @Query("DELETE FROM Notification n WHERE n.user.id = :userId AND n.isInBin = true")

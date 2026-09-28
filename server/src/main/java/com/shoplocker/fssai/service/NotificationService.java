@@ -161,8 +161,18 @@ public class NotificationService {
     }
 
     @Transactional(readOnly = true)
+    public List<Notification> getActiveNotifications(Long userId) {
+        return notificationRepository.findByUserIdAndIsInBinFalseOrderByCreatedAtDesc(userId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Notification> getBinNotifications(Long userId) {
+        return notificationRepository.findByUserIdAndIsInBinTrueOrderByCreatedAtDesc(userId);
+    }
+
+    @Transactional(readOnly = true)
     public long getUnreadCount(Long userId) {
-        return notificationRepository.countByUserIdAndIsReadFalse(userId);
+        return notificationRepository.countByUserIdAndIsReadFalseAndIsInBinFalse(userId);
     }
 
     @Transactional
@@ -173,6 +183,11 @@ public class NotificationService {
     @Transactional
     public void moveNotificationsToBin(Long userId) {
         notificationRepository.moveNotificationsToBin(userId);
+    }
+
+    @Transactional
+    public boolean restoreFromBin(Long userId, Long notificationId) {
+        return notificationRepository.restoreFromBin(userId, notificationId) > 0;
     }
 
     @Transactional

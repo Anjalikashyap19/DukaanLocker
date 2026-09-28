@@ -135,6 +135,9 @@ interface ApiService {
     @GET("api/notifications")
     suspend fun getNotifications(): Response<List<NotificationItem>>
 
+    @GET("api/notifications/bin")
+    suspend fun getBinNotifications(): Response<List<NotificationItem>>
+
     @GET("api/notifications/unread-count")
     suspend fun getUnreadNotificationCount(): Response<UnreadCountResponse>
 
@@ -143,6 +146,9 @@ interface ApiService {
 
     @PUT("api/notifications/move-to-bin")
     suspend fun moveToBin(): Response<Map<String, String>>
+
+    @PUT("api/notifications/{id}/restore")
+    suspend fun restoreFromBin(@Path("id") id: Long): Response<Map<String, String>>
 
     @DELETE("api/notifications/permanent-delete")
     suspend fun permanentDelete(): Response<Map<String, String>>
