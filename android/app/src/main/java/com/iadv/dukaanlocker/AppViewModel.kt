@@ -99,6 +99,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (isLoggedIn) {
             loadShops()
             if (role == "ADMIN") loadManagers()
+            loadNotifications()
         }
     }
 
@@ -157,6 +158,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearTargetMissingDocument() {
         updateState { it.copy(targetMissingDocumentType = null) }
+    }
+
+    fun openMissingDocumentNotification(notification: NotificationItem) {
+        if (notification.type != "MISSING_DOCUMENT") return
+        // Return to the screen we came from (Owner/Manager home) so the user lands on Docs
+        if (_uiState.value.navigationHistory.isNotEmpty()) goBack() else navigateToHome()
+        setBottomTab(BottomTab.Docs)
+        val shopId = notification.referenceId
+        if (shopId != null) {
+            setSelectedBusinessForDocs(shopId.toString())
+            loadDocuments(shopId)
+            if (_uiState.value.shops.isEmpty()) loadShops()
+        }
+        notification.metadata?.let { setTargetMissingDocument(it) }
     }
 
     fun goBackTab() {

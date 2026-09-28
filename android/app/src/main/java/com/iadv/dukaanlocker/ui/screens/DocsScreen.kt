@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.iadv.dukaanlocker.ui.components.SkeletonDocumentCard
 import com.iadv.dukaanlocker.ui.components.ShimmerEffect
@@ -47,10 +48,23 @@ fun DocsScreen(
     val grouped = documents.groupBy { it.type }
     val orderedTypes = grouped.keys.sortedBy { grouped[it]?.first()?.name ?: it }
 
-    // Auto-expand the section for the target missing document type
+    // Auto-expand + scroll the section for the target missing document type
+    val listState = rememberLazyListState()
     var expandedType by remember { mutableStateOf<String?>(targetMissingDocumentType) }
+    var scrolledToTarget by remember { mutableStateOf<String?>(null) }
+
     LaunchedEffect(targetMissingDocumentType) {
         expandedType = targetMissingDocumentType
+        if (targetMissingDocumentType == null) scrolledToTarget = null
+    }
+
+    LaunchedEffect(targetMissingDocumentType, documents) {
+        if (targetMissingDocumentType == null || scrolledToTarget == targetMissingDocumentType) return@LaunchedEffect
+        val targetIndex = orderedTypes.indexOf(targetMissingDocumentType)
+        if (targetIndex >= 0) {
+            listState.scrollToItem(targetIndex)
+            scrolledToTarget = targetMissingDocumentType
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().background(colors.background)) {
@@ -103,6 +117,7 @@ fun DocsScreen(
             }
         } else {
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                 contentPadding = PaddingValues(vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)

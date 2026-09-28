@@ -52,4 +52,10 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     Optional<Notification> findByUserIdAndTypeAndReferenceId(Long userId, String type, Long referenceId);
 
     Optional<Notification> findByUserIdAndTypeAndReferenceIdAndCreatedAtAfter(Long userId, String type, Long referenceId, Instant after);
+
+    boolean existsByUserIdAndTypeAndReferenceIdAndMetadataAndCreatedAtAfter(Long userId, String type,
+                                                                           Long referenceId, String metadata,
+                                                                           Instant after);
+
+    long countByUserIdAndTypeAndReferenceIdAndCreatedAtAfter(Long userId, String type, Long referenceId, Instant after);
 }

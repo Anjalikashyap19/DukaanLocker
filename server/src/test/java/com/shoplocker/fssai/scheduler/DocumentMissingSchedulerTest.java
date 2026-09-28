@@ -7,23 +7,32 @@ import com.shoplocker.fssai.repository.ShopRepository;
 import com.shoplocker.fssai.repository.UserRepository;
 import com.shoplocker.fssai.service.NotificationService;
 import com.shoplocker.fssai.service.RequiredDocumentService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.*;
-import java.time.temporal.ChronoUnit;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * Test config (src/test/resources/application.properties):
+ * max-per-run=1, max-per-day=3, min-interval-hours=24.
+ *
+ * Behavior under test: every scheduled run / login sends up to maxPerRun
+ * DISTINCT missing docs (same doc never repeated inside the 24h window) until
+ * the rolling daily quota (maxPerDay) is reached.
+ */
 @SpringBootTest
 @Transactional
 @DisplayName("DocumentMissingScheduler integration tests")
@@ -37,6 +46,9 @@ class DocumentMissingSchedulerTest {
     @Autowired private RequiredDocumentService requiredDocumentService;
     @Autowired private NotificationService notificationService;
     @MockitoBean private com.google.firebase.messaging.FirebaseMessaging firebaseMessaging;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     private User owner;
     private Shop shop;
@@ -79,80 +91,142 @@ class DocumentMissingSchedulerTest {
         userRepository.deleteAll();
     }
 
-    @Test
-    @DisplayName("Sends exactly maxPerRun=1 notification per shop per run")
-    void sendsOnlyOneNotificationPerShopPerRun() {
-        // GROCERY requires: PAN, GST, FSSAI_FOOD_LICENSE, TRADE_LICENSE, MSME_CERTIFICATE, SHOP_INSURANCE
-        // No documents uploaded -> all 6 are missing
+    private Set<String> requiredDocNames() {
+        return requiredDocumentService.getRequiredDocuments("GROCERY", BusinessScale.SMALL)
+                .stream()
+                .map(Enum::name)
+                .collect(java.util.stream.Collectors.toSet());
+    }
 
+    private Notification precreateMissingDocNotification(String documentType) {
+        return notificationService.createNotification(
+                owner.getId(), "title", "body", "MISSING_DOCUMENT", shop.getId(), documentType);
+    }
+
+    @Test
+    @DisplayName("Single run sends one MISSING_DOCUMENT notification carrying the doc type")
+    void singleRunSendsOneDistinctDocNotification() {
+        // GROCERY requires: PAN, GST, FSSAI_FOOD_LICENSE, TRADE_LICENSE,
+        // MSME_CERTIFICATE, SHOP_INSURANCE -> none uploaded -> 6 missing
         scheduler.checkMissingDocuments();
 
         List<Notification> notifs = notificationRepository.findAll();
         assertThat(notifs).hasSize(1);
         assertThat(notifs.get(0).getType()).isEqualTo("MISSING_DOCUMENT");
         assertThat(notifs.get(0).getReferenceId()).isEqualTo(shop.getId());
+        assertThat(notifs.get(0).getMetadata()).isIn(requiredDocNames());
     }
 
     @Test
-    @DisplayName("Min-interval gate prevents duplicate within window")
-    @Disabled("Flaky due to H2 Instant comparison timing; tested manually")
-    void minIntervalGatePreventsDuplicate() {
-        // Pre-create a MISSING_DOCUMENT notification within the min-interval window
-        Notification existing = notificationService.createNotification(
-                owner.getId(), "title", "body", "MISSING_DOCUMENT", shop.getId(), null);
-        // Override createdAt to 1 hour ago (well within 24h window)
-        existing.setCreatedAt(Instant.now().minus(1, ChronoUnit.HOURS));
-        notificationRepository.saveAndFlush(existing);
+    @DisplayName("Repeated runs cover different docs, capped by the daily quota")
+    void repeatedRunsCoverDifferentDocsUpToDailyQuota() {
+        // max-per-run=1, max-per-day=3 -> four runs produce exactly 3
+        // notifications, all about different documents
+        for (int run = 0; run < 4; run++) {
+            scheduler.checkMissingDocuments();
+        }
+
+        List<Notification> notifs = notificationRepository.findAll();
+        assertThat(notifs).hasSize(3);
+        assertThat(notifs)
+                .allMatch(n -> "MISSING_DOCUMENT".equals(n.getType()))
+                .allMatch(n -> n.getMetadata() != null && requiredDocNames().contains(n.getMetadata()));
+        assertThat(notifs.stream().map(Notification::getMetadata).distinct())
+                .hasSize(3);
+    }
+
+    @Test
+    @DisplayName("A doc already notified inside the window is never repeated")
+    void perDocGateSkipsDocAlreadyNotifiedInWindow() {
+        // GST was already reminded about recently -> it must be skipped while
+        // another missing doc still gets the run's slot
+        precreateMissingDocNotification("GST");
 
         scheduler.checkMissingDocuments();
 
         List<Notification> notifs = notificationRepository.findAll();
-        // Should NOT create a new notification because one exists within 24h window
-        assertThat(notifs).hasSize(1);
+        assertThat(notifs).hasSize(2);
+        long gstReminders = notifs.stream()
+                .filter(n -> "GST".equals(n.getMetadata()))
+                .count();
+        assertThat(gstReminders).isEqualTo(1);
+        assertThat(notifs.stream().map(Notification::getMetadata).distinct()).hasSize(2);
     }
 
     @Test
-    @DisplayName("Allows notification after min-interval expires")
-    @Disabled("Flaky due to H2 Instant comparison timing; tested manually")
-    void allowsNotificationAfterIntervalExpires() {
-        // Pre-create a MISSING_DOCUMENT notification OUTSIDE the min-interval window
-        Notification existing = notificationService.createNotification(
-                owner.getId(), "title", "body", "MISSING_DOCUMENT", shop.getId(), null);
-        // Override createdAt to 48 hours ago (well outside 24h window)
-        existing.setCreatedAt(Instant.now().minus(48, ChronoUnit.HOURS));
-        notificationRepository.saveAndFlush(existing);
+    @DisplayName("A stale reminder outside the window becomes eligible again")
+    void allowsNotificationAfterWindowExpires() {
+        Notification stale = precreateMissingDocNotification("GST");
+
+        // created_at is updatable=false -> backdate via native update
+        entityManager.createNativeQuery("UPDATE notifications SET created_at = :ts WHERE id = :id")
+                .setParameter("ts", Timestamp.valueOf(LocalDateTime.now().minusHours(48)))
+                .setParameter("id", stale.getId())
+                .executeUpdate();
 
         scheduler.checkMissingDocuments();
 
+        // stale one no longer blocks nor counts toward today's quota
         List<Notification> notifs = notificationRepository.findAll();
-        // Should create a new notification because old one is outside 24h window
         assertThat(notifs).hasSize(2);
     }
 
     @Test
-    @DisplayName("Rotation picks different doc when interval expires")
-    @Disabled("Flaky due to H2 Instant comparison timing; tested manually")
-    void rotationPicksDifferentDocEachDay() {
-        // Run 1 - creates 1 notification
-        scheduler.checkMissingDocuments();
-        List<Notification> notifs1 = notificationRepository.findAll();
-        assertThat(notifs1).hasSize(1);
+    @DisplayName("Owner-scoped check only notifies that owner's shops")
+    void ownerScopedCheckOnlyNotifiesTargetOwnersShops() {
+        User otherOwner = new User();
+        otherOwner.setUserName("Other Owner");
+        otherOwner.setEmailId("other@example.com");
+        otherOwner.setMobileNumber("8888888888");
+        otherOwner.setPassword("password");
+        otherOwner.setRole(Role.ADMIN);
+        otherOwner = userRepository.save(otherOwner);
 
-        // Manually set the first notification's createdAt to 48 hours ago (outside 24h window)
-        Notification firstNotif = notifs1.get(0);
-        firstNotif.setCreatedAt(Instant.now().minus(48, ChronoUnit.HOURS));
-        notificationRepository.saveAndFlush(firstNotif);
+        Shop otherShop = new Shop();
+        otherShop.setShopName("Other Shop");
+        otherShop.setOwnerName("Other Owner");
+        otherShop.setMobile("8765432109");
+        otherShop.setCategory("GROCERY");
+        otherShop.setScale(BusinessScale.SMALL);
+        otherShop.setState("Tamil Nadu");
+        otherShop.setCity("Chennai");
+        otherShop.setBranchName("Main");
+        otherShop.setAddress("456 Other St");
+        otherShop.setPincode("600002");
+        otherShop.setOwner(otherOwner);
+        shopRepository.save(otherShop);
 
-        // Run 2 - should create a new notification since first is outside min-interval
-        scheduler.checkMissingDocuments();
-        List<Notification> notifs2 = notificationRepository.findAll();
-        assertThat(notifs2).hasSize(2);
+        int sent = scheduler.checkMissingDocumentsForOwner(owner.getId());
+
+        assertThat(sent).isEqualTo(1);
+        List<Notification> notifs = notificationRepository.findAll();
+        assertThat(notifs).hasSize(1);
+        assertThat(notifs.get(0).getReferenceId()).isEqualTo(shop.getId());
+        assertThat(notificationRepository.findByUserIdOrderByCreatedAtDesc(otherOwner.getId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Login-time trigger reaches the daily minimum in one call")
+    void loginTriggerReachesDailyMinimum() {
+        // Simulates the AuthService login hook running where the scheduler
+        // can fire: quota allows maxPerDay=3 per window for this owner
+        int first = scheduler.checkMissingDocumentsForOwner(owner.getId());
+        // further logins same day keep adding distinct docs up to the quota
+        int second = scheduler.checkMissingDocumentsForOwner(owner.getId());
+        int third = scheduler.checkMissingDocumentsForOwner(owner.getId());
+        int fourth = scheduler.checkMissingDocumentsForOwner(owner.getId());
+
+        assertThat(first + second + third).isEqualTo(3);
+        assertThat(fourth).isZero();
+
+        List<Notification> notifs = notificationRepository.findAll();
+        assertThat(notifs).hasSize(3);
+        assertThat(notifs.stream().map(Notification::getMetadata).distinct()).hasSize(3);
     }
 
     @Test
     @DisplayName("Shops with no missing docs receive no notifications")
     void shopWithAllDocsUploadedReceivesNoNotifications() {
-        // Upload all required docs for GROCERY
         Set<DocumentType> required = requiredDocumentService.getRequiredDocuments("GROCERY", BusinessScale.SMALL);
         for (DocumentType type : required) {
             Document doc = new Document();

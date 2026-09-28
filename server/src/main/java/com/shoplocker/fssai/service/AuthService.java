@@ -23,6 +23,7 @@ import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
 import com.shoplocker.fssai.repository.*;
 import com.shoplocker.fssai.security.JwtService;
+import com.shoplocker.fssai.scheduler.DocumentMissingScheduler;
 import com.shoplocker.fssai.util.MsmeDataParser;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -103,6 +104,7 @@ public class AuthService {
     private final LoginAttemptService loginAttemptService;
     private final OtpService otpService;
     private final NotificationService notificationService;
+    private final DocumentMissingScheduler documentMissingScheduler;
 
     /**
      * Self-reference (via the Spring proxy) so the DB-creation phase can run
@@ -125,7 +127,8 @@ public class AuthService {
                        GoogleOAuthService googleOAuthService,
                        LoginAttemptService loginAttemptService,
                        OtpService otpService,
-                       NotificationService notificationService) {
+                       NotificationService notificationService,
+                       DocumentMissingScheduler documentMissingScheduler) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -137,6 +140,7 @@ public class AuthService {
         this.loginAttemptService = loginAttemptService;
         this.otpService = otpService;
         this.notificationService = notificationService;
+        this.documentMissingScheduler = documentMissingScheduler;
     }
 
     @Transactional
@@ -232,11 +236,17 @@ public class AuthService {
         }
 
         String token = jwtService.generateToken(user);
-        createLoginWelcomeNotification(user);
+        createLoginNotifications(user);
         return AuthResponse.from(user, token);
     }
 
-    private void createLoginWelcomeNotification(User user) {
+    /**
+     * Runs on every successful login. Creates the welcome-back notification and
+     * immediately surfaces this owner's missing-document reminders (distinct docs,
+     * capped at the daily quota) so a freshly logged-in user always sees their
+     * daily minimum. A failure here must never break login.
+     */
+    private void createLoginNotifications(User user) {
         String name = user.getUserName() == null || user.getUserName().isBlank()
                 ? "there"
                 : user.getUserName().trim();
@@ -247,6 +257,15 @@ public class AuthService {
                 "WELCOME",
                 null,
                 null);
+
+        try {
+            int sent = documentMissingScheduler.checkMissingDocumentsForOwner(user.getId());
+            if (sent > 0) {
+                log.info("Sent {} missing-document notification(s) to user {} on login", sent, user.getId());
+            }
+        } catch (Exception e) {
+            log.warn("Missing-document check failed for user {} on login: {}", user.getId(), e.getMessage());
+        }
     }
 
     /**
@@ -281,7 +300,7 @@ public class AuthService {
             // User already exists — just log them in
             User user = existingUser.get();
             String token = jwtService.generateToken(user);
-            createLoginWelcomeNotification(user);
+            createLoginNotifications(user);
             log.info("Google login: existing user email={}", maskEmail(email));
             return AuthResponse.from(user, token);
         }
@@ -322,7 +341,7 @@ public class AuthService {
                         FailureCode.USER_NOT_FOUND));
 
         String token = jwtService.generateToken(user);
-        createLoginWelcomeNotification(user);
+        createLoginNotifications(user);
         log.info("Google login: existing user email={}", maskEmail(email));
         return AuthResponse.from(user, token);
     }
@@ -407,7 +426,7 @@ public class AuthService {
         loginAttemptService.reset(ipKey);
 
         String token = jwtService.generateToken(user);
-        createLoginWelcomeNotification(user);
+        createLoginNotifications(user);
         log.info("Manager logged in via code: userId={}", user.getId());
         return AuthResponse.from(user, token);
     }
@@ -862,7 +881,7 @@ public class AuthService {
 
         // Issue fresh JWT token
         String token = jwtService.generateToken(user);
-        createLoginWelcomeNotification(user);
+        createLoginNotifications(user);
         log.info("Biometric login successful: userId={} email={}", userId, maskEmail(email));
         return AuthResponse.from(user, token);
     }
@@ -944,7 +963,7 @@ public class AuthService {
         // left locked out by their own earlier resends.
         otpService.clearRateLimit(user.getMobileNumber());
         String token = jwtService.generateToken(user);
-        createLoginWelcomeNotification(user);
+        createLoginNotifications(user);
         log.info("MSME login successful: userId={} udyam={}", user.getId(), udyamNumber);
         return AuthResponse.from(user, token);
     }

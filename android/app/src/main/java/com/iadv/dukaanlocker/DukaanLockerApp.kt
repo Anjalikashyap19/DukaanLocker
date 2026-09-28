@@ -408,26 +408,16 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
 
                             is Screen.Notifications -> {
                                 var binConfirm by remember { mutableStateOf(false) }
+                                LaunchedEffect(Unit) { vm.loadNotifications() }
                                 NotificationScreen(
                                     notifications = state.notifications,
                                     onBack = { vm.goBack() },
                                     onClearAll = { binConfirm = true },
                                     onOpenBin = { vm.navigateTo(Screen.Bin) },
                                     onNotificationClick = { notification ->
-                                        if (notification.type == "MISSING_DOCUMENT" && notification.referenceId != null) {
-                                            // Navigate to Docs tab and select the business with missing document
-                                            vm.setBottomTab(BottomTab.Docs)
-                                            // Store the target document type to auto-select it
-                                            notification.metadata?.let { docType ->
-                                                vm.setTargetMissingDocument(docType)
-                                            }
-                                            // Find the business/shop for this document reference and load documents
-                                            val shop = state.shops.find { it.id == notification.referenceId }
-                                            shop?.let { s ->
-                                                vm.loadDocuments(s.id)
-                                                vm.setSelectedBusinessForDocs(s.id.toString())
-                                            }
-                                        }
+                                        // Leave the notifications screen and land on the
+                                        // Documents tab with the missing doc section open
+                                        vm.openMissingDocumentNotification(notification)
                                     },
                                     onMoveToBin = { notification ->
                                         vm.moveNotificationToBin(notification.id)
