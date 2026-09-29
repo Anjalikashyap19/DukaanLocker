@@ -3,9 +3,11 @@ package com.iadv.dukaanlocker.ui.screens
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -35,10 +37,16 @@ fun NotificationScreen(
     onOpenBin: () -> Unit,
     onNotificationClick: (NotificationItem) -> Unit,
     onMarkAllRead: () -> Unit,
-    onMoveToBin: (NotificationItem) -> Unit
+    onMoveToBin: (NotificationItem) -> Unit,
+    onRenew: (NotificationItem) -> Unit = {}
 ) {
     val colors = LocalAppColors.current
     var binTarget by remember { mutableStateOf<NotificationItem?>(null) }
+    var renewTarget by remember { mutableStateOf<NotificationItem?>(null) }
+    var selectedCategory by remember { mutableStateOf(NotificationCategory.ALL) }
+    val filteredNotifications = remember(notifications, selectedCategory) {
+        notifications.filter { it.matchesCategory(selectedCategory) }
+    }
 
     // Auto-mark all as read when screen opens
     LaunchedEffect(Unit) {
@@ -100,44 +108,84 @@ fun NotificationScreen(
         },
         containerColor = colors.background
     ) { padding ->
-        if (notifications.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.Info,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = colors.textSecondary.copy(alpha = 0.5f)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "No notifications yet",
-                        fontSize = 16.sp,
-                        color = colors.textSecondary
-                    )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            if (notifications.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    NotificationCategory.values().forEach { category ->
+                        val count = if (category == NotificationCategory.ALL) {
+                            notifications.size
+                        } else {
+                            notifications.count { it.matchesCategory(category) }
+                        }
+                        FilterChip(
+                            selected = selectedCategory == category,
+                            onClick = { selectedCategory = category },
+                            label = {
+                                Text(
+                                    "${category.label} ($count)",
+                                    fontSize = 12.sp,
+                                    maxLines = 1
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = colors.primary,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
                 }
+                Spacer(modifier = Modifier.height(8.dp))
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(vertical = 12.dp)
-            ) {
-                items(notifications) { notification ->
-                    NotificationCard(
-                        notification = notification,
-                        colors = colors,
-                        onClick = { onNotificationClick(notification) },
-                        onLongClick = { binTarget = notification }
-                    )
+
+            if (filteredNotifications.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = colors.textSecondary.copy(alpha = 0.5f)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            if (notifications.isEmpty()) "No notifications yet"
+                            else "No ${selectedCategory.label.lowercase()} notifications",
+                            fontSize = 16.sp,
+                            color = colors.textSecondary,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(vertical = 12.dp)
+                ) {
+                    items(filteredNotifications) { notification ->
+                        NotificationCard(
+                            notification = notification,
+                            colors = colors,
+                            onClick = { onNotificationClick(notification) },
+                            onLongClick = { binTarget = notification },
+                            onRenew = { renewTarget = notification }
+                        )
+                    }
                 }
             }
         }
@@ -190,6 +238,56 @@ fun NotificationScreen(
             }
         )
     }
+
+    if (renewTarget != null) {
+        val target = renewTarget!!
+        AlertDialog(
+            onDismissRequest = { renewTarget = null },
+            shape = RoundedCornerShape(20.dp),
+            icon = {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(48.dp)
+                )
+            },
+            title = {
+                Text(
+                    "Renew document?",
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Text(
+                    "We'll renew your ${(target.metadata ?: "document").replace('_', ' ')} and upload the certificate to your Dukaan Locker within 24 hours.",
+                    textAlign = TextAlign.Center
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onRenew(target)
+                        renewTarget = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("Renew", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = { renewTarget = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Text("Cancel", fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+                }
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -198,7 +296,8 @@ private fun NotificationCard(
     notification: NotificationItem,
     colors: com.iadv.dukaanlocker.ui.theme.AppColors,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    onRenew: (() -> Unit)? = null
 ) {
     val icon = when (notification.type) {
         "WELCOME" -> Icons.Default.CheckCircle
@@ -275,6 +374,16 @@ private fun NotificationCard(
                         color = colors.textSecondary.copy(alpha = 0.7f)
                     )
                 }
+                if (onRenew != null && notification.type in RENEWABLE_NOTIFICATION_TYPES) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = onRenew,
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Renew", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
 
             if (!notification.isRead) {
@@ -305,3 +414,28 @@ private fun formatTimeAgo(createdAt: String): String {
         ""
     }
 }
+
+private enum class NotificationCategory(val label: String) {
+    ALL("All"),
+    MISSING_DOC("Missing Doc"),
+    ALERT("Alert"),
+    ACTIVITY("Activity")
+}
+
+private val ALERT_NOTIFICATION_TYPES = setOf("EXPIRING_SOON", "EXPIRED", "NO_BUSINESS")
+
+private val RENEWABLE_NOTIFICATION_TYPES = setOf("EXPIRING_SOON", "EXPIRED")
+
+private fun NotificationItem.effectiveCategory(): NotificationCategory = when (category) {
+    "MISSING_DOC" -> NotificationCategory.MISSING_DOC
+    "ALERT" -> NotificationCategory.ALERT
+    "ACTIVITY" -> NotificationCategory.ACTIVITY
+    else -> when {
+        type == "MISSING_DOCUMENT" -> NotificationCategory.MISSING_DOC
+        type in ALERT_NOTIFICATION_TYPES -> NotificationCategory.ALERT
+        else -> NotificationCategory.ACTIVITY
+    }
+}
+
+private fun NotificationItem.matchesCategory(category: NotificationCategory): Boolean =
+    effectiveCategory() == category

@@ -671,9 +671,13 @@ public class DocumentValidationService {
      * per-type {@code *DocumentService} upload pipelines perform, so the unified
      * re-upload endpoint ({@code ShopController}) holds documents to the same
      * compliance bar instead of accepting unvalidated PDFs.
+     *
+     * @return the OCR-extracted text, so callers can mine it for metadata
+     *         (e.g. expiry dates) without running OCR twice
      */
-    public void validateContentWithOcr(DocumentType docType, byte[] fileBytes, String fileName) {
+    public String validateContentWithOcr(DocumentType docType, byte[] fileBytes, String fileName) {
         String extractedText = textractService.extractText(fileBytes, fileName);
         validate(docType, extractedText, fileName);
+        return extractedText;
     }
 }

@@ -2,13 +2,13 @@ package com.iadv.dukaanlocker
 
 import android.app.Activity
 import android.net.Uri
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Warning
@@ -22,14 +22,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.iadv.dukaanlocker.ToastType
 import com.iadv.dukaanlocker.api.*
 import com.iadv.dukaanlocker.ui.navigation.BottomTab
 import com.iadv.dukaanlocker.ui.navigation.Screen
 import com.iadv.dukaanlocker.ui.screens.*
 import com.iadv.dukaanlocker.ui.strings.LocalAppLanguage
 import com.iadv.dukaanlocker.ui.theme.*
+import com.iadv.dukaanlocker.ui.components.ToastOverlay
 
 @Composable
 fun DukaanLockerApp(
@@ -113,10 +116,10 @@ fun DukaanLockerApp(
                 val auth = AuthResponse(token = token, tokenType = "Bearer", userId = userId, userName = userName, mobileNumber = mobileNumber, emailId = email, role = role)
                 vm.saveAuth(auth, sendWelcomePush = true)
                 vm.navigateToHome()
-                Toast.makeText(context, "Welcome, $userName!", Toast.LENGTH_SHORT).show()
+                vm.showToast("Welcome, $userName!", ToastType.SUCCESS)
             },
             { exception ->
-                Toast.makeText(context, "Google Sign-In failed: ${exception.message}", Toast.LENGTH_LONG).show()
+                vm.showToast("Google Sign-In failed: ${exception.message}", ToastType.ERROR)
             }
         )
     }
@@ -139,6 +142,15 @@ fun DukaanLockerApp(
         }
     }
 
+    // ── NOTIFICATION TAP ROUTING ──
+    // Consume the route captured by MainActivity (content tap or Renew action)
+    // once the user is logged in and the app is unlocked.
+    LaunchedEffect(state.isLoggedIn, state.isAppUnlocked, state.currentScreen) {
+        if (state.isLoggedIn && state.isAppUnlocked) {
+            vm.consumePendingNotificationRoute()
+        }
+    }
+
     // ── BIOMETRIC LOGIN ──
     LaunchedEffect(state.showBiometricLoginPrompt) {
         if (state.showBiometricLoginPrompt && onBiometricLogin != null) {
@@ -154,11 +166,11 @@ fun DukaanLockerApp(
                             }
                         } else {
                             vm.updateState { it.copy(biometricLoginFailed = true) }
-                            Toast.makeText(context, "Biometric login unavailable. Please sign in normally.", Toast.LENGTH_LONG).show()
+                            vm.showToast("Biometric login unavailable. Please sign in normally.", ToastType.WARNING)
                         }
                     } else {
                         vm.updateState { it.copy(biometricLoginFailed = true) }
-                        Toast.makeText(context, "Biometric authentication failed.", Toast.LENGTH_LONG).show()
+                        vm.showToast("Biometric authentication failed.", ToastType.ERROR)
                     }
                 },
                 { vm.updateState { it.copy(showBiometricLoginPrompt = false, biometricLoginFailed = true) } }
@@ -350,10 +362,10 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                                     if (cipher != null) {
                                                         vm.enableBiometricLogin(cipher, state.authToken ?: "", state.currentUserId, state.currentUserName, state.currentUserEmail, state.currentUserRole)
                                                     } else {
-                                                        Toast.makeText(context, "Biometric authentication failed. Cipher is null.", Toast.LENGTH_SHORT).show()
+                                                        vm.showToast("Biometric authentication failed. Cipher is null.", ToastType.ERROR)
                                                     }
                                                 },
-                                                { errorMessage -> Toast.makeText(context, "Authentication failed: $errorMessage", Toast.LENGTH_SHORT).show() }
+                                                { errorMessage -> vm.showToast("Authentication failed: $errorMessage", ToastType.ERROR) }
                                             )
                                         },
                                         onBiometricLoginToggle = { enabled -> if (!enabled) vm.disableBiometricLogin() },
@@ -370,7 +382,7 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                         onFetchDoc = { doc -> vm.showFetchDialog(doc) },
                                         onUploadDoc = { doc -> vm.updateState { s -> s.copy(pendingUploadDoc = doc) } },
                                         onViewDoc = { doc -> vm.openDocument(doc) },
-                                        onDeleteDoc = { doc -> Toast.makeText(context, "${doc.name} - delete via API", Toast.LENGTH_SHORT).show() },
+                                        onDeleteDoc = { doc -> vm.showToast("${doc.name} - delete via API", ToastType.INFO) },
                                         onLogout = { vm.logout() },
                                         onAddCustomDoc = { shopId -> vm.showCustomDocDialog(shopId.toLongOrNull() ?: return@OwnerHomeScreen) },
                                         isLoadingShops = state.isLoadingShops,
@@ -422,7 +434,10 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                     onMoveToBin = { notification ->
                                         vm.moveNotificationToBin(notification.id)
                                     },
-                                    onMarkAllRead = { vm.markNotificationsRead() }
+                                    onMarkAllRead = { vm.markNotificationsRead() },
+                                    onRenew = { notification ->
+                                        vm.requestRenewal(notification)
+                                    }
                                 )
                                 // Bin confirmation dialog
                                 if (binConfirm) {
@@ -683,7 +698,59 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                 dismissButton = null
                             )
                         }
+
+                        // ── Renewal Requested Dialog ──
+                        if (state.renewalSuccessOrder != null) {
+                            val order = state.renewalSuccessOrder!!
+                            AlertDialog(
+                                onDismissRequest = { vm.dismissRenewalSuccess() },
+                                containerColor = if (state.isDarkTheme) Color(0xFF1E293B) else Color.White,
+                                shape = RoundedCornerShape(20.dp),
+                                title = {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text("Renewal Requested", fontWeight = FontWeight.Bold, color = if (state.isDarkTheme) Color.White else Color.Black)
+                                    }
+                                },
+                                text = {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                                        Text(
+                                            "Your license will be uploaded to your Dukaan Locker within 24 hours.",
+                                            color = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                            textAlign = TextAlign.Center
+                                        )
+                                        if (!order.dlId.isNullOrBlank()) {
+                                            Spacer(modifier = Modifier.height(12.dp))
+                                            Text(
+                                                "DL ID: ${order.dlId}",
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Text(
+                                                "Use this DL ID to find your locker folder",
+                                                fontSize = 12.sp,
+                                                color = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                                textAlign = TextAlign.Center
+                                            )
+                                        }
+                                    }
+                                },
+                                confirmButton = {
+                                    Button(onClick = { vm.dismissRenewalSuccess() }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)) {
+                                        Text("Done", fontWeight = FontWeight.Bold)
+                                    }
+                                },
+                                dismissButton = null
+                            )
+                        }
                     }
+
+                    // ── Toast Overlay (bottom notifications) ──
+                    ToastOverlay(
+                        toasts = state.toastQueue,
+                        onDismiss = { vm.dismissToast(it) }
+                    )
 
                     // ── Bottom Navigation Bar ──
                     if (state.isLoggedIn && state.viewDocumentId == null && (state.currentScreen is Screen.OwnerHome || state.currentScreen is Screen.ManagerHome)) {

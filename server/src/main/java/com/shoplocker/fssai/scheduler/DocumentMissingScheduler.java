@@ -11,15 +11,30 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.time.*;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Drip-feeds missing-document reminders: 3-5 per owner per day, one per
+ * configured time slot (with per-owner-per-day jitter so timings shift daily),
+ * each about a different missing document with rotating copy.
+ *
+ * Every send carries a per-slot dedupe key (missing:{date}:slot:{idx}) so a
+ * slot fires exactly once even with repeated cron runs / logins; per-document
+ * eligibility uses a calendar-day window so tomorrow rotates to other docs.
+ */
 @Component
 public class DocumentMissingScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(DocumentMissingScheduler.class);
+
+    private static final String TYPE = "MISSING_DOCUMENT";
+    private static final String CATEGORY = "MISSING_DOC";
 
     private final DocumentRepository documentRepository;
     private final ShopRepository shopRepository;
@@ -27,17 +42,19 @@ public class DocumentMissingScheduler {
     private final NotificationService notificationService;
     private final NotificationRepository notificationRepository;
 
-    @Value("${notification.missing-doc.max-per-run:3}")
-    private int maxPerRun;
+    /** Comma-separated local times, e.g. 10:00,13:30,17:00,20:00 */
+    @Value("${notification.missing-doc.slots:10:00,13:30,17:00,20:00}")
+    private String slotsConfig;
+
+    /** +/- minutes of deterministic per-owner-per-day jitter around each slot. */
+    @Value("${notification.missing-doc.jitter-minutes:45}")
+    private int jitterMinutes;
+
+    @Value("${notification.missing-doc.min-per-day:3}")
+    private int minPerDay;
 
     @Value("${notification.missing-doc.max-per-day:5}")
     private int maxPerDay;
-
-    @Value("${notification.missing-doc.min-interval-hours:24}")
-    private long minIntervalHours;
-
-    @Value("${notification.missing-doc.rotation-strategy:ROUND_ROBIN}")
-    private String rotationStrategy;
 
     public DocumentMissingScheduler(DocumentRepository documentRepository,
                                      ShopRepository shopRepository,
@@ -51,163 +68,160 @@ public class DocumentMissingScheduler {
         this.notificationRepository = notificationRepository;
     }
 
+    /** Cron entry point: serves every due, unserved slot for every owner. */
     public void checkMissingDocuments() {
         log.info("Running missing document check scheduler...");
-
         List<Shop> allShops = shopRepository.findAll();
-        int notificationsSent = notifyMissingDocuments(allShops);
+        Map<Long, List<Shop>> byOwner = allShops.stream()
+                .collect(Collectors.groupingBy(s -> s.getOwner().getId()));
 
+        int notificationsSent = 0;
+        for (Map.Entry<Long, List<Shop>> entry : byOwner.entrySet()) {
+            try {
+                notificationsSent += serveDueSlots(entry.getKey(), entry.getValue());
+            } catch (Exception e) {
+                log.error("Missing-document check failed for owner {}: {}",
+                        entry.getKey(), e.getMessage(), e);
+            }
+        }
         log.info("Missing document check completed. Sent {} notifications.", notificationsSent);
     }
 
-    /**
-     * Login-time trigger: sends this owner's missing-document notifications only.
-     * Together with {@link #checkMissingDocuments()} (3 runs per day) every logged-in
-     * owner gets at least 3 - at most 5 - missing-document notifications per day,
-     * each about a different document, never the same doc twice inside the window.
-     */
+    /** Login-time trigger: catches this owner up on any slots already due today. */
     public int checkMissingDocumentsForOwner(Long ownerId) {
         List<Shop> shops = shopRepository.findByOwnerId(ownerId);
-        return notifyMissingDocuments(shops);
+        if (shops.isEmpty()) return 0;
+        try {
+            return serveDueSlots(ownerId, shops);
+        } catch (Exception e) {
+            log.error("Missing-document check failed for owner {}: {}", ownerId, e.getMessage(), e);
+            return 0;
+        }
     }
 
-    private int notifyMissingDocuments(List<Shop> shops) {
-        int notificationsSent = 0;
-        Instant intervalStart = Instant.now().minus(minIntervalHours, ChronoUnit.HOURS);
+    private int serveDueSlots(Long ownerId, List<Shop> shops) {
+        LocalDate today = LocalDate.now();
+        LocalTime now = LocalTime.now();
+        String dateKey = today.toString();
+        ZoneId zone = ZoneId.systemDefault();
+        java.time.Instant startOfDay = today.atStartOfDay(zone).toInstant();
 
-        for (Shop shop : shops) {
-            try {
-                notificationsSent += notifyForShop(shop, intervalStart);
-            } catch (Exception e) {
-                log.error("Missing-document check failed for shop {} (owner {}): {}",
-                        shop.getId(), shop.getOwner().getId(), e.getMessage(), e);
-            }
-        }
-        return notificationsSent;
-    }
+        List<LocalTime> slots = parseSlots();
+        if (slots.isEmpty()) return 0;
 
-    private int notifyForShop(Shop shop, Instant intervalStart) {
-        Long ownerId = shop.getOwner().getId();
-        Set<DocumentType> requiredDocs = requiredDocumentService.getRequiredDocuments(
-                shop.getCategory(), shop.getScale());
+        int target = dailyTarget(ownerId, today);
+        List<Integer> chosenSlots = chosenSlots(ownerId, today, slots.size(), target);
 
-        List<Document> existingDocs = documentRepository.findByShopId(shop.getId());
-        Set<DocumentType> uploadedTypes = new HashSet<>();
-        for (Document doc : existingDocs) {
-            if (doc.getStatus() != DocumentStatus.NOT_UPLOADED) {
-                uploadedTypes.add(doc.getDocumentType());
-            }
-        }
+        int sentToday = (int) notificationRepository.countByUserIdAndCategoryAndCreatedAtAfter(
+                ownerId, CATEGORY, startOfDay);
 
-        List<DocumentType> missingDocs = requiredDocs.stream()
-                .filter(dt -> !uploadedTypes.contains(dt))
-                .sorted(Comparator.comparing(Enum::ordinal))
-                .collect(Collectors.toList());
+        int sent = 0;
+        NotificationCopy.Period period = NotificationCopy.periodFor(now);
+        int variantSeed = NotificationCopy.variant(ownerId, today, Integer.MAX_VALUE);
 
-        if (missingDocs.isEmpty()) {
-            return 0;
-        }
+        for (int slotIndex : chosenSlots) {
+            if (sentToday + sent >= target) break;
 
-        // Per-document gate: skip docs already notified for this shop inside the
-        // window (metadata holds the documentType), so the same doc is never repeated
-        // while other missing docs are still eligible.
-        List<DocumentType> candidates = missingDocs.stream()
-                .filter(dt -> !notificationRepository
-                        .existsByUserIdAndTypeAndReferenceIdAndMetadataAndCreatedAtAfter(
-                                ownerId, "MISSING_DOCUMENT", shop.getId(), dt.name(), intervalStart))
-                .collect(Collectors.toList());
+            LocalTime planned = slots.get(slotIndex)
+                    .plusMinutes(jitterMinutes(ownerId, dateKey, slotIndex));
+            if (now.isBefore(planned)) continue;                     // slot not due yet
 
-        if (candidates.isEmpty()) {
-            log.debug("Skipping shop {} (owner {}) - every missing doc already notified within last {} hours",
-                    shop.getId(), ownerId, minIntervalHours);
-            return 0;
-        }
+            String slotKey = "missing:" + dateKey + ":slot:" + slotIndex;
+            if (notificationRepository.existsByUserIdAndDedupeKey(ownerId, slotKey)) continue;
 
-        // Rolling daily quota per shop: caps the total (logins + scheduled runs
-        // combined) at maxPerDay notifications inside the window.
-        long alreadySent = notificationRepository.countByUserIdAndTypeAndReferenceIdAndCreatedAtAfter(
-                ownerId, "MISSING_DOCUMENT", shop.getId(), intervalStart);
-        int remainingQuota = (int) Math.max(0, maxPerDay - alreadySent);
-        if (remainingQuota == 0) {
-            log.debug("Skipping shop {} (owner {}) - daily quota of {} missing-doc notifications reached",
-                    shop.getId(), ownerId, maxPerDay);
-            return 0;
-        }
+            Candidate candidate = pickCandidate(ownerId, shops, today, startOfDay);
+            if (candidate == null) continue;                          // nothing eligible right now
 
-        int toNotify = Math.min(maxPerRun, Math.min(remainingQuota, candidates.size()));
-        List<DocumentType> selectedDocs = selectDocumentsToNotify(candidates, toNotify);
+            String title = NotificationCopy.missingDocTitle(candidate.documentType);
+            String body = NotificationCopy.missingDocBody(
+                    candidate.documentType, period, candidate.shop.getShopName(), variantSeed + slotIndex);
 
-        int notificationsSent = 0;
-        for (DocumentType required : selectedDocs) {
-            String docName = formatDocumentName(required);
-            String shopName = shop.getShopName();
-
-            String title = "\uD83D\uDCC4 Missing " + docName;
-            String body = String.format("Your %s needs a %s to stay compliant. Tap to upload now!",
-                    shopName, docName);
-
-            notificationService.sendPushAndCreateNotification(
-                    ownerId, title, body, "MISSING_DOCUMENT", shop.getId(),
-                    Map.of("shopId", shop.getId().toString(), "documentType", required.name())
+            boolean created = notificationService.sendPushAndCreateNotification(
+                    ownerId, title, body, TYPE, candidate.shop.getId(),
+                    Map.of("shopId", candidate.shop.getId().toString(),
+                           "documentType", candidate.documentType.name()),
+                    slotKey
             );
-            notificationsSent++;
+            if (created) sent++;
         }
-        return notificationsSent;
+        return sent;
     }
 
-    private List<DocumentType> selectDocumentsToNotify(List<DocumentType> missingDocs, int count) {
-        if (missingDocs.size() <= count) {
-            return missingDocs;
-        }
+    // ── Candidate selection ────────────────────────────────────────────────
 
-        switch (rotationStrategy.toUpperCase()) {
-            case "OLDEST_FIRST" -> {
-                // Oldest-first would require tracking when each doc went missing;
-                // without that data, fall back to round-robin
-                return missingDocs.subList(0, count);
+    private record Candidate(Shop shop, DocumentType documentType) {}
+
+    private Candidate pickCandidate(Long ownerId, List<Shop> shops, LocalDate today, java.time.Instant startOfDay) {
+        List<Candidate> candidates = new ArrayList<>();
+        for (Shop shop : shops) {
+            Set<DocumentType> requiredDocs = requiredDocumentService.getRequiredDocuments(
+                    shop.getCategory(), shop.getScale());
+
+            Set<DocumentType> uploadedTypes = new HashSet<>();
+            for (Document doc : documentRepository.findByShopId(shop.getId())) {
+                if (doc.getStatus() != DocumentStatus.NOT_UPLOADED) {
+                    uploadedTypes.add(doc.getDocumentType());
+                }
             }
-            case "ROUND_ROBIN" -> {
-                // Use day-of-year as rotation offset so each day picks the next doc
-                long dayOffset = ChronoUnit.DAYS.between(
-                        LocalDate.of(1970, 1, 1), LocalDate.now());
-                int offset = (int) (dayOffset % missingDocs.size());
-                return pickWithOffset(missingDocs, count, offset);
-            }
-            default -> {
-                log.warn("Unknown rotation strategy '{}', defaulting to ROUND_ROBIN", rotationStrategy);
-                return pickWithOffset(missingDocs, count, 0);
+
+            for (DocumentType docType : requiredDocs) {
+                if (uploadedTypes.contains(docType)) continue;
+                // Calendar-day gate: already reminded about this doc for this shop today
+                if (notificationRepository
+                        .existsByUserIdAndTypeAndReferenceIdAndMetadataAndCreatedAtAfter(
+                                ownerId, TYPE, shop.getId(), docType.name(), startOfDay)) {
+                    continue;
+                }
+                candidates.add(new Candidate(shop, docType));
             }
         }
+        if (candidates.isEmpty()) return null;
+
+        // Day-of-year rotation so a new day starts at a different doc
+        long dayOffset = ChronoUnit.DAYS.between(LocalDate.of(1970, 1, 1), today);
+        int offset = (int) Math.floorMod(dayOffset, candidates.size());
+        return candidates.get(offset);
     }
 
-    private List<DocumentType> pickWithOffset(List<DocumentType> docs, int count, int offset) {
-        List<DocumentType> result = new ArrayList<>();
-        for (int i = 0; i < count; i++) {
-            int idx = (offset + i) % docs.size();
-            result.add(docs.get(idx));
+    // ── Scheduling helpers (all deterministic per owner+day) ───────────────
+
+    private List<LocalTime> parseSlots() {
+        List<LocalTime> slots = new ArrayList<>();
+        for (String raw : slotsConfig.split(",")) {
+            String value = raw.trim();
+            if (value.isEmpty()) continue;
+            try {
+                slots.add(LocalTime.parse(value));
+            } catch (DateTimeParseException e) {
+                log.warn("Ignoring unparsable missing-doc slot '{}'", value);
+            }
         }
-        return result;
+        slots.sort(Comparator.naturalOrder());
+        return slots;
     }
 
-    private String formatDocumentName(DocumentType type) {
-        return switch (type) {
-            case GST -> "GST Certificate";
-            case PAN -> "PAN Card";
-            case FSSAI_FOOD_LICENSE -> "FSSAI License";
-            case MSME_CERTIFICATE -> "MSME Certificate";
-            case TRADE_LICENSE -> "Trade License";
-            case SHOP_ESTABLISHMENT -> "Shop Establishment Certificate";
-            case FIRE_SAFETY -> "Fire Safety Certificate";
-            case POLLUTION_CONTROL -> "Pollution Control Certificate";
-            case DRUG_LICENSE -> "Drug License";
-            case IEC -> "IEC Certificate";
-            case TRADEMARK -> "Trademark Certificate";
-            case PROPERTY_TAX -> "Property Tax Receipt";
-            case PROFESSIONAL_TAX -> "Professional Tax Certificate";
-            case LABOUR_LICENSE -> "Labour License";
-            case SHOP_INSURANCE -> "Shop Insurance";
-            case AADHAAR -> "Aadhaar Card";
-            case CUSTOM -> "Custom Document";
-        };
+    private int dailyTarget(Long ownerId, LocalDate today) {
+        int min = Math.max(0, Math.min(minPerDay, maxPerDay));
+        int max = Math.max(min, maxPerDay);
+        if (min == max) return min;
+        int h = Objects.hash(ownerId, today.toString());
+        return min + Math.floorMod(h, (max - min + 1));
+    }
+
+    /** Deterministically picks which of today's slots will actually send. */
+    private List<Integer> chosenSlots(Long ownerId, LocalDate today, int slotCount, int target) {
+        List<Integer> indices = new ArrayList<>();
+        for (int i = 0; i < slotCount; i++) indices.add(i);
+        Collections.shuffle(indices, new Random(Objects.hash(ownerId, today.toString(), "slots")));
+        return indices.stream()
+                .limit(Math.min(target, slotCount))
+                .sorted()
+                .collect(Collectors.toList());
+    }
+
+    private long jitterMinutes(Long ownerId, String dateKey, int slotIndex) {
+        if (jitterMinutes <= 0) return 0;
+        int h = Objects.hash(ownerId, dateKey, slotIndex);
+        return Math.floorMod(h, (2 * jitterMinutes + 1)) - (long) jitterMinutes;
     }
 }

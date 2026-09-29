@@ -376,6 +376,7 @@ data class NotificationItem(
     @SerializedName("title") val title: String,
     @SerializedName("body") val body: String,
     @SerializedName("type") val type: String,
+    @SerializedName("category") val category: String? = null,
     @SerializedName("referenceId") val referenceId: Long?,
     @SerializedName("metadata") val metadata: String?,
     @SerializedName("read") val isRead: Boolean,
@@ -384,4 +385,22 @@ data class NotificationItem(
 
 data class UnreadCountResponse(
     @SerializedName("count") val count: Long
+)
+
+data class RenewalOrderItem(
+    @SerializedName("id") val id: Long,
+    @SerializedName("shopId") val shopId: Long,
+    @SerializedName("shopName") val shopName: String? = null,
+    @SerializedName("documentType") val documentType: String,
+    @SerializedName("status") val status: String,
+    @SerializedName("dlId") val dlId: String? = null,
+    @SerializedName("notes") val notes: String? = null,
+    @SerializedName("requestedAt") val requestedAt: String? = null,
+    @SerializedName("completedAt") val completedAt: String? = null
+)
+
+data class CreateRenewalRequest(
+    @SerializedName("shopId") val shopId: Long,
+    @SerializedName("documentType") val documentType: String,
+    @SerializedName("notes") val notes: String? = null
 )

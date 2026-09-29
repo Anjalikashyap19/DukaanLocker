@@ -15,10 +15,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -27,15 +27,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Test config (src/test/resources/application.properties):
- * max-per-run=1, max-per-day=3, min-interval-hours=24.
+ * slots=00:00,00:00,00:00 (always due), jitter=0, min-per-day=max-per-day=3.
  *
- * Behavior under test: every scheduled run / login sends up to maxPerRun
- * DISTINCT missing docs (same doc never repeated inside the 24h window) until
- * the rolling daily quota (maxPerDay) is reached.
+ * Behavior under test: one run serves every due slot (3), one notification per
+ * slot about a distinct missing doc, daily quota is a hard cap, per-doc
+ * eligibility uses a calendar-day window, and each send carries a slot dedupe
+ * key so repeated runs / logins never double-fire a slot.
  */
 @SpringBootTest
 @Transactional
-@DisplayName("DocumentMissingScheduler integration tests")
+@DisplayName("DocumentMissingScheduler drip tests")
 class DocumentMissingSchedulerTest {
 
     @Autowired private DocumentMissingScheduler scheduler;
@@ -45,7 +46,6 @@ class DocumentMissingSchedulerTest {
     @Autowired private NotificationRepository notificationRepository;
     @Autowired private RequiredDocumentService requiredDocumentService;
     @Autowired private NotificationService notificationService;
-    @MockitoBean private com.google.firebase.messaging.FirebaseMessaging firebaseMessaging;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -104,58 +104,61 @@ class DocumentMissingSchedulerTest {
     }
 
     @Test
-    @DisplayName("Single run sends one MISSING_DOCUMENT notification carrying the doc type")
-    void singleRunSendsOneDistinctDocNotification() {
-        // GROCERY requires: PAN, GST, FSSAI_FOOD_LICENSE, TRADE_LICENSE,
-        // MSME_CERTIFICATE, SHOP_INSURANCE -> none uploaded -> 6 missing
-        scheduler.checkMissingDocuments();
+    @DisplayName("One run serves all due slots: quota notifications, distinct docs, slot dedupe keys")
+    void oneRunServesAllDueSlots() {
+        // GROCERY/SMALL requires 6 docs, none uploaded -> plenty of candidates.
+        // Slots 00:00 x3 are always due, target=3.
+        int sent = scheduler.checkMissingDocumentsForOwner(owner.getId());
 
-        List<Notification> notifs = notificationRepository.findAll();
-        assertThat(notifs).hasSize(1);
-        assertThat(notifs.get(0).getType()).isEqualTo("MISSING_DOCUMENT");
-        assertThat(notifs.get(0).getReferenceId()).isEqualTo(shop.getId());
-        assertThat(notifs.get(0).getMetadata()).isIn(requiredDocNames());
-    }
-
-    @Test
-    @DisplayName("Repeated runs cover different docs, capped by the daily quota")
-    void repeatedRunsCoverDifferentDocsUpToDailyQuota() {
-        // max-per-run=1, max-per-day=3 -> four runs produce exactly 3
-        // notifications, all about different documents
-        for (int run = 0; run < 4; run++) {
-            scheduler.checkMissingDocuments();
-        }
-
+        assertThat(sent).isEqualTo(3);
         List<Notification> notifs = notificationRepository.findAll();
         assertThat(notifs).hasSize(3);
         assertThat(notifs)
                 .allMatch(n -> "MISSING_DOCUMENT".equals(n.getType()))
-                .allMatch(n -> n.getMetadata() != null && requiredDocNames().contains(n.getMetadata()));
-        assertThat(notifs.stream().map(Notification::getMetadata).distinct())
-                .hasSize(3);
+                .allMatch(n -> "MISSING_DOC".equals(n.getCategory()))
+                .allMatch(n -> n.getReferenceId().equals(shop.getId()))
+                .allMatch(n -> n.getMetadata() != null && requiredDocNames().contains(n.getMetadata()))
+                .allMatch(n -> n.getDedupeKey() != null
+                        && n.getDedupeKey().startsWith("missing:" + LocalDate.now() + ":slot:"));
+        assertThat(notifs.stream().map(Notification::getMetadata).distinct()).hasSize(3);
     }
 
     @Test
-    @DisplayName("A doc already notified inside the window is never repeated")
-    void perDocGateSkipsDocAlreadyNotifiedInWindow() {
-        // GST was already reminded about recently -> it must be skipped while
-        // another missing doc still gets the run's slot
-        precreateMissingDocNotification("GST");
-
-        scheduler.checkMissingDocuments();
+    @DisplayName("Repeated runs never exceed the daily target (slot dedupe)")
+    void repeatedRunsAreCappedByDailyTarget() {
+        for (int run = 0; run < 4; run++) {
+            scheduler.checkMissingDocumentsForOwner(owner.getId());
+        }
 
         List<Notification> notifs = notificationRepository.findAll();
-        assertThat(notifs).hasSize(2);
-        long gstReminders = notifs.stream()
-                .filter(n -> "GST".equals(n.getMetadata()))
-                .count();
-        assertThat(gstReminders).isEqualTo(1);
-        assertThat(notifs.stream().map(Notification::getMetadata).distinct()).hasSize(2);
+        assertThat(notifs).hasSize(3);
+        assertThat(notifs.stream().map(Notification::getMetadata).distinct()).hasSize(3);
     }
 
     @Test
-    @DisplayName("A stale reminder outside the window becomes eligible again")
-    void allowsNotificationAfterWindowExpires() {
+    @DisplayName("A doc already reminded about today is skipped and counts toward the daily quota")
+    void perDocGateSkipsDocAlreadyNotifiedToday() {
+        precreateMissingDocNotification("GST");
+
+        // The pre-created reminder already consumes 1 of today's quota of 3
+        int sent = scheduler.checkMissingDocumentsForOwner(owner.getId());
+
+        assertThat(sent).isEqualTo(2);
+        List<Notification> notifs = notificationRepository.findAll();
+        assertThat(notifs).hasSize(3);
+        // GST appears exactly once (the pre-created one) - never re-sent today
+        assertThat(notifs.stream().filter(n -> "GST".equals(n.getMetadata())).count()).isEqualTo(1);
+        // the drip sends are about other distinct docs
+        List<String> dripDocs = notifs.stream()
+                .filter(n -> n.getDedupeKey() != null)
+                .map(Notification::getMetadata)
+                .toList();
+        assertThat(dripDocs).hasSize(2).doesNotContain("GST");
+    }
+
+    @Test
+    @DisplayName("Yesterday's reminder does not block today's rotation")
+    void staleReminderOutsideCalendarDayBecomesEligibleAgain() {
         Notification stale = precreateMissingDocNotification("GST");
 
         // created_at is updatable=false -> backdate via native update
@@ -164,11 +167,11 @@ class DocumentMissingSchedulerTest {
                 .setParameter("id", stale.getId())
                 .executeUpdate();
 
-        scheduler.checkMissingDocuments();
+        int sent = scheduler.checkMissingDocumentsForOwner(owner.getId());
 
         // stale one no longer blocks nor counts toward today's quota
-        List<Notification> notifs = notificationRepository.findAll();
-        assertThat(notifs).hasSize(2);
+        assertThat(sent).isEqualTo(3);
+        assertThat(notificationRepository.findAll()).hasSize(4);
     }
 
     @Test
@@ -198,30 +201,22 @@ class DocumentMissingSchedulerTest {
 
         int sent = scheduler.checkMissingDocumentsForOwner(owner.getId());
 
-        assertThat(sent).isEqualTo(1);
+        assertThat(sent).isEqualTo(3);
         List<Notification> notifs = notificationRepository.findAll();
-        assertThat(notifs).hasSize(1);
-        assertThat(notifs.get(0).getReferenceId()).isEqualTo(shop.getId());
+        assertThat(notifs).hasSize(3);
+        assertThat(notifs).allMatch(n -> n.getReferenceId().equals(shop.getId()));
         assertThat(notificationRepository.findByUserIdOrderByCreatedAtDesc(otherOwner.getId())).isEmpty();
     }
 
     @Test
-    @DisplayName("Login-time trigger reaches the daily minimum in one call")
-    void loginTriggerReachesDailyMinimum() {
-        // Simulates the AuthService login hook running where the scheduler
-        // can fire: quota allows maxPerDay=3 per window for this owner
-        int first = scheduler.checkMissingDocumentsForOwner(owner.getId());
-        // further logins same day keep adding distinct docs up to the quota
-        int second = scheduler.checkMissingDocumentsForOwner(owner.getId());
-        int third = scheduler.checkMissingDocumentsForOwner(owner.getId());
-        int fourth = scheduler.checkMissingDocumentsForOwner(owner.getId());
+    @DisplayName("Global run fans out to every owner")
+    void globalRunCoversEveryOwner() {
+        scheduler.checkMissingDocuments();
 
-        assertThat(first + second + third).isEqualTo(3);
-        assertThat(fourth).isZero();
-
-        List<Notification> notifs = notificationRepository.findAll();
-        assertThat(notifs).hasSize(3);
-        assertThat(notifs.stream().map(Notification::getMetadata).distinct()).hasSize(3);
+        assertThat(notificationRepository.findAll())
+                .hasSize(3)
+                .allMatch(n -> n.getUser().getId().equals(owner.getId()));
+        assertThat(notificationRepository.findByUserIdOrderByCreatedAtDesc(owner.getId())).hasSize(3);
     }
 
     @Test
@@ -237,9 +232,9 @@ class DocumentMissingSchedulerTest {
             documentRepository.save(doc);
         }
 
-        scheduler.checkMissingDocuments();
+        int sent = scheduler.checkMissingDocumentsForOwner(owner.getId());
 
-        List<Notification> notifs = notificationRepository.findAll();
-        assertThat(notifs).isEmpty();
+        assertThat(sent).isZero();
+        assertThat(notificationRepository.findAll()).isEmpty();
     }
 }

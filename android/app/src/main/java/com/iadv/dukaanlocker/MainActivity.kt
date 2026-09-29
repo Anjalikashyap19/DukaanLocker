@@ -2,6 +2,7 @@ package com.iadv.dukaanlocker
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -25,6 +26,40 @@ import java.util.Locale
 
 // Use FragmentActivity (not ComponentActivity) so BiometricPrompt works
 class MainActivity : FragmentActivity() {
+
+    /** Routing info carried by a tapped notification (set before composition). */
+    data class PendingNotificationRoute(
+        val type: String?,
+        val route: String?,
+        val shopId: Long?,
+        val documentType: String?,
+        val action: String?
+    )
+
+    companion object {
+        @Volatile
+        var pendingNotificationRoute: PendingNotificationRoute? = null
+            private set
+
+        private fun readPendingRoute(intent: android.content.Intent?): PendingNotificationRoute? {
+            val type = intent?.getStringExtra("notification_type") ?: return null
+            return PendingNotificationRoute(
+                type = type,
+                route = intent.getStringExtra("notification_route"),
+                shopId = intent.getStringExtra("notification_shop_id")?.toLongOrNull(),
+                documentType = intent.getStringExtra("notification_document_type"),
+                action = intent.getStringExtra("notification_action")
+            )
+        }
+
+        private fun capturePendingRoute(intent: android.content.Intent?) {
+            readPendingRoute(intent)?.let { pendingNotificationRoute = it }
+        }
+
+        fun clearPendingNotificationRoute() {
+            pendingNotificationRoute = null
+        }
+    }
 
     lateinit var googleSignInHelper: GoogleSignInHelper
         private set
@@ -108,6 +143,12 @@ class MainActivity : FragmentActivity() {
         super.attachBaseContext(newBase?.let { applyLanguage(it) })
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        capturePendingRoute(intent)
+    }
+
     private fun applyLanguage(base: Context): Context {
         val code = readLanguageFromPrefs(base)
         val locale = Locale(code)
@@ -132,6 +173,7 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         
         createNotificationChannel()
+        capturePendingRoute(intent)
         requestNotificationPermissionIfNeeded()
         registerFcmTokenIfAuthenticated()
         
@@ -287,6 +329,27 @@ class MainActivity : FragmentActivity() {
             }
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
             notificationManager.createNotificationChannel(channel)
+
+            // High-importance channel for expiring/expired document alerts
+            val alertChannel = android.app.NotificationChannel(
+                com.iadv.dukaanlocker.service.DukaanFirebaseMessagingService.ALERT_CHANNEL_ID,
+                com.iadv.dukaanlocker.service.DukaanFirebaseMessagingService.ALERT_CHANNEL_NAME,
+                android.app.NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Urgent alerts for expiring and expired documents"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 400, 200, 400)
+                setSound(
+                    android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+                setShowBadge(true)
+                lockscreenVisibility = androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC
+            }
+            notificationManager.createNotificationChannel(alertChannel)
         }
     }
 

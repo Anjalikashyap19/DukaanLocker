@@ -4,7 +4,9 @@ import jakarta.persistence.*;
 import java.time.Instant;
 
 @Entity
-@Table(name = "notifications")
+@Table(name = "notifications",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uq_notifications_user_dedupe", columnNames = {"user_id", "dedupe_key"}))
 public class Notification {
 
     @Id
@@ -29,6 +31,14 @@ public class Notification {
 
     @Column(name = "metadata", columnDefinition = "TEXT")
     private String metadata;
+
+    /** MISSING_DOC | ALERT | ACTIVITY - derived from {@link #type} at insert time. */
+    @Column(name = "category", length = 30)
+    private String category;
+
+    /** Idempotency key for scheduler dedup; unique per user. */
+    @Column(name = "dedupe_key", length = 255)
+    private String dedupeKey;
 
     @Column(name = "is_read", nullable = false)
     private boolean isRead = false;
@@ -74,6 +84,12 @@ public class Notification {
 
     public String getMetadata() { return metadata; }
     public void setMetadata(String metadata) { this.metadata = metadata; }
+
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
+
+    public String getDedupeKey() { return dedupeKey; }
+    public void setDedupeKey(String dedupeKey) { this.dedupeKey = dedupeKey; }
 
     public boolean isRead() { return isRead; }
     public void setRead(boolean read) { isRead = read; }

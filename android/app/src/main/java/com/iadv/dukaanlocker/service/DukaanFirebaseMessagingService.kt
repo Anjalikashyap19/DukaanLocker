@@ -20,8 +20,14 @@ class DukaanFirebaseMessagingService : FirebaseMessagingService() {
 
     companion object {
         private const val TAG = "FCMService"
-        private const val CHANNEL_ID = "dukaan_notifications_v2"
-        private const val CHANNEL_NAME = "Dukaan Notifications"
+        const val CHANNEL_ID = "dukaan_notifications_v2"
+        const val CHANNEL_NAME = "Dukaan Notifications"
+        const val ALERT_CHANNEL_ID = "dukaan_alerts_v1"
+        const val ALERT_CHANNEL_NAME = "Document Alerts"
+
+        // Urgent expiry alerts get their own high-importance channel
+        private val ALERT_TYPES = setOf("EXPIRING_SOON", "EXPIRED")
+        private val RENEWAL_TYPES = setOf("EXPIRING_SOON", "EXPIRED", "RENEWAL_REQUESTED", "RENEWAL_COMPLETED")
     }
 
     override fun onNewToken(token: String) {
@@ -43,15 +49,34 @@ class DukaanFirebaseMessagingService : FirebaseMessagingService() {
         val body = message.notification?.body ?: message.data["body"] ?: ""
         val type = message.data["type"] ?: "GENERAL"
 
-        showNotification(title, body, type)
+        showNotification(
+            title = title,
+            body = body,
+            type = type,
+            route = message.data["route"],
+            shopId = message.data["shopId"],
+            documentType = message.data["documentType"]
+        )
     }
 
-    private fun showNotification(title: String, body: String, type: String) {
-        createNotificationChannel()
+    private fun showNotification(
+        title: String,
+        body: String,
+        type: String,
+        route: String?,
+        shopId: String?,
+        documentType: String?
+    ) {
+        createNotificationChannels()
+
+        val channelId = if (type in ALERT_TYPES) ALERT_CHANNEL_ID else CHANNEL_ID
 
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             putExtra("notification_type", type)
+            putExtra("notification_route", route)
+            putExtra("notification_shop_id", shopId)
+            putExtra("notification_document_type", documentType)
         }
 
         val pendingIntent = PendingIntent.getActivity(
@@ -59,15 +84,8 @@ class DukaanFirebaseMessagingService : FirebaseMessagingService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val icon = when (type) {
-            "EXPIRING_SOON", "EXPIRED" -> R.drawable.ic_notification
-            "MISSING_DOCUMENT" -> R.drawable.ic_notification
-            "NO_BUSINESS" -> R.drawable.ic_notification
-            else -> R.drawable.ic_notification
-        }
-
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(icon)
+        val builder = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -77,15 +95,36 @@ class DukaanFirebaseMessagingService : FirebaseMessagingService() {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
-            .build()
+
+        // "Renew" quick action on expiry alerts: opens the app on the
+        // Notifications screen where the user confirms the renewal request.
+        if (type in RENEWAL_TYPES) {
+            val renewIntent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                putExtra("notification_type", type)
+                putExtra("notification_route", "renewal")
+                putExtra("notification_shop_id", shopId)
+                putExtra("notification_document_type", documentType)
+                putExtra("notification_action", "renew")
+            }
+            val renewPendingIntent = PendingIntent.getActivity(
+                this, 1, renewIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            builder.addAction(
+                NotificationCompat.Action(R.drawable.ic_notification, "Renew", renewPendingIntent)
+            )
+        }
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(System.currentTimeMillis().toInt(), notification)
+        notificationManager.notify(System.currentTimeMillis().toInt(), builder.build())
     }
 
-    private fun createNotificationChannel() {
+    private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+            val defaultChannel = NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_HIGH
@@ -103,8 +142,28 @@ class DukaanFirebaseMessagingService : FirebaseMessagingService() {
                 setShowBadge(true)
                 lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
             }
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
+
+            val alertChannel = NotificationChannel(
+                ALERT_CHANNEL_ID,
+                ALERT_CHANNEL_NAME,
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Urgent alerts for expiring and expired documents"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 400, 200, 400)
+                setSound(
+                    android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+                setShowBadge(true)
+                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+            }
+
+            notificationManager.createNotificationChannel(defaultChannel)
+            notificationManager.createNotificationChannel(alertChannel)
         }
     }
 

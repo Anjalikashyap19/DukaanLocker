@@ -74,8 +74,28 @@ public class NotificationService {
         }
     }
 
+    /**
+     * Canonical category taxonomy for notification filtering:
+     * MISSING_DOC (upload reminders), ALERT (expiry escalation), ACTIVITY
+     * (welcome/login, no-business and other general notices).
+     */
+    public static String categoryFor(String type) {
+        if (type == null) return "ACTIVITY";
+        return switch (type) {
+            case "MISSING_DOCUMENT" -> "MISSING_DOC";
+            case "EXPIRING_SOON", "EXPIRED" -> "ALERT";
+            default -> "ACTIVITY";
+        };
+    }
+
     @Transactional
     public Notification createNotification(Long userId, String title, String body, String type, Long referenceId, String metadata) {
+        return createNotification(userId, title, body, type, referenceId, metadata, null);
+    }
+
+    @Transactional
+    public Notification createNotification(Long userId, String title, String body, String type, Long referenceId,
+                                           String metadata, String dedupeKey) {
         Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) {
             log.warn("User not found for notification: {}", userId);
@@ -84,6 +104,8 @@ public class NotificationService {
         User user = userOpt.get();
         Notification notification = new Notification(user, title, body, type, referenceId);
         notification.setMetadata(metadata);
+        notification.setCategory(categoryFor(type));
+        notification.setDedupeKey(dedupeKey);
         notificationRepository.save(notification);
         log.info("Notification created for user {}: {}", userId, title);
         return notification;
@@ -147,12 +169,43 @@ public class NotificationService {
 
     @Transactional
     public void sendPushAndCreateNotification(Long userId, String title, String body, String type, Long referenceId, Map<String, String> data) {
+        sendPushAndCreateNotification(userId, title, body, type, referenceId, data, null);
+    }
+
+    /**
+     * Composite send with idempotency: when {@code dedupeKey} is provided and a
+     * notification with the same key already exists for this user, nothing is sent.
+     *
+     * @return true if the notification was created and pushed
+     */
+    @Transactional
+    public boolean sendPushAndCreateNotification(Long userId, String title, String body, String type, Long referenceId,
+                                                 Map<String, String> data, String dedupeKey) {
+        if (dedupeKey != null && notificationRepository.existsByUserIdAndDedupeKey(userId, dedupeKey)) {
+            log.debug("Skipping duplicate notification for user {} (dedupeKey={})", userId, dedupeKey);
+            return false;
+        }
+
         String metadata = null;
         if (data != null && data.containsKey("documentType")) {
             metadata = data.get("documentType");
         }
-        createNotification(userId, title, body, type, referenceId, metadata);
-        sendPushNotification(userId, title, body, data);
+
+        // Always expose type/category in the push payload so the Android client
+        // can route and icon the notification correctly.
+        Map<String, String> payload = data == null ? new java.util.HashMap<>() : new java.util.HashMap<>(data);
+        payload.put("type", type);
+        payload.put("category", categoryFor(type));
+
+        try {
+            createNotification(userId, title, body, type, referenceId, metadata, dedupeKey);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // Unique (user_id, dedupe_key) raced with another sender - treat as already sent.
+            log.info("Duplicate notification suppressed for user {} (dedupeKey={})", userId, dedupeKey);
+            return false;
+        }
+        sendPushNotification(userId, title, body, payload);
+        return true;
     }
 
     @Transactional(readOnly = true)

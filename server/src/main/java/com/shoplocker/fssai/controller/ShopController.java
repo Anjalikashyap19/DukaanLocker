@@ -12,6 +12,7 @@ import com.shoplocker.fssai.entity.User;
 import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
 import com.shoplocker.fssai.service.DocumentValidationService;
+import com.shoplocker.fssai.service.ExpiryDateExtractor;
 import com.shoplocker.fssai.service.LocalFileStorageService;
 import com.shoplocker.fssai.service.ShopAccessService;
 import com.shoplocker.fssai.service.ShopService;
@@ -40,15 +41,18 @@ public class ShopController {
     private final ShopAccessService shopAccessService;
     private final DocumentValidationService documentValidationService;
     private final LocalFileStorageService localFileStorageService;
+    private final ExpiryDateExtractor expiryDateExtractor;
 
     public ShopController(ShopService shopService,
                           ShopAccessService shopAccessService,
                           DocumentValidationService documentValidationService,
-                          LocalFileStorageService localFileStorageService) {
+                          LocalFileStorageService localFileStorageService,
+                          ExpiryDateExtractor expiryDateExtractor) {
         this.shopService = shopService;
         this.shopAccessService = shopAccessService;
         this.documentValidationService = documentValidationService;
         this.localFileStorageService = localFileStorageService;
+        this.expiryDateExtractor = expiryDateExtractor;
     }
 
     @Operation(summary = "Create a shop", description = "ADMIN only. Creates a new shop and links it to " +
@@ -145,7 +149,8 @@ public class ShopController {
         // OCR + content validation — align re-upload with the per-type /docs
         // upload pipeline so a re-uploaded file is verified to be the correct
         // document type and not a mismatch (e.g. a PAN uploaded as GST).
-        documentValidationService.validateContentWithOcr(docType, fileBytes, file.getOriginalFilename());
+        String ocrText = documentValidationService.validateContentWithOcr(
+                docType, fileBytes, file.getOriginalFilename());
 
         // Build file key: relative path within the shop folder
         // Structure: {doc-type}/{sanitized-filename}
@@ -166,6 +171,12 @@ public class ShopController {
         }
         if (expiryDateStr != null && !expiryDateStr.isBlank()) {
             expiryDate = LocalDateTime.parse(expiryDateStr);
+        }
+
+        // The mobile app never sends expiryDate - mine it from the OCR text so
+        // the expiry-alert escalation actually has data to work with.
+        if (expiryDate == null) {
+            expiryDate = expiryDateExtractor.extract(ocrText).orElse(null);
         }
 
         DocumentResponse response = shopService.uploadOrReuploadDocument(

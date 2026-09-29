@@ -58,4 +58,8 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
                                                                            Instant after);
 
     long countByUserIdAndTypeAndReferenceIdAndCreatedAtAfter(Long userId, String type, Long referenceId, Instant after);
+
+    boolean existsByUserIdAndDedupeKey(Long userId, String dedupeKey);
+
+    long countByUserIdAndCategoryAndCreatedAtAfter(Long userId, String category, Instant after);
 }

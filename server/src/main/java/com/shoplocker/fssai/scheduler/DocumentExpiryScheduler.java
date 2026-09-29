@@ -6,23 +6,49 @@ import com.shoplocker.fssai.repository.ShopRepository;
 import com.shoplocker.fssai.service.NotificationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.time.*;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
+/**
+ * Expiry-alert escalation for uploaded documents that carry an expiry date:
+ *
+ *   T-30  "will expire on {date} - renew now"
+ *   T-15  "I think you forgot to renew - still have time"
+ *   T-7   "very little time left - don't worry, we will help you"
+ *   T-6..T-0  daily escalating reminders
+ *   expired   daily reminders, capped at expired-max-days
+ *
+ * Each stage/days is gated by a dedupe key (expiry:{docId}:T30 / :D5 / :X2),
+ * so a stage fires whenever it is first seen - a missed calendar day is never
+ * permanently skipped (the flaw of the previous exact-day implementation).
+ *
+ * referenceId is the SHOP id so in-app taps navigate to the right business;
+ * the document id travels in the push payload as {@code documentId}.
+ */
 @Component
 public class DocumentExpiryScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(DocumentExpiryScheduler.class);
 
+    private static final DateTimeFormatter EXPIRY_FORMAT = DateTimeFormatter.ofPattern("d MMMM yyyy");
+
     private final DocumentRepository documentRepository;
     private final ShopRepository shopRepository;
     private final NotificationService notificationService;
 
-    // Notification intervals before expiry (in days)
-    private static final List<Long> NOTIFICATION_INTERVALS = List.of(30L, 23L, 16L, 9L, 2L);
+    /** Ascending or descending; parsed and sorted descending internally. */
+    @Value("${notification.alert.stage-days:30,15,7}")
+    private String stageDaysConfig;
+
+    @Value("${notification.alert.expired-max-days:7}")
+    private int expiredMaxDays;
 
     public DocumentExpiryScheduler(DocumentRepository documentRepository,
                                     ShopRepository shopRepository,
@@ -35,113 +61,117 @@ public class DocumentExpiryScheduler {
     public void checkExpiringDocuments() {
         log.info("Running document expiry check scheduler...");
 
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime thirtyDaysFromNow = now.plusDays(30);
-
-        // Find all documents with expiry date within 30 days
+        List<Long> stages = parseStages();
         List<Document> allDocs = documentRepository.findAll();
         int notificationsSent = 0;
 
         for (Document doc : allDocs) {
             if (doc.getExpiryDate() == null) continue;
             if (doc.getStatus() == DocumentStatus.NOT_UPLOADED) continue;
-
-            LocalDate expiryDate = doc.getExpiryDate().toLocalDate();
-            long daysUntilExpiry = ChronoUnit.DAYS.between(LocalDate.now(), expiryDate);
-
-            if (daysUntilExpiry < 0) {
-                // Document has expired
-                handleExpiredDocument(doc, daysUntilExpiry);
-                notificationsSent++;
-            } else if (daysUntilExpiry <= 30) {
-                // Document is expiring soon
-                handleExpiringSoonDocument(doc, daysUntilExpiry, now);
-                notificationsSent++;
+            try {
+                if (processDocument(doc, stages)) notificationsSent++;
+            } catch (Exception e) {
+                log.error("Expiry check failed for document {} (shop {}): {}",
+                        doc.getId(), doc.getShop() != null ? doc.getShop().getId() : null,
+                        e.getMessage(), e);
             }
         }
 
-        log.info("Document expiry check completed. Processed {} documents.", notificationsSent);
+        log.info("Document expiry check completed. Sent {} notifications.", notificationsSent);
     }
 
-    private void handleExpiredDocument(Document doc, long daysExpired) {
+    private boolean processDocument(Document doc, List<Long> stages) {
+        LocalDate today = LocalDate.now();
+        long days = ChronoUnit.DAYS.between(today, doc.getExpiryDate().toLocalDate());
+
+        if (days > stages.get(0)) return false;                    // still too far out
+
         Shop shop = doc.getShop();
         Long ownerId = shop.getOwner().getId();
-        String docName = formatDocumentName(doc.getDocumentType());
+        String docName = NotificationCopy.formatDocumentName(doc.getDocumentType());
         String shopName = shop.getShopName();
+        String expiryDateStr = doc.getExpiryDate().toLocalDate().format(EXPIRY_FORMAT);
+        int variant = NotificationCopy.variant(doc.getId(), today, Integer.MAX_VALUE);
 
-        // Check if we already sent an expired notification today
-        Optional<Notification> existing = notificationService.getNotifications(ownerId).stream()
-                .filter(n -> "EXPIRED".equals(n.getType()) && doc.getId().equals(n.getReferenceId()))
-                .filter(n -> n.getCreatedAt().atZone(ZoneId.systemDefault()).toLocalDate().equals(LocalDate.now()))
-                .findFirst();
+        String stage;
+        String type;
+        String dedupeKey;
+        String payloadStage;
 
-        if (existing.isPresent()) return;
+        if (days < 0) {
+            if (Math.abs(days) > expiredMaxDays) return false;      // stop nagging after the cap
+            stage = "EXPIRED";
+            payloadStage = "EXPIRED";
+            type = "EXPIRED";
+            dedupeKey = "expiry:" + doc.getId() + ":X" + Math.abs(days);
+        } else if (days < stages.get(stages.size() - 1)) {
+            // Daily escalation window: below the smallest stage down to expiry day
+            stage = days == 0 ? "DAILY_TODAY" : "DAILY";
+            payloadStage = "D" + days;
+            type = "EXPIRING_SOON";
+            dedupeKey = "expiry:" + doc.getId() + ":D" + days;
+        } else {
+            long chosen = smallestStageAtLeast(stages, days);       // 30 | 15 | 7
+            stage = "T" + chosen;
+            payloadStage = "T" + chosen;
+            type = "EXPIRING_SOON";
+            dedupeKey = "expiry:" + doc.getId() + ":T" + chosen;
+        }
 
-        String title = "\u274C Document Expired!";
-        String body = String.format("Your %s for %s has expired %d days ago. Upload the renewed copy ASAP to avoid penalties!",
-                docName, shopName, Math.abs(daysExpired));
+        String title = NotificationCopy.expiryTitle(days, doc.getDocumentType());
+        String body = "DAILY_TODAY".equals(stage)
+                ? NotificationCopy.expiryBody("DAILY_TODAY", days, expiryDateStr,
+                        doc.getDocumentType(), shopName, variant)
+                : NotificationCopy.expiryBody(stage, days, expiryDateStr,
+                        doc.getDocumentType(), shopName, variant);
 
-        notificationService.sendPushAndCreateNotification(
-                ownerId, title, body, "EXPIRED", doc.getId(),
-                Map.of("shopId", shop.getId().toString(), "documentType", doc.getDocumentType().name())
-        );
-    }
-
-    private void handleExpiringSoonDocument(Document doc, long daysUntilExpiry, LocalDateTime now) {
-        Shop shop = doc.getShop();
-        Long ownerId = shop.getOwner().getId();
-        String docName = formatDocumentName(doc.getDocumentType());
-        String shopName = shop.getShopName();
-
-        // Only send notification on specific intervals
-        boolean shouldNotify = NOTIFICATION_INTERVALS.contains(daysUntilExpiry);
-        if (!shouldNotify) return;
-
-        // Check if we already sent this notification
-        Optional<Notification> existing = notificationService.getNotifications(ownerId).stream()
-                .filter(n -> "EXPIRING_SOON".equals(n.getType()) && doc.getId().equals(n.getReferenceId()))
-                .filter(n -> n.getCreatedAt().atZone(ZoneId.systemDefault()).toLocalDate().equals(LocalDate.now()))
-                .findFirst();
-
-        if (existing.isPresent()) return;
-
-        String urgency = daysUntilExpiry <= 7 ? "\uD83D\uDEA8" : "\u26A0\uFE0F";
-        String title = urgency + " " + docName + " expiring soon";
-        String body = String.format("Your %s for %s expires in %d days. Renew now to keep your business running smooth!",
-                docName, shopName, daysUntilExpiry);
-
-        // Update document status
-        if (daysUntilExpiry <= 7) {
+        // Keep document status in sync with what the user is being told
+        if (days < 0 && doc.getStatus() != DocumentStatus.EXPIRED) {
+            doc.setStatus(DocumentStatus.EXPIRED);
+            documentRepository.save(doc);
+        } else if (days <= stages.get(stages.size() - 1) && days >= 0
+                && doc.getStatus() != DocumentStatus.EXPIRING_SOON) {
             doc.setStatus(DocumentStatus.EXPIRING_SOON);
             documentRepository.save(doc);
         }
 
-        notificationService.sendPushAndCreateNotification(
-                ownerId, title, body, "EXPIRING_SOON", doc.getId(),
-                Map.of("shopId", shop.getId().toString(), "documentType", doc.getDocumentType().name(),
-                        "daysLeft", String.valueOf(daysUntilExpiry))
+        return notificationService.sendPushAndCreateNotification(
+                ownerId, title, body, type, shop.getId(),
+                Map.of("shopId", shop.getId().toString(),
+                       "documentId", String.valueOf(doc.getId()),
+                       "documentType", doc.getDocumentType().name(),
+                       "daysLeft", String.valueOf(days),
+                       "alertStage", payloadStage,
+                       "route", "renewal"),
+                dedupeKey
         );
     }
 
-    private String formatDocumentName(DocumentType type) {
-        return switch (type) {
-            case GST -> "GST Certificate";
-            case PAN -> "PAN Card";
-            case FSSAI_FOOD_LICENSE -> "FSSAI License";
-            case MSME_CERTIFICATE -> "MSME Certificate";
-            case TRADE_LICENSE -> "Trade License";
-            case SHOP_ESTABLISHMENT -> "Shop Establishment Certificate";
-            case FIRE_SAFETY -> "Fire Safety Certificate";
-            case POLLUTION_CONTROL -> "Pollution Control Certificate";
-            case DRUG_LICENSE -> "Drug License";
-            case IEC -> "IEC Certificate";
-            case TRADEMARK -> "Trademark Certificate";
-            case PROPERTY_TAX -> "Property Tax Receipt";
-            case PROFESSIONAL_TAX -> "Professional Tax Certificate";
-            case LABOUR_LICENSE -> "Labour License";
-             case SHOP_INSURANCE -> "Shop Insurance";
-            case AADHAAR -> "Aadhaar Card";
-            case CUSTOM -> "Custom Document";
-        };
+    private long smallestStageAtLeast(List<Long> stagesDesc, long days) {
+        // stagesDesc is sorted descending; walk it and return the smallest >= days
+        long chosen = stagesDesc.get(stagesDesc.size() - 1);
+        for (long stage : stagesDesc) {
+            if (stage >= days) chosen = stage;
+        }
+        return chosen;
+    }
+
+    private List<Long> parseStages() {
+        List<Long> stages = new ArrayList<>();
+        for (String raw : stageDaysConfig.split(",")) {
+            String value = raw.trim();
+            if (value.isEmpty()) continue;
+            try {
+                long days = Long.parseLong(value);
+                if (days >= 0) stages.add(days);
+            } catch (NumberFormatException e) {
+                log.warn("Ignoring unparsable alert stage '{}'", value);
+            }
+        }
+        if (stages.isEmpty()) {
+            stages.addAll(List.of(30L, 15L, 7L));
+        }
+        stages.sort((a, b) -> Long.compare(b, a));                  // descending
+        return stages;
     }
 }

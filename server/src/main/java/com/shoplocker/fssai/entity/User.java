@@ -121,6 +121,15 @@ public class User {
     }
 
 
+    public String getDlId() {
+        return dlId;
+    }
+
+    public void setDlId(String dlId) {
+        this.dlId = dlId;
+    }
+
+
     public List<Shop> getShops() {
         return shops;
     }

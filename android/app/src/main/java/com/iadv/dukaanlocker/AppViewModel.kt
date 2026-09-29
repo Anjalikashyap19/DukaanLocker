@@ -2,7 +2,6 @@ package com.iadv.dukaanlocker
 
 import android.app.Application
 import android.net.Uri
-import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.iadv.dukaanlocker.api.*
@@ -64,7 +63,9 @@ data class AppUiState(
     val showCustomDocDialog: Boolean = false,
     val customDocShopId: Long? = null,
     val selectedBusinessIdForDocs: String? = null,
-    val targetMissingDocumentType: String? = null
+    val targetMissingDocumentType: String? = null,
+    val renewalSuccessOrder: RenewalOrderItem? = null,
+    val toastQueue: List<ToastMessage> = emptyList()
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -105,6 +106,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateState(update: (AppUiState) -> AppUiState) {
         _uiState.value = update(_uiState.value)
+    }
+
+    fun showToast(message: String, type: ToastType = ToastType.INFO, duration: Long = 3000) {
+        val toast = ToastMessage(message = message, type = type, duration = duration)
+        updateState { it.copy(toastQueue = it.toastQueue + toast) }
+        // Auto-dismiss after duration
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(duration)
+            updateState { state ->
+                state.copy(toastQueue = state.toastQueue.filterNot { it.id == toast.id })
+            }
+        }
+    }
+
+    fun dismissToast(toastId: Long) {
+        updateState { it.copy(toastQueue = it.toastQueue.filterNot { it.id == toastId }) }
     }
 
     fun setScreen(screen: Screen) {
@@ -162,16 +179,35 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openMissingDocumentNotification(notification: NotificationItem) {
         if (notification.type != "MISSING_DOCUMENT") return
+        openMissingDocumentRoute(notification.referenceId, notification.metadata)
+    }
+
+    private fun openMissingDocumentRoute(shopId: Long?, documentType: String?) {
         // Return to the screen we came from (Owner/Manager home) so the user lands on Docs
         if (_uiState.value.navigationHistory.isNotEmpty()) goBack() else navigateToHome()
         setBottomTab(BottomTab.Docs)
-        val shopId = notification.referenceId
         if (shopId != null) {
             setSelectedBusinessForDocs(shopId.toString())
             loadDocuments(shopId)
             if (_uiState.value.shops.isEmpty()) loadShops()
         }
-        notification.metadata?.let { setTargetMissingDocument(it) }
+        documentType?.let { setTargetMissingDocument(it) }
+    }
+
+    /**
+     * Routes the app based on a tapped notification (extras captured by
+     * MainActivity before composition). Safe to call repeatedly — the pending
+     * route is consumed only when the user is logged in and unlocked.
+     */
+    fun consumePendingNotificationRoute() {
+        if (!uiState.value.isLoggedIn) return
+        val pending = MainActivity.pendingNotificationRoute ?: return
+        MainActivity.clearPendingNotificationRoute()
+        when (pending.type) {
+            "MISSING_DOCUMENT" -> openMissingDocumentRoute(pending.shopId, pending.documentType)
+            "EXPIRING_SOON", "EXPIRED", "RENEWAL_REQUESTED", "RENEWAL_COMPLETED" ->
+                if (uiState.value.currentScreen != Screen.Notifications) navigateTo(Screen.Notifications)
+        }
     }
 
     fun goBackTab() {
@@ -266,7 +302,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 selectedBottomTab = BottomTab.Home
             )
         }
-        Toast.makeText(context, "Logged out", Toast.LENGTH_SHORT).show()
+        showToast("Logged out", ToastType.INFO)
     }
 
     fun logoutManager() {
@@ -349,9 +385,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 if (response.isSuccessful) {
                     updateState { it.copy(notifications = emptyList(), unreadNotificationCount = 0) }
                     loadNotifications()
+                    showToast("All notifications moved to bin", ToastType.SUCCESS)
+                } else {
+                    showToast("Failed to move notifications to bin: ${response.parseErrorMessage()}", ToastType.ERROR)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("Notifications", "Failed to move to bin: ${e.message}")
+                showToast("Network error: ${e.message}", ToastType.ERROR)
             }
         }
     }
@@ -522,12 +562,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val auth = response.body() ?: return@launch
                     saveAuth(auth, sendWelcomePush = true)
                     navigateToHome()
-                    Toast.makeText(context, "Welcome, ${_uiState.value.currentUserName}!", Toast.LENGTH_SHORT).show()
+                    showToast("Welcome, ${_uiState.value.currentUserName}!", ToastType.SUCCESS)
                 } else {
-                    Toast.makeText(context, "Login failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
+                    showToast("Login failed: ${response.parseErrorMessage()}", ToastType.ERROR)
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
+                showToast("Network error: ${e.message}", ToastType.ERROR)
             }
             updateState { it.copy(isLoading = false) }
             onDone()
@@ -543,12 +583,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val auth = response.body() ?: return@launch
                     saveAuth(auth, sendWelcomePush = false)
                     updateState { it.copy(currentScreen = Screen.Wizard) }
-                    Toast.makeText(context, "Account created! Welcome, ${_uiState.value.currentUserName}!", Toast.LENGTH_SHORT).show()
+                    showToast("Account created! Welcome, ${_uiState.value.currentUserName}!", ToastType.SUCCESS)
                 } else {
-                    Toast.makeText(context, "Registration failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
+                    showToast("Registration failed: ${response.parseErrorMessage()}", ToastType.ERROR)
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
+                showToast("Network error: ${e.message}", ToastType.ERROR)
             }
             updateState { it.copy(isLoading = false) }
             onDone()
@@ -573,12 +613,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     loadShops()
                     if (auth.role == "ADMIN") loadManagers()
                     loadNotifications()
-                    Toast.makeText(context, "MSME verified! Welcome, ${auth.userName}!", Toast.LENGTH_LONG).show()
+                    showToast("MSME verified! Welcome, ${auth.userName}!", ToastType.SUCCESS)
                 } else {
-                    Toast.makeText(context, "MSME registration failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
+                    showToast("MSME registration failed: ${response.parseErrorMessage()}", ToastType.ERROR)
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
+                showToast("Network error: ${e.message}", ToastType.ERROR)
             }
             updateState { it.copy(isLoading = false) }
             onDone()
@@ -596,12 +636,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     updateState { it.copy(currentScreen = Screen.ManagerHome) }
                     loadShops()
                     loadNotifications()
-                    Toast.makeText(context, "Welcome, ${auth.userName}!", Toast.LENGTH_SHORT).show()
+                    showToast("Welcome, ${auth.userName}!", ToastType.SUCCESS)
                 } else {
-                    Toast.makeText(context, "Login failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
+                    showToast("Login failed: ${response.parseErrorMessage()}", ToastType.ERROR)
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
+                showToast("Network error: ${e.message}", ToastType.ERROR)
             }
             updateState { it.copy(isLoading = false) }
         }
@@ -659,7 +699,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     loadShops()
                     if (auth.role == "ADMIN") loadManagers()
                     loadNotifications()
-                    Toast.makeText(context, "Welcome back, ${auth.userName}!", Toast.LENGTH_LONG).show()
+                    showToast("Welcome back, ${auth.userName}!", ToastType.SUCCESS)
                     onResult(true, null)
                 } else {
                     onResult(false, response.parseErrorMessage())
@@ -680,7 +720,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val auth = response.body() ?: return@launch
                     saveAuth(auth, sendWelcomePush = true)
                     navigateToHome()
-                    Toast.makeText(context, "Welcome back, ${_uiState.value.currentUserName}!", Toast.LENGTH_SHORT).show()
+                    showToast("Welcome back, ${_uiState.value.currentUserName}!", ToastType.SUCCESS)
                     onResult(true, null)
                 } else {
                     onResult(false, response.parseErrorMessage())
@@ -709,12 +749,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         if (shopId != null) api.assignShopToManager(newMgr.id, shopId)
                     }
                     loadManagers()
-                    Toast.makeText(context, "Manager '$name' created!\nCode: ${newMgr.managerCode}", Toast.LENGTH_LONG).show()
+                    showToast("Manager '$name' created!\nCode: ${newMgr.managerCode}", ToastType.SUCCESS)
                 } else {
-                    Toast.makeText(context, "Failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
+                    showToast("Failed: ${response.parseErrorMessage()}", ToastType.ERROR)
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                showToast("Error: ${e.message}", ToastType.ERROR)
             }
             updateState { it.copy(isLoading = false) }
         }
@@ -733,9 +773,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 loadManagers()
                 if (failedCount > 0) {
-                    Toast.makeText(context, "Manager access revoked ($failedCount shops failed)", Toast.LENGTH_SHORT).show()
+                    showToast("Manager access revoked ($failedCount shops failed)", ToastType.WARNING)
                 } else {
-                    Toast.makeText(context, "Manager access revoked", Toast.LENGTH_SHORT).show()
+                    showToast("Manager access revoked", ToastType.SUCCESS)
                 }
             }
         }
@@ -748,13 +788,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val sId = shopId.toLongOrNull() ?: return@launch
                 val response = api.assignShopToManager(mgrId, sId)
                 if (response.isSuccessful) {
-                    Toast.makeText(context, "Business assigned to manager", Toast.LENGTH_SHORT).show()
+                    showToast("Business assigned to manager", ToastType.SUCCESS)
                     loadManagers()
                 } else {
-                    Toast.makeText(context, "Failed: ${response.parseErrorMessage()}", Toast.LENGTH_SHORT).show()
+                    showToast("Failed: ${response.parseErrorMessage()}", ToastType.ERROR)
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                showToast("Error: ${e.message}", ToastType.ERROR)
             }
         }
     }
@@ -765,13 +805,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val resp = api.disableManager(id)
                 if (resp.isSuccessful) {
-                    Toast.makeText(context, "Manager disabled", Toast.LENGTH_SHORT).show()
+                    showToast("Manager disabled", ToastType.SUCCESS)
                     loadManagers()
                 } else {
-                    Toast.makeText(context, "Failed: ${resp.parseErrorMessage()}", Toast.LENGTH_SHORT).show()
+                    showToast("Failed: ${resp.parseErrorMessage()}", ToastType.ERROR)
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                showToast("Error: ${e.message}", ToastType.ERROR)
             }
         }
     }
@@ -782,13 +822,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val resp = api.enableManager(id)
                 if (resp.isSuccessful) {
-                    Toast.makeText(context, "Manager enabled", Toast.LENGTH_SHORT).show()
+                    showToast("Manager enabled", ToastType.SUCCESS)
                     loadManagers()
                 } else {
-                    Toast.makeText(context, "Failed: ${resp.parseErrorMessage()}", Toast.LENGTH_SHORT).show()
+                    showToast("Failed: ${resp.parseErrorMessage()}", ToastType.ERROR)
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                showToast("Error: ${e.message}", ToastType.ERROR)
             }
         }
     }
@@ -809,23 +849,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         try {
                             val assignResp = api.assignShopToManager(pendingManagerId.toLong(), shopId)
                             if (!assignResp.isSuccessful) {
-                                Toast.makeText(context, "Shop created but manager assignment failed", Toast.LENGTH_SHORT).show()
+                                showToast("Shop created but manager assignment failed", ToastType.WARNING)
                             }
                             loadManagers()
                         } catch (e: Exception) {
-                            Toast.makeText(context, "Shop created but manager assignment failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                            showToast("Shop created but manager assignment failed: ${e.message}", ToastType.WARNING)
                         }
                     }
-                    Toast.makeText(context, "${biz.name} created!", Toast.LENGTH_SHORT).show()
+                    showToast("${biz.name} created!", ToastType.SUCCESS)
                     loadShops()
                     updateState { it.copy(currentScreen = Screen.OwnerHome) }
                 } else {
                     // Surface the server error (e.g. "Invalid scale") instead of
                     // bouncing back to Home as if the save had succeeded.
-                    Toast.makeText(context, response.parseErrorMessage(), Toast.LENGTH_LONG).show()
+                    showToast(response.parseErrorMessage(), ToastType.ERROR)
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                showToast("Error: ${e.message}", ToastType.ERROR)
             }
             updateState { it.copy(isLoading = false) }
             onDone()
@@ -843,7 +883,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 ))
                 if (!response.isSuccessful) {
                     // e.g. invalid scale — stay on the edit screen and show why
-                    Toast.makeText(context, response.parseErrorMessage(), Toast.LENGTH_LONG).show()
+                    showToast(response.parseErrorMessage(), ToastType.ERROR)
                 } else {
                     try {
                         val currentManagerId = _uiState.value.managerShopAssignments.entries.find { shopId.toString() in it.value }?.key
@@ -854,15 +894,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             api.assignShopToManager(pendingManagerId.toLong(), shopId)
                         }
                     } catch (e: Exception) {
-                        Toast.makeText(context, "Shop updated but manager assignment failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                        showToast("Shop updated but manager assignment failed: ${e.message}", ToastType.WARNING)
                     }
                     loadManagers()
-                    Toast.makeText(context, "${biz.name} updated!", Toast.LENGTH_SHORT).show()
+                    showToast("${biz.name} updated!", ToastType.SUCCESS)
                     loadShops()
                     updateState { it.copy(editShopTarget = null, currentScreen = Screen.OwnerHome) }
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                showToast("Error: ${e.message}", ToastType.ERROR)
             }
             updateState { it.copy(isLoading = false) }
             onDone()
@@ -933,9 +973,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (success) {
             LockerStorage.saveBiometricLoginEnabled(context, true)
             updateState { it.copy(isBiometricLoginEnabled = true) }
-            Toast.makeText(context, "Biometric login enabled!", Toast.LENGTH_SHORT).show()
+            showToast("Biometric login enabled!", ToastType.SUCCESS)
         } else {
-            Toast.makeText(context, "Failed to enable biometric login", Toast.LENGTH_SHORT).show()
+            showToast("Failed to enable biometric login", ToastType.ERROR)
         }
         return success
     }
@@ -944,7 +984,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         BiometricCredentialManager.clearCredentials(context)
         LockerStorage.saveBiometricLoginEnabled(context, false)
         updateState { it.copy(isBiometricLoginEnabled = false) }
-        Toast.makeText(context, "Biometric login disabled", Toast.LENGTH_SHORT).show()
+        showToast("Biometric login disabled", ToastType.INFO)
     }
 
     fun uploadDocument(doc: DocumentItem, uri: Uri) {
@@ -953,7 +993,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@launch
                 if (bytes.size > 10 * 1024 * 1024) {
-                    Toast.makeText(context, "File too large (max 10MB)", Toast.LENGTH_LONG).show()
+                    showToast("File too large (max 10MB)", ToastType.ERROR)
                     updateState { it.copy(isLoading = false) }
                     return@launch
                 }
@@ -966,13 +1006,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val urlDocType = doc.type.uppercase()
                 val response = api.uploadDocument(shopId = shopId, documentType = urlDocType, file = filePart, documentNumber = null, issueDate = null, expiryDate = null)
                 if (response.isSuccessful) {
-                    Toast.makeText(context, "${doc.name} uploaded!", Toast.LENGTH_SHORT).show()
+                    showToast("${doc.name} uploaded!", ToastType.SUCCESS)
                     loadDocuments(shopId)
                 } else {
-                    Toast.makeText(context, "Upload failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
+                    showToast("Upload failed: ${response.parseErrorMessage()}", ToastType.ERROR)
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "Upload error: ${e.message}", Toast.LENGTH_LONG).show()
+                showToast("Upload error: ${e.message}", ToastType.ERROR)
             }
             updateState { it.copy(isLoading = false) }
         }
@@ -993,7 +1033,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@launch
                 if (bytes.size > 10 * 1024 * 1024) {
-                    Toast.makeText(context, "File too large (max 10MB)", Toast.LENGTH_LONG).show()
+                    showToast("File too large (max 10MB)", ToastType.ERROR)
                     updateState { it.copy(isLoading = false) }
                     return@launch
                 }
@@ -1003,14 +1043,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val filePart = MultipartBody.Part.createFormData("file", "${documentName.trim()}.pdf", requestBody)
                 val response = api.uploadDocument(shopId = shopId, documentType = urlDocType, file = filePart, documentNumber = null, issueDate = null, expiryDate = null)
                 if (response.isSuccessful) {
-                    Toast.makeText(context, "'$documentName' uploaded!", Toast.LENGTH_SHORT).show()
+                    showToast("'$documentName' uploaded!", ToastType.SUCCESS)
                     dismissCustomDocDialog()
                     loadDocuments(shopId)
                 } else {
-                    Toast.makeText(context, "Upload failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
+                    showToast("Upload failed: ${response.parseErrorMessage()}", ToastType.ERROR)
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "Upload error: ${e.message}", Toast.LENGTH_LONG).show()
+                showToast("Upload error: ${e.message}", ToastType.ERROR)
             }
             updateState { it.copy(isLoading = false) }
         }
@@ -1028,13 +1068,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         }
                         onResult(body.sessionId, body.captchaBase64)
                     } else {
-                        Toast.makeText(context, "Failed to load captcha: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
+                        showToast("Failed to load captcha: ${response.parseErrorMessage()}", ToastType.ERROR)
                         onResult("", "")
                     }
                 }
             } catch (e: Exception) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    Toast.makeText(context, "Network error loading captcha: ${e.message}", Toast.LENGTH_LONG).show()
+                    showToast("Network error loading captcha: ${e.message}", ToastType.ERROR)
                     onResult("", "")
                 }
             }
@@ -1060,14 +1100,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             onResult(false, body)
                         }
                     } else {
-                        Toast.makeText(context, "GST verification failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
+                        showToast("GST verification failed: ${response.parseErrorMessage()}", ToastType.ERROR)
                         onResult(false, null)
                     }
                 }
             } catch (e: Exception) {
                 android.util.Log.e("GST_FETCH", "<<< EXCEPTION: ${e.javaClass.simpleName}: ${e.message}", e)
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
+                    showToast("Network error: ${e.message}", ToastType.ERROR)
                     onResult(false, null)
                 }
             }
@@ -1087,13 +1127,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             onResult(false, body)
                         }
                     } else {
-                        Toast.makeText(context, "MSME verification failed: ${response.parseErrorMessage()}", Toast.LENGTH_LONG).show()
+                        showToast("MSME verification failed: ${response.parseErrorMessage()}", ToastType.ERROR)
                         onResult(false, null)
                     }
                 }
             } catch (e: Exception) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
+                    showToast("Network error: ${e.message}", ToastType.ERROR)
                     onResult(false, null)
                 }
             }
@@ -1136,10 +1176,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun clearNotifications() {
         viewModelScope.launch {
             try {
-                api.clearNotifications()
-                updateState { it.copy(notifications = emptyList(), unreadNotificationCount = 0) }
+                val response = api.clearNotifications()
+                if (response.isSuccessful) {
+                    updateState { it.copy(notifications = emptyList(), unreadNotificationCount = 0) }
+                    showToast("Notifications cleared", ToastType.SUCCESS)
+                } else {
+                    showToast("Failed to clear notifications: ${response.parseErrorMessage()}", ToastType.ERROR)
+                }
             } catch (e: Exception) {
                 android.util.Log.e("Notifications", "Failed to clear: ${e.message}")
+                showToast("Network error: ${e.message}", ToastType.ERROR)
             }
         }
     }
@@ -1167,11 +1213,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         state.copy(binNotifications = state.binNotifications.filterNot { it.id == notificationId })
                     }
                     loadNotifications()
+                    showToast("Notification restored", ToastType.SUCCESS)
                 } else {
                     android.util.Log.e("Notifications", "Failed to restore: ${response.code()}")
+                    showToast("Failed to restore notification: ${response.parseErrorMessage()}", ToastType.ERROR)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("Notifications", "Failed to restore: ${e.message}")
+                showToast("Network error: ${e.message}", ToastType.ERROR)
             }
         }
     }
@@ -1183,11 +1232,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 if (response.isSuccessful) {
                     updateState { it.copy(binNotifications = emptyList()) }
                     loadNotifications()
+                    showToast("All notifications restored", ToastType.SUCCESS)
                 } else {
                     android.util.Log.e("Notifications", "Failed to restore all: ${response.code()}")
+                    showToast("Failed to restore notifications: ${response.parseErrorMessage()}", ToastType.ERROR)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("Notifications", "Failed to restore all: ${e.message}")
+                showToast("Network error: ${e.message}", ToastType.ERROR)
             }
         }
     }
@@ -1200,9 +1252,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     updateState {
                         it.copy(notifications = emptyList(), binNotifications = emptyList(), unreadNotificationCount = 0)
                     }
+                    showToast("Notifications deleted permanently", ToastType.SUCCESS)
+                } else {
+                    showToast("Failed to delete notifications: ${response.parseErrorMessage()}", ToastType.ERROR)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("Notifications", "Failed to permanently delete: ${e.message}")
+                showToast("Network error: ${e.message}", ToastType.ERROR)
             }
         }
     }
@@ -1219,11 +1275,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             unreadNotificationCount = remaining.count { !it.isRead }.toLong()
                         )
                     }
+                    showToast("Notification moved to bin", ToastType.SUCCESS)
                 } else {
                     android.util.Log.e("Notifications", "Failed to move notification to bin: ${response.code()}")
+                    showToast("Failed to move to bin: ${response.parseErrorMessage()}", ToastType.ERROR)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("Notifications", "Failed to move notification to bin: ${e.message}")
+                showToast("Network error: ${e.message}", ToastType.ERROR)
             }
         }
     }
@@ -1236,11 +1295,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     updateState { state ->
                         state.copy(binNotifications = state.binNotifications.filterNot { it.id == notificationId })
                     }
+                    showToast("Notification deleted", ToastType.SUCCESS)
                 } else {
                     android.util.Log.e("Notifications", "Failed to delete notification: ${response.code()}")
+                    showToast("Failed to delete notification: ${response.parseErrorMessage()}", ToastType.ERROR)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("Notifications", "Failed to delete notification: ${e.message}")
+                showToast("Network error: ${e.message}", ToastType.ERROR)
             }
         }
     }
@@ -1249,5 +1311,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             ApiClient.registerDeviceToken(context, token)
         }
+    }
+
+    fun requestRenewal(notification: NotificationItem) {
+        val shopId = notification.referenceId
+        val documentType = notification.metadata
+        if (shopId == null || documentType.isNullOrBlank()) {
+            showToast("Cannot start renewal for this alert", ToastType.ERROR)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val response = api.requestRenewal(CreateRenewalRequest(shopId, documentType))
+                if (response.isSuccessful) {
+                    updateState { it.copy(renewalSuccessOrder = response.body()) }
+                    showToast("Renewal requested", ToastType.SUCCESS)
+                    loadNotifications()
+                } else {
+                    showToast("Failed to request renewal: ${response.parseErrorMessage()}", ToastType.ERROR)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("Renewal", "Failed to request renewal: ${e.message}")
+                showToast("Network error: ${e.message}", ToastType.ERROR)
+            }
+        }
+    }
+
+    fun dismissRenewalSuccess() {
+        updateState { it.copy(renewalSuccessOrder = null) }
     }
 }

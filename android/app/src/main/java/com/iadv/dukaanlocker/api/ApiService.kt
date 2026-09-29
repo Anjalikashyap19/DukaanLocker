@@ -165,6 +165,13 @@ interface ApiService {
     @DELETE("api/notifications")
     suspend fun clearNotifications(): Response<Map<String, String>>
 
+    // ── Renewals ──────────────────────────────────────────────────────
+    @POST("api/renewals")
+    suspend fun requestRenewal(@Body body: CreateRenewalRequest): Response<RenewalOrderItem>
+
+    @GET("api/renewals")
+    suspend fun getRenewals(): Response<List<RenewalOrderItem>>
+
     @POST("api/device-token")
     suspend fun registerDeviceToken(@Body body: Map<String, String>): Response<Map<String, String>>
 

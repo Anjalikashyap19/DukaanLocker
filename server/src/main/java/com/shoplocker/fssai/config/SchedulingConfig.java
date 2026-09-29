@@ -19,11 +19,18 @@ public class SchedulingConfig implements SchedulingConfigurer {
     private final RandomTimeTrigger randomTimeTrigger;
 
     /**
-     * Fixed 3x/day schedule for the missing-document check so every owner
-     * reliably gets 3-5 notifications per day regardless of server restarts.
+     * Missing-doc drip: evaluated every 15 minutes; the scheduler itself decides
+     * which configured time slots (with per-owner jitter) are due and unserved.
      */
-    @Value("${notification.missing-doc.cron:0 0 9,14,19 * * *}")
+    @Value("${notification.missing-doc.cron:0 */15 * * * *}")
     private String missingDocCron;
+
+    /**
+     * Expiry alerts: hourly during waking hours (08:00-22:15) so daily escalation
+     * stages fire promptly but never during the night.
+     */
+    @Value("${notification.alert.cron:0 15 8-22 * * *}")
+    private String alertCron;
 
     public SchedulingConfig(DocumentExpiryScheduler documentExpiryScheduler,
                             DocumentMissingScheduler documentMissingScheduler,
@@ -37,7 +44,8 @@ public class SchedulingConfig implements SchedulingConfigurer {
 
     @Override
     public void configureTasks(ScheduledTaskRegistrar registrar) {
-        registrar.addTriggerTask(documentExpiryScheduler::checkExpiringDocuments, randomTimeTrigger);
+        registrar.addTriggerTask(documentExpiryScheduler::checkExpiringDocuments,
+                new CronTrigger(alertCron));
         registrar.addTriggerTask(documentMissingScheduler::checkMissingDocuments,
                 new CronTrigger(missingDocCron));
         registrar.addTriggerTask(noBusinessScheduler::checkUsersWithoutBusiness, randomTimeTrigger);
