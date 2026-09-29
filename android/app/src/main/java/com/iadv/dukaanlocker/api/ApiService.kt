@@ -130,6 +130,11 @@ interface ApiService {
     @POST("api/gst/fetch")
     suspend fun fetchGst(@Body request: GstFetchRequest): Response<GstVerificationResponse>
 
+    // ── FSSAI Food License Verification ─────────────────────────────────────
+
+    @POST("api/fssai/fetch")
+    suspend fun fetchFssai(@Body request: FssaiFetchRequest): Response<FssaiVerificationResponse>
+
     // ── Notifications ───────────────────────────────────────────────────────
 
     @GET("api/notifications")

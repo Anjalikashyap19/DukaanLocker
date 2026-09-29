@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import com.iadv.dukaanlocker.api.ApiClient
 import com.iadv.dukaanlocker.api.StreamDocumentRequest
 import com.iadv.dukaanlocker.api.ViewDocumentRequest
+import com.iadv.dukaanlocker.ui.components.EmptyStateView
 import com.iadv.dukaanlocker.ui.strings.AppStrings
 import com.iadv.dukaanlocker.ui.strings.LocalAppLanguage
 import com.iadv.dukaanlocker.ui.theme.LocalAppColors
@@ -307,9 +308,9 @@ fun DocumentViewerScreen(
                 }
 
                 pageInfos.isEmpty() -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                             Text(AppStrings.get(lang, "No document to display"), style = MaterialTheme.typography.bodyLarge, color = colors.textSecondary)
-                    }
+                    EmptyStateView(
+                        title = AppStrings.get(lang, "No document to display")
+                    )
                 }
 
                 else -> {

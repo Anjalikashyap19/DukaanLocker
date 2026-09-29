@@ -618,7 +618,7 @@ fun docDescription(type: String): String = when (type) {
 
 fun docFetchLabel(type: String): String = when (type) {
     "GST" -> "GSTIN Number (15-char alphanumeric)"
-    "FSSAI" -> "FSSAI Lic./Reg. No. (14-digit)"
+    "FSSAI", "FSSAI_FOOD_LICENSE" -> "FSSAI Lic./Reg. No. (14-digit)"
     "Udyam" -> "Udyam Reg. No. (UDYAM-XX-00-0000000)"
     "DrugLicense" -> "Drug License Number (Form 20/21)"
     "PAN" -> "PAN (10-char alphanumeric)"

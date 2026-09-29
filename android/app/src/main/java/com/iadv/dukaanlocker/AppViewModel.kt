@@ -15,9 +15,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
+
+/** Client-side budget for a single document auto-fetch call (UI shows a 60s countdown). */
+const val FETCH_TIMEOUT_MS = 60_000L
 
 data class AppUiState(
     val isLoggedIn: Boolean = false,
@@ -1085,7 +1089,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 android.util.Log.d("GST_FETCH", ">>> REQUEST: shopId=$shopId, gstin=$gstin")
-                val response = api.fetchGst(GstFetchRequest(shopId = shopId, gstin = gstin))
+                val response = withTimeoutOrNull(FETCH_TIMEOUT_MS) {
+                    api.fetchGst(GstFetchRequest(shopId = shopId, gstin = gstin))
+                }
+                if (response == null) {
+                    android.util.Log.w("GST_FETCH", "<<< TIMED OUT after ${FETCH_TIMEOUT_MS}ms")
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onResult(false, null)
+                    }
+                    return@launch
+                }
                 android.util.Log.d("GST_FETCH", "<<< RESPONSE CODE: ${response.code()}")
                 android.util.Log.d("GST_FETCH", "<<< RESPONSE BODY: ${response.body()}")
                 if (!response.isSuccessful) {
@@ -1117,7 +1130,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun fetchMsme(shopId: String, udyamNumber: String, sessionId: String, captchaText: String, onResult: (Boolean, UdyamVerifyResponse?) -> Unit) {
         viewModelScope.launch {
             try {
-                val response = api.fetchUdyam(UdyamFetchRequest(shopId = shopId, udyamNumber = udyamNumber, sessionId = sessionId, captchaText = captchaText))
+                val response = withTimeoutOrNull(FETCH_TIMEOUT_MS) {
+                    api.fetchUdyam(UdyamFetchRequest(shopId = shopId, udyamNumber = udyamNumber, sessionId = sessionId, captchaText = captchaText))
+                }
+                if (response == null) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onResult(false, null)
+                    }
+                    return@launch
+                }
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     if (response.isSuccessful) {
                         val body = response.body()
@@ -1132,6 +1153,44 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             } catch (e: Exception) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    showToast("Network error: ${e.message}", ToastType.ERROR)
+                    onResult(false, null)
+                }
+            }
+        }
+    }
+
+    fun fetchFssai(shopId: String, licenseNumber: String, onResult: (Boolean, FssaiVerificationResponse?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                android.util.Log.d("FSSAI_FETCH", ">>> REQUEST: shopId=$shopId, licenseNumber=$licenseNumber")
+                val response = withTimeoutOrNull(FETCH_TIMEOUT_MS) {
+                    api.fetchFssai(FssaiFetchRequest(shopId = shopId, licenseNumber = licenseNumber))
+                }
+                if (response == null) {
+                    android.util.Log.w("FSSAI_FETCH", "<<< TIMED OUT after ${FETCH_TIMEOUT_MS}ms")
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onResult(false, null)
+                    }
+                    return@launch
+                }
+                android.util.Log.d("FSSAI_FETCH", "<<< RESPONSE CODE: ${response.code()}")
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    if (response.isSuccessful) {
+                        val body = response.body()
+                        if (body != null && body.success) {
+                            onResult(true, body)
+                        } else {
+                            onResult(false, body)
+                        }
+                    } else {
+                        showToast("FSSAI verification failed: ${response.parseErrorMessage()}", ToastType.ERROR)
+                        onResult(false, null)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("FSSAI_FETCH", "<<< EXCEPTION: ${e.javaClass.simpleName}: ${e.message}", e)
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     showToast("Network error: ${e.message}", ToastType.ERROR)
                     onResult(false, null)

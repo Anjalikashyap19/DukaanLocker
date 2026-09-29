@@ -1,5 +1,7 @@
 package com.iadv.dukaanlocker.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -14,18 +16,47 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.iadv.dukaanlocker.*
 import com.iadv.dukaanlocker.ui.strings.AppStrings
 import com.iadv.dukaanlocker.ui.strings.LocalAppLanguage
 import com.iadv.dukaanlocker.ui.theme.*
+
+// ── Apply-for-service URLs (IndiaAdvocacy service pages from text.txt) ───────
+fun applyUrlFor(type: String): String? = when (type) {
+    "PAN" -> "https://indiaadvocacy.in/compliances/pan-registration/"
+    "TAN" -> "https://indiaadvocacy.in/compliances/tan-registration/"
+    "MSME_CERTIFICATE", "MSME", "Udyam", "UDYAM" -> "https://indiaadvocacy.in/compliances/msme-emp/"
+    "FSSAI_FOOD_LICENSE", "FSSAI", "FOOD_LICENSE" -> "https://indiaadvocacy.in/license/food-license/"
+    "TRADE_LICENSE", "TradeLicense" -> "https://indiaadvocacy.in/license/tradelicence/"
+    "DRUG_LICENSE", "DrugLicense" -> "https://indiaadvocacy.in/license/drug-license/"
+    "GST" -> "https://indiaadvocacy.in/taxation/gst/"
+    "SHOP_INSURANCE", "ShopInsurance" -> "https://indiaadvocacy.in/insurance/shopkeeper-insurance/"
+    "SHOP_ESTABLISHMENT" -> "https://indiaadvocacy.in/license/shop-establishment/"
+    "PROFESSIONAL_TAX" -> "https://indiaadvocacy.in/taxation/professionaltax/"
+    "POLLUTION_CONTROL" -> "https://indiaadvocacy.in/compliances/pollutioncontrolcertificate/"
+    "TRADEMARK" -> "https://indiaadvocacy.in/startup/trademark/"
+    "PROPERTY_TAX" -> "https://indiaadvocacy.in/taxation/propertytax/"
+    "IEC" -> "https://indiaadvocacy.in/compliances/import-exportcode/"
+    "FIRE_SAFETY", "FIRE_NOC", "FireNOC" -> "https://indiaadvocacy.in/insurance/fireinsurance/"
+    else -> null
+}
+
+// Doc types that must keep the "REQUIRED" badge (no self-apply flow)
+private val applyExcludedTypes = setOf("LABOUR_LICENSE", "LabourLicense", "AADHAAR")
 
 // ── Document Card ────────────────────────────────────────────────────────────
 @Composable
@@ -38,6 +69,11 @@ fun DocumentCard(
 ) {
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
+    val context = LocalContext.current
+    val applyUrl = applyUrlFor(doc.type)
+    val needsApply = doc.status != "FETCHED" && doc.status != "UPLOADED"
+    val showApply = needsApply && doc.type !in applyExcludedTypes
+    var showApplyDialog by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -88,13 +124,14 @@ fun DocumentCard(
                             },
                             RoundedCornerShape(6.dp)
                         )
+                        .clickable(enabled = showApply && applyUrl != null) { showApplyDialog = true }
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
                         when (doc.status) {
                             "FETCHED" -> AppStrings.get(lang, "FETCHED")
                             "UPLOADED" -> AppStrings.get(lang, "UPLOADED")
-                            else -> AppStrings.get(lang, "REQUIRED")
+                            else -> if (showApply) AppStrings.get(lang, "APPLY") else AppStrings.get(lang, "REQUIRED")
                         },
                         fontSize = 10.sp, fontWeight = FontWeight.Bold,
                         color = when (doc.status) {
@@ -180,6 +217,76 @@ fun DocumentCard(
                 }
             }
         }
+    }
+
+    // ── Apply-now confirmation popup → open IndiaAdvocacy service page ──────
+    if (showApplyDialog && applyUrl != null) {
+        AlertDialog(
+            onDismissRequest = { showApplyDialog = false },
+            containerColor = colors.cardBg,
+            shape = RoundedCornerShape(20.dp),
+            title = {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(colors.primary.copy(alpha = 0.1f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Description, contentDescription = null, tint = colors.primary, modifier = Modifier.size(28.dp))
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        doc.name,
+                        fontWeight = FontWeight.Bold, fontSize = 17.sp,
+                        color = colors.textPrimary, textAlign = TextAlign.Center
+                    )
+                }
+            },
+            text = {
+                Text(
+                    AppStrings.get(lang, "If you don't have") + " " + doc.name + " " +
+                        AppStrings.get(lang, "yet, apply for it now on our website."),
+                    fontSize = 13.sp, color = colors.textSecondary,
+                    textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { showApplyDialog = false },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, colors.border)
+                    ) {
+                        Text(
+                            AppStrings.get(lang, "Cancel"),
+                            fontWeight = FontWeight.SemiBold, color = colors.textPrimary
+                        )
+                    }
+                    Button(
+                        onClick = {
+                            showApplyDialog = false
+                            runCatching {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(applyUrl)))
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
+                    ) {
+                        Text(AppStrings.get(lang, "Continue"), fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        )
     }
 }
 

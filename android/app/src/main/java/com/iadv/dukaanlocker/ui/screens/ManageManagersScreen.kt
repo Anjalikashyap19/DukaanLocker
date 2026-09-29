@@ -11,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.iadv.dukaanlocker.ui.components.SkeletonManagerCard
+import com.iadv.dukaanlocker.ui.components.EmptyStateView
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -111,22 +112,10 @@ fun ManageManagersScreen(
             }
         } else if (managers.isEmpty()) {
             // Empty State
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.People,
-                        contentDescription = null,
-                        tint = colors.textSecondary.copy(alpha = 0.4f),
-                        modifier = Modifier.size(80.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(AppStrings.get(lang, "No Managers Added Yet"), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary)
-                    Text(AppStrings.get(lang, "Tap 'Add' to invite a manager"), fontSize = 13.sp, color = colors.textSecondary.copy(alpha = 0.6f))
-                }
-            }
+            EmptyStateView(
+                title = AppStrings.get(lang, "No Managers Added Yet"),
+                subtitle = AppStrings.get(lang, "Tap 'Add' to invite a manager")
+            )
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),

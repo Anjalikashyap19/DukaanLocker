@@ -10,8 +10,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.iadv.dukaanlocker.ui.components.SkeletonDocumentCard
+import com.iadv.dukaanlocker.ui.components.EmptyStateView
 import com.iadv.dukaanlocker.ui.components.ShimmerEffect
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ExpandLess
@@ -40,7 +42,8 @@ fun DocsScreen(
     businesses: List<ShopResponse> = emptyList(),
     isLoadingDocuments: Boolean = false,
     onAddCustomDoc: (String) -> Unit = {},
-    targetMissingDocumentType: String? = null
+    targetMissingDocumentType: String? = null,
+    onBack: () -> Unit = {}
 ) {
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
@@ -73,20 +76,32 @@ fun DocsScreen(
             color = colors.background,
             shadowElevation = 4.dp
         ) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
-                Text(
-                    AppStrings.get(lang, "Documents"),
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = colors.textPrimary
-                )
-                Text(
-                    if (isLoadingDocuments) AppStrings.get(lang, "Loading documents...")
-                    else if (documents.isEmpty()) AppStrings.get(lang, "No documents yet")
-                    else "${documents.size} ${AppStrings.get(lang, "document")}${if (documents.size == 1) "" else "s"} ${AppStrings.get(lang, "across")} ${businesses.size} ${AppStrings.get(lang, "business")}${if (businesses.size == 1) "" else "es"}",
-                    fontSize = 12.sp,
-                    color = colors.textSecondary
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = AppStrings.get(lang, "Back"),
+                        tint = colors.textPrimary
+                    )
+                }
+                Column(modifier = Modifier.weight(1f).padding(start = 4.dp, end = 12.dp)) {
+                    Text(
+                        AppStrings.get(lang, "Documents"),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textPrimary
+                    )
+                    Text(
+                        if (isLoadingDocuments) AppStrings.get(lang, "Loading documents...")
+                        else if (documents.isEmpty()) AppStrings.get(lang, "No documents yet")
+                        else "${documents.size} ${AppStrings.get(lang, "document")}${if (documents.size == 1) "" else "s"} ${AppStrings.get(lang, "across")} ${businesses.size} ${AppStrings.get(lang, "business")}${if (businesses.size == 1) "" else "es"}",
+                        fontSize = 12.sp,
+                        color = colors.textSecondary
+                    )
+                }
             }
         }
 
@@ -102,19 +117,10 @@ fun DocsScreen(
                 item { Spacer(modifier = Modifier.height(72.dp)) }
             }
         } else if (documents.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.Description,
-                        contentDescription = null,
-                        tint = colors.textSecondary.copy(alpha = 0.3f),
-                        modifier = Modifier.size(96.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(AppStrings.get(lang, "No Documents"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary)
-                    Text(AppStrings.get(lang, "Upload or auto-fetch documents from a business"), fontSize = 14.sp, color = colors.textSecondary.copy(alpha = 0.6f))
-                }
-            }
+            EmptyStateView(
+                title = AppStrings.get(lang, "No Documents"),
+                subtitle = AppStrings.get(lang, "Upload or auto-fetch documents from a business")
+            )
         } else {
             LazyColumn(
                 state = listState,

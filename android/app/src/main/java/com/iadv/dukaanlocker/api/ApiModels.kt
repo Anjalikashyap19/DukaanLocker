@@ -369,6 +369,32 @@ data class UdyamFetchRequest(
     @SerializedName("captchaText") val captchaText: String
 )
 
+// ── FSSAI Food License Verification ─────────────────────────────────────
+
+data class FssaiFetchRequest(
+    @SerializedName("shopId") val shopId: String,
+    @SerializedName("licenseNumber") val licenseNumber: String
+)
+
+data class FssaiVerificationResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("licenseNumber") val licenseNumber: String?,
+    @SerializedName("companyName") val companyName: String?,
+    @SerializedName("contactPerson") val contactPerson: String?,
+    @SerializedName("kindOfBusiness") val kindOfBusiness: String?,
+    @SerializedName("licenseCategory") val licenseCategory: String?,
+    @SerializedName("status") val status: String?,
+    @SerializedName("licenseActive") val licenseActive: Boolean?,
+    @SerializedName("state") val state: String?,
+    @SerializedName("district") val district: String?,
+    @SerializedName("address") val address: String?,
+    @SerializedName("pincode") val pincode: String?,
+    @SerializedName("expiryDate") val expiryDate: String?,
+    @SerializedName("pdfUrl") val pdfUrl: String?,
+    @SerializedName("certificateHtml") val certificateHtml: String?,
+    @SerializedName("errorMessage") val errorMessage: String?
+)
+
 // ── Notifications ─────────────────────────────────────────────────────────
 
 data class NotificationItem(

@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.iadv.dukaanlocker.ui.components.SkeletonBusinessCard
+import com.iadv.dukaanlocker.ui.components.EmptyStateView
 import com.iadv.dukaanlocker.ui.components.ShimmerEffect
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -181,17 +182,10 @@ fun OwnerHomeScreen(
                 }
             } else if (businesses.isEmpty()) {
                 // Empty state
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.StoreMallDirectory, contentDescription = null, tint = colors.textSecondary.copy(alpha = 0.3f), modifier = Modifier.size(96.dp))
-                        Spacer(modifier = Modifier.height(16.dp))
-                         Text(AppStrings.get(lang, "No Businesses Added"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary)
-                         Text(AppStrings.get(lang, "Tap + to add your first business"), fontSize = 14.sp, color = colors.textSecondary.copy(alpha = 0.6f))
-                    }
-                }
+                EmptyStateView(
+                    title = AppStrings.get(lang, "No Businesses Added"),
+                    subtitle = AppStrings.get(lang, "Tap + to add your first business")
+                )
             } else if (selectedBusinessId == null) {
                 // Business List View
                 LazyColumn(

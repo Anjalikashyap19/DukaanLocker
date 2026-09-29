@@ -228,6 +228,15 @@ fun DukaanLockerApp(
 
                         val handleLogout: () -> Unit = { vm.logout() }
 
+                        // Back for bottom-tab screens (Docs / Settings): previous tab, else Home
+                        val handleTabBack: () -> Unit = {
+                            if (state.bottomTabHistory.isNotEmpty()) {
+                                vm.goBackTab()
+                            } else {
+                                vm.setBottomTab(BottomTab.Home)
+                            }
+                        }
+
                         val docsTabContent: @Composable () -> Unit = {
                             val selectedBusinessId = state.selectedBusinessIdForDocs
                             val filteredDocuments = if (selectedBusinessId != null) {
@@ -248,7 +257,8 @@ fun DukaanLockerApp(
                                 businesses = filteredBusinesses,
                                 isLoadingDocuments = state.isLoadingDocuments,
                                 onAddCustomDoc = { shopId -> vm.showCustomDocDialog(shopId.toLongOrNull() ?: return@DocsScreen) },
-                                targetMissingDocumentType = state.targetMissingDocumentType
+                                targetMissingDocumentType = state.targetMissingDocumentType,
+                                onBack = handleTabBack
                             )
                         }
 
@@ -259,7 +269,8 @@ fun DukaanLockerApp(
                                 user = UserAccount(mobile = ApiClient.getUserMobile(context), name = state.currentUserName, email = state.currentUserEmail, role = state.currentUserRole),
                                 onLogout = handleLogout,
                                 businesses = if (state.currentUserRole == "MANAGER") state.shops else emptyList(),
-                                isLoadingShops = state.isLoadingShops
+                                isLoadingShops = state.isLoadingShops,
+                                onBack = handleTabBack
                             )
                         }
 
@@ -647,6 +658,11 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                 },
                                 onFetchMsme = { shopId, udyamNumber, sessionId, captchaText, result ->
                                     vm.fetchMsme(shopId, udyamNumber, sessionId, captchaText) { success, response ->
+                                        result(success, response)
+                                    }
+                                },
+                                onFetchFssai = { shopId, licenseNumber, result ->
+                                    vm.fetchFssai(shopId, licenseNumber) { success, response ->
                                         result(success, response)
                                     }
                                 }

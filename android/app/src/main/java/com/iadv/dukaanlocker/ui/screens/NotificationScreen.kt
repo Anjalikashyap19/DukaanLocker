@@ -1,5 +1,6 @@
 package com.iadv.dukaanlocker.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.iadv.dukaanlocker.api.NotificationItem
+import com.iadv.dukaanlocker.ui.components.EmptyStateView
 import com.iadv.dukaanlocker.ui.theme.LocalAppColors
 
 @Composable
@@ -122,11 +124,7 @@ fun NotificationScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     NotificationCategory.values().forEach { category ->
-                        val count = if (category == NotificationCategory.ALL) {
-                            notifications.size
-                        } else {
-                            notifications.count { it.matchesCategory(category) }
-                        }
+                        val count = notifications.count { it.matchesCategory(category) }
                         FilterChip(
                             selected = selectedCategory == category,
                             onClick = { selectedCategory = category },
@@ -148,27 +146,12 @@ fun NotificationScreen(
             }
 
             if (filteredNotifications.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.Info,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = colors.textSecondary.copy(alpha = 0.5f)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            if (notifications.isEmpty()) "No notifications yet"
-                            else "No ${selectedCategory.label.lowercase()} notifications",
-                            fontSize = 16.sp,
-                            color = colors.textSecondary,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
+                EmptyStateView(
+                    title = if (notifications.isEmpty()) "No notifications yet"
+                    else "No ${selectedCategory.label.lowercase()} notifications",
+                    subtitle = if (notifications.isEmpty()) "Alerts and updates about your documents will appear here"
+                    else "Nothing in this category yet"
+                )
             } else {
                 LazyColumn(
                     modifier = Modifier
@@ -218,22 +201,29 @@ fun NotificationScreen(
                 )
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        binTarget?.let(onMoveToBin)
-                        binTarget = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("Move", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onError)
-                }
-            },
-            dismissButton = {
-                Button(
-                    onClick = { binTarget = null },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Text("Cancel", fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+                    OutlinedButton(
+                        onClick = { binTarget = null },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, colors.border)
+                    ) {
+                        Text("Cancel", fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+                    }
+                    Button(
+                        onClick = {
+                            binTarget?.let(onMoveToBin)
+                            binTarget = null
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Move", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onError)
+                    }
                 }
             }
         )
@@ -267,23 +257,29 @@ fun NotificationScreen(
                 )
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        onRenew(target)
-                        renewTarget = null
-                    },
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("Renew", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                Button(
-                    onClick = { renewTarget = null },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Text("Cancel", fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+                    OutlinedButton(
+                        onClick = { renewTarget = null },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, colors.border)
+                    ) {
+                        Text("Cancel", fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+                    }
+                    Button(
+                        onClick = {
+                            onRenew(target)
+                            renewTarget = null
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Text("Renew", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         )
@@ -438,4 +434,4 @@ private fun NotificationItem.effectiveCategory(): NotificationCategory = when (c
 }
 
 private fun NotificationItem.matchesCategory(category: NotificationCategory): Boolean =
-    effectiveCategory() == category
+    category == NotificationCategory.ALL || effectiveCategory() == category

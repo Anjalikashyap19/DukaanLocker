@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.iadv.dukaanlocker.*
+import com.iadv.dukaanlocker.api.FssaiVerificationResponse
 import com.iadv.dukaanlocker.api.GstVerificationResponse
 import com.iadv.dukaanlocker.api.UdyamVerifyResponse
 import com.iadv.dukaanlocker.ui.strings.AppStrings
@@ -28,6 +29,9 @@ import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
 
+/** User-facing fetch budget: the dialog shows a 1-minute countdown. */
+private const val FETCH_COUNTDOWN_SECONDS = 60
+
 @Composable
 fun FetchDocumentDialog(
     doc: DocumentItem,
@@ -36,7 +40,8 @@ fun FetchDocumentDialog(
     onSuccess: (regNum: String, issue: String, expiry: String) -> Unit,
     onFetchGst: ((shopId: String, gstin: String, (Boolean, GstVerificationResponse?) -> Unit) -> Unit)? = null,
     onInitMsmeCaptcha: (((String, String) -> Unit) -> Unit)? = null,
-    onFetchMsme: ((shopId: String, udyamNumber: String, sessionId: String, captchaText: String, (Boolean, UdyamVerifyResponse?) -> Unit) -> Unit)? = null
+    onFetchMsme: ((shopId: String, udyamNumber: String, sessionId: String, captchaText: String, (Boolean, UdyamVerifyResponse?) -> Unit) -> Unit)? = null,
+    onFetchFssai: ((shopId: String, licenseNumber: String, (Boolean, FssaiVerificationResponse?) -> Unit) -> Unit)? = null
 ) {
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
@@ -47,6 +52,11 @@ fun FetchDocumentDialog(
     var fetchError by remember { mutableStateOf<String?>(null) }
     var gstResponse by remember { mutableStateOf<GstVerificationResponse?>(null) }
     var msmeResponse by remember { mutableStateOf<UdyamVerifyResponse?>(null) }
+    var fssaiResponse by remember { mutableStateOf<FssaiVerificationResponse?>(null) }
+
+    // 1-minute countdown state
+    var remainingSeconds by remember { mutableStateOf(FETCH_COUNTDOWN_SECONDS) }
+    var timedOut by remember { mutableStateOf(false) }
 
     // MSME captcha state
     val isMsme = doc.type == "MSME_CERTIFICATE"
@@ -59,9 +69,11 @@ fun FetchDocumentDialog(
     // Hold pending results from callbacks
     var pendingGstResult by remember { mutableStateOf<Pair<Boolean, GstVerificationResponse?>?>(null) }
     var pendingMsmeResult by remember { mutableStateOf<Pair<Boolean, UdyamVerifyResponse?>?>(null) }
+    var pendingFssaiResult by remember { mutableStateOf<Pair<Boolean, FssaiVerificationResponse?>?>(null) }
 
     val labelText = docFetchLabel(doc.type)
     val isGst = doc.type == "GST"
+    val isFssai = doc.type == "FSSAI_FOOD_LICENSE"
 
     // Init MSME captcha when dialog opens for MSME
     LaunchedEffect(isMsme) {
@@ -80,6 +92,7 @@ fun FetchDocumentDialog(
     LaunchedEffect(pendingGstResult) {
         pendingGstResult?.let { (success, response) ->
             pendingGstResult = null
+            if (timedOut) return@let
             isFetching = false
             if (success && response != null) {
                 gstResponse = response
@@ -101,6 +114,7 @@ fun FetchDocumentDialog(
     LaunchedEffect(pendingMsmeResult) {
         pendingMsmeResult?.let { (success, response) ->
             pendingMsmeResult = null
+            if (timedOut) return@let
             isFetching = false
             if (success && response != null) {
                 msmeResponse = response
@@ -118,11 +132,49 @@ fun FetchDocumentDialog(
         }
     }
 
+    // Handle FSSAI pending result
+    LaunchedEffect(pendingFssaiResult) {
+        pendingFssaiResult?.let { (success, response) ->
+            pendingFssaiResult = null
+            if (timedOut) return@let
+            isFetching = false
+            if (success && response != null) {
+                fssaiResponse = response
+                onSuccess(
+                    response.licenseNumber ?: regInput.trim(),
+                    SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()),
+                    formatFssaiExpiry(response.expiryDate)
+                )
+            } else {
+                fetchError = response?.errorMessage ?: "Verification failed. Please check the FSSAI license number and try again."
+            }
+        }
+    }
+
+    // 1-minute countdown — expires while still fetching -> "Unable to fetch. Please retry."
+    LaunchedEffect(isFetching) {
+        if (isFetching) {
+            timedOut = false
+            remainingSeconds = FETCH_COUNTDOWN_SECONDS
+            while (remainingSeconds > 0) {
+                delay(1000)
+                remainingSeconds--
+            }
+            if (isFetching) {
+                timedOut = true
+                isFetching = false
+                fetchError = "Unable to fetch. Please retry."
+            }
+        }
+    }
+
     LaunchedEffect(isFetching) {
         if (isFetching) {
             fetchError = null
             gstResponse = null
             msmeResponse = null
+            fssaiResponse = null
+            timedOut = false
 
             if (isGst && onFetchGst != null) {
                 val steps = listOf(
@@ -138,6 +190,21 @@ fun FetchDocumentDialog(
                 }
                 onFetchGst(doc.businessId, regInput.trim().uppercase()) { success, response ->
                     pendingGstResult = success to response
+                }
+            } else if (isFssai && onFetchFssai != null) {
+                val steps = listOf(
+                    0.2f to AppStrings.get(lang, "Connecting to FSSAI Portal Gateway..."),
+                    0.5f to AppStrings.get(lang, "Verifying license number against government database..."),
+                    0.8f to AppStrings.get(lang, "Fetching food license details..."),
+                    1.0f to AppStrings.get(lang, "Encrypting and locking in Dukaan Vault...")
+                )
+                for ((progress, text) in steps) {
+                    delay(600)
+                    fetchProgress = progress
+                    currentStepText = text
+                }
+                onFetchFssai(doc.businessId, regInput.trim()) { success, response ->
+                    pendingFssaiResult = success to response
                 }
             } else if (isMsme && onFetchMsme != null && msmeSessionId.isNotBlank() && captchaInput.isNotBlank()) {
                 val steps = listOf(
@@ -226,6 +293,25 @@ fun FetchDocumentDialog(
                         }
                     }
 
+                    // FSSAI verified details
+                    if (fssaiResponse != null && fssaiResponse!!.success) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = colors.accent.copy(alpha = 0.1f)),
+                            border = BorderStroke(1.dp, colors.accent.copy(alpha = 0.3f)),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text("FSSAI License Verified!", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = colors.accent)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                fssaiResponse!!.companyName?.let { Text("FBO Name: $it", fontSize = 11.sp, color = colors.textSecondary) }
+                                fssaiResponse!!.licenseNumber?.let { Text("License No: $it", fontSize = 11.sp, color = colors.textSecondary) }
+                                fssaiResponse!!.status?.let { Text("Status: $it", fontSize = 11.sp, color = colors.textSecondary) }
+                                fssaiResponse!!.expiryDate?.let { Text("Valid Till: $it", fontSize = 11.sp, color = colors.textSecondary) }
+                            }
+                        }
+                    }
+
                     // Number input
                     OutlinedTextField(
                         value = regInput,
@@ -307,10 +393,23 @@ fun FetchDocumentDialog(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(AppStrings.get(lang, "VERIFYING CREDENTIALS"), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = colors.accent, letterSpacing = 1.sp)
                     Text(currentStepText, fontSize = 12.sp, color = colors.textSecondary, textAlign = TextAlign.Center)
+                    Text(
+                        "Time remaining: ${remainingSeconds}s",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (remainingSeconds <= 10) colors.error else colors.textPrimary
+                    )
                 }
             }
         }
     }
+}
+
+/** Converts the upstream FSSAI expiry date (dd-MM-yyyy) to the app's dd/MM/yyyy form. */
+private fun formatFssaiExpiry(raw: String?): String {
+    if (raw.isNullOrBlank()) return ""
+    val parts = raw.trim().split("-")
+    return if (parts.size == 3) "${parts[0]}/${parts[1]}/${parts[2]}" else raw
 }
 
 @Composable

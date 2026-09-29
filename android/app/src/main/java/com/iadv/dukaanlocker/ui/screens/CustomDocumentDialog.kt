@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -74,10 +75,13 @@ fun CustomDocumentDialog(
                         focusedBorderColor = colors.primary,
                         unfocusedBorderColor = colors.border,
                         focusedLabelColor = colors.primary,
-                        cursorColor = colors.textPrimary,
-
+                        unfocusedLabelColor = colors.textSecondary,
+                        focusedTextColor = colors.textPrimary,
+                        unfocusedTextColor = colors.textPrimary,
+                        cursorColor = colors.primary,
+                        focusedLeadingIconColor = colors.primary,
+                        unfocusedLeadingIconColor = colors.primary
                     ),
-
                     shape = RoundedCornerShape(12.dp)
                 )
 
@@ -110,21 +114,35 @@ fun CustomDocumentDialog(
             }
         },
         confirmButton = {
-            Button(
-                onClick = { onUpload(documentName.trim()) },
-                enabled = documentName.isNotBlank() && selectedFileName != null,
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = colors.primary,
-                    contentColor = colors.background
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(AppStrings.get(lang, "Upload"), fontWeight = FontWeight.Bold , color = colors.primary)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(AppStrings.get(lang, "Cancel"), color = colors.textSecondary)
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, colors.border)
+                ) {
+                    Text(
+                        AppStrings.get(lang, "Cancel"),
+                        fontWeight = FontWeight.SemiBold, color = colors.textPrimary
+                    )
+                }
+                Button(
+                    onClick = { onUpload(documentName.trim()) },
+                    enabled = documentName.isNotBlank() && selectedFileName != null,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.primary,
+                        contentColor = Color.White,
+                        disabledContainerColor = colors.primary.copy(alpha = 0.35f),
+                        disabledContentColor = Color.White.copy(alpha = 0.7f)
+                    )
+                ) {
+                    Text(AppStrings.get(lang, "Upload"), fontWeight = FontWeight.Bold)
+                }
             }
         }
     )

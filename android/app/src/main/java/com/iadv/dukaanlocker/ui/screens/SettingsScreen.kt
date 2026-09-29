@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import com.iadv.dukaanlocker.ui.components.SkeletonSettingsCard
 import com.iadv.dukaanlocker.ui.components.SkeletonText
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Logout
@@ -41,7 +42,8 @@ fun SettingsScreen(
     user: UserAccount,
     onLogout: () -> Unit,
     businesses: List<ShopResponse> = emptyList(),
-    isLoadingShops: Boolean = false
+    isLoadingShops: Boolean = false,
+    onBack: () -> Unit = {}
 ) {
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
@@ -53,9 +55,21 @@ fun SettingsScreen(
             color = colors.background,
             shadowElevation = 4.dp
         ) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
-                Text(AppStrings.get(lang, "Settings"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                Text(AppStrings.get(lang, "Account & preferences"), fontSize = 12.sp, color = colors.textSecondary)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = AppStrings.get(lang, "Back"),
+                        tint = colors.textPrimary
+                    )
+                }
+                Column(modifier = Modifier.weight(1f).padding(start = 4.dp, end = 12.dp)) {
+                    Text(AppStrings.get(lang, "Settings"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                    Text(AppStrings.get(lang, "Account & preferences"), fontSize = 12.sp, color = colors.textSecondary)
+                }
             }
         }
 

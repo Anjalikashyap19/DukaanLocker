@@ -115,6 +115,9 @@ public class SecurityConfig {
                      .requestMatchers(HttpMethod.POST, "/api/gst/fetch").authenticated()
                      // ── Udyam endpoints: init, captcha, verify are public; fetch requires auth ──
                      .requestMatchers(HttpMethod.POST, "/api/udyam/fetch").authenticated()
+                     // ── FSSAI endpoints: verify is public, fetch requires auth ──
+                     .requestMatchers(HttpMethod.GET, "/api/fssai/verify/**").permitAll()
+                     .requestMatchers(HttpMethod.POST, "/api/fssai/fetch").authenticated()
                      // ── MANAGER-only (must be BEFORE the ADMIN /api/managers/** catch-all) ──
                     .requestMatchers(HttpMethod.GET, "/api/managers/me/shops").hasRole("MANAGER")
                     // ── ADMIN-only endpoints ──────────────────────────────────

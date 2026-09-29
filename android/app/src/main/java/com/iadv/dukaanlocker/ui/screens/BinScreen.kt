@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.iadv.dukaanlocker.api.NotificationItem
+import com.iadv.dukaanlocker.ui.components.EmptyStateView
 import com.iadv.dukaanlocker.ui.theme.LocalAppColors
 
 @Composable
@@ -106,33 +107,11 @@ fun BinScreen(
         containerColor = colors.background
     ) { padding ->
         if (notifications.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.Info,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = colors.textSecondary.copy(alpha = 0.5f)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "Bin is empty",
-                        fontSize = 16.sp,
-                        color = colors.textSecondary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "No notifications in bin",
-                        fontSize = 14.sp,
-                        color = colors.textSecondary.copy(alpha = 0.7f)
-                    )
-                }
-            }
+            EmptyStateView(
+                title = "Bin is empty",
+                subtitle = "No notifications in bin",
+                modifier = Modifier.padding(padding)
+            )
         } else {
             LazyColumn(
                 modifier = Modifier

@@ -11,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.iadv.dukaanlocker.ui.components.SkeletonBusinessCard
+import com.iadv.dukaanlocker.ui.components.EmptyStateView
 import com.iadv.dukaanlocker.ui.components.ShimmerEffect
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -162,14 +163,10 @@ fun ManagerHomeScreen(
         if (selectedBusinessId == null) {
             // Assigned Businesses List
             if (assignedBusinesses.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Business, contentDescription = null, tint = colors.textSecondary.copy(alpha = 0.3f), modifier = Modifier.size(80.dp))
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(AppStrings.get(lang, "No Assigned Businesses"), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textSecondary)
-                        Text(AppStrings.get(lang, "Contact the owner for access"), fontSize = 13.sp, color = colors.textSecondary.copy(alpha = 0.6f))
-                    }
-                }
+                EmptyStateView(
+                    title = AppStrings.get(lang, "No Assigned Businesses"),
+                    subtitle = AppStrings.get(lang, "Contact the owner for access")
+                )
             } else {
                 LazyColumn(
                     modifier = Modifier

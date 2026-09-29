@@ -69,6 +69,8 @@ public enum FailureCode {
     // ---- Location / External API errors ----
     /** GST verification via API Setu failed (network, auth, or invalid response). */
     GST_VERIFICATION_FAILED     ("gst_verification_failed",     HttpStatus.BAD_GATEWAY),
+    /** FSSAI food license verification via the license lookup API failed (network, auth, or invalid response). */
+    FSSAI_VERIFICATION_FAILED   ("fssai_verification_failed",   HttpStatus.BAD_GATEWAY),
 
     // ---- Shop / Manager / Assignment errors ----
     /** Shop not found. */
