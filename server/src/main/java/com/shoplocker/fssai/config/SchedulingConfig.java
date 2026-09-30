@@ -32,6 +32,15 @@ public class SchedulingConfig implements SchedulingConfigurer {
     @Value("${notification.alert.cron:0 15 8-22 * * *}")
     private String alertCron;
 
+    /**
+     * Catch-up pass: runs around the clock and reports only documents that are
+     * already past their expiry date, so a document uploaded as already-expired
+     * surfaces within minutes instead of waiting for the daytime window. Reuses
+     * the same dedupe keys, so it can never double-send.
+     */
+    @Value("${notification.alert.catchup-cron:0 */30 * * * *}")
+    private String catchupCron;
+
     public SchedulingConfig(DocumentExpiryScheduler documentExpiryScheduler,
                             DocumentMissingScheduler documentMissingScheduler,
                             NoBusinessScheduler noBusinessScheduler,
@@ -44,8 +53,10 @@ public class SchedulingConfig implements SchedulingConfigurer {
 
     @Override
     public void configureTasks(ScheduledTaskRegistrar registrar) {
-        registrar.addTriggerTask(documentExpiryScheduler::checkExpiringDocuments,
+        registrar.addTriggerTask(() -> documentExpiryScheduler.checkExpiringDocuments(false),
                 new CronTrigger(alertCron));
+        registrar.addTriggerTask(() -> documentExpiryScheduler.checkExpiringDocuments(true),
+                new CronTrigger(catchupCron));
         registrar.addTriggerTask(documentMissingScheduler::checkMissingDocuments,
                 new CronTrigger(missingDocCron));
         registrar.addTriggerTask(noBusinessScheduler::checkUsersWithoutBusiness, randomTimeTrigger);

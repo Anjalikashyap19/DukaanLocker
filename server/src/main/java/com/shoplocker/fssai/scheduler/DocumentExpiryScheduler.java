@@ -23,7 +23,15 @@ import java.util.Map;
  *   T-15  "I think you forgot to renew - still have time"
  *   T-7   "very little time left - don't worry, we will help you"
  *   T-6..T-0  daily escalating reminders
- *   expired   daily reminders, capped at expired-max-days
+ *   expired   daily reminders for expired-max-days, then a slow repeat every
+ *             expired-repeat-days so a long-expired document is never
+ *             permanently ignored
+ *
+ * Two entry points share this logic. The daytime cron runs the full ladder.
+ * A second 24/7 cron runs with {@code expiredOnly=true}, which considers only
+ * documents already past their expiry date, so a document uploaded as
+ * already-expired is reported within minutes while the daily countdown
+ * reminders never fire at night.
  *
  * Each stage/days is gated by a dedupe key (expiry:{docId}:T30 / :D5 / :X2),
  * so a stage fires whenever it is first seen - a missed calendar day is never
@@ -50,6 +58,10 @@ public class DocumentExpiryScheduler {
     @Value("${notification.alert.expired-max-days:7}")
     private int expiredMaxDays;
 
+    /** Gap between repeat reminders once a document is past the daily cap. */
+    @Value("${notification.alert.expired-repeat-days:14}")
+    private int expiredRepeatDays;
+
     public DocumentExpiryScheduler(DocumentRepository documentRepository,
                                     ShopRepository shopRepository,
                                     NotificationService notificationService) {
@@ -59,17 +71,26 @@ public class DocumentExpiryScheduler {
     }
 
     public void checkExpiringDocuments() {
-        log.info("Running document expiry check scheduler...");
+        checkExpiringDocuments(false);
+    }
+
+    /**
+     * @param expiredOnly when true, only documents already past their expiry date
+     *                    are considered. Drives the 24/7 catch-up cron.
+     */
+    public void checkExpiringDocuments(boolean expiredOnly) {
+        log.info("Running document expiry check scheduler{}...",
+                expiredOnly ? " (catch-up: already expired only)" : "");
 
         List<Long> stages = parseStages();
-        List<Document> allDocs = documentRepository.findAll();
+        List<Document> allDocs = documentRepository.findAllWithShopAndOwner();
         int notificationsSent = 0;
 
         for (Document doc : allDocs) {
             if (doc.getExpiryDate() == null) continue;
             if (doc.getStatus() == DocumentStatus.NOT_UPLOADED) continue;
             try {
-                if (processDocument(doc, stages)) notificationsSent++;
+                if (processDocument(doc, stages, expiredOnly)) notificationsSent++;
             } catch (Exception e) {
                 log.error("Expiry check failed for document {} (shop {}): {}",
                         doc.getId(), doc.getShop() != null ? doc.getShop().getId() : null,
@@ -80,11 +101,17 @@ public class DocumentExpiryScheduler {
         log.info("Document expiry check completed. Sent {} notifications.", notificationsSent);
     }
 
-    private boolean processDocument(Document doc, List<Long> stages) {
+    private boolean processDocument(Document doc, List<Long> stages, boolean expiredOnly) {
         LocalDate today = LocalDate.now();
         long days = ChronoUnit.DAYS.between(today, doc.getExpiryDate().toLocalDate());
 
-        if (days > stages.get(0)) return false;                    // still too far out
+        // Synced before every notification-policy early return: a document that
+        // is already expired must read EXPIRED in the app even on the runs where
+        // its reminder is suppressed by the repeat window or the dedupe key.
+        syncStatus(doc, days, stages);
+
+        if (days >= 0 && expiredOnly) return false;          // catch-up: expired only
+        if (days > stages.get(0)) return false;              // still too far out
 
         Shop shop = doc.getShop();
         Long ownerId = shop.getOwner().getId();
@@ -99,11 +126,15 @@ public class DocumentExpiryScheduler {
         String payloadStage;
 
         if (days < 0) {
-            if (Math.abs(days) > expiredMaxDays) return false;      // stop nagging after the cap
+            long overdue = Math.abs(days);
             stage = "EXPIRED";
             payloadStage = "EXPIRED";
             type = "EXPIRED";
-            dedupeKey = "expiry:" + doc.getId() + ":X" + Math.abs(days);
+            // Daily while inside the cap, then one reminder per repeat window
+            // so a licence that expired weeks ago still surfaces.
+            dedupeKey = overdue <= expiredMaxDays
+                    ? "expiry:" + doc.getId() + ":X" + overdue
+                    : "expiry:" + doc.getId() + ":XR" + expiredRepeatBucket(overdue);
         } else if (days < stages.get(stages.size() - 1)) {
             // Daily escalation window: below the smallest stage down to expiry day
             stage = days == 0 ? "DAILY_TODAY" : "DAILY";
@@ -125,16 +156,6 @@ public class DocumentExpiryScheduler {
                 : NotificationCopy.expiryBody(stage, days, expiryDateStr,
                         doc.getDocumentType(), shopName, variant);
 
-        // Keep document status in sync with what the user is being told
-        if (days < 0 && doc.getStatus() != DocumentStatus.EXPIRED) {
-            doc.setStatus(DocumentStatus.EXPIRED);
-            documentRepository.save(doc);
-        } else if (days <= stages.get(stages.size() - 1) && days >= 0
-                && doc.getStatus() != DocumentStatus.EXPIRING_SOON) {
-            doc.setStatus(DocumentStatus.EXPIRING_SOON);
-            documentRepository.save(doc);
-        }
-
         return notificationService.sendPushAndCreateNotification(
                 ownerId, title, body, type, shop.getId(),
                 Map.of("shopId", shop.getId().toString(),
@@ -145,6 +166,36 @@ public class DocumentExpiryScheduler {
                        "route", "renewal"),
                 dedupeKey
         );
+    }
+
+    /**
+     * Mirrors {@link #expiredRepeatBucket}: 0 for the first repeat window, 1 for
+     * the next. Stable for every run inside the same window, so the dedupe key
+     * only changes when the next reminder is actually due.
+     */
+    private long expiredRepeatBucket(long overdue) {
+        int repeat = Math.max(1, expiredRepeatDays);
+        return (overdue - expiredMaxDays - 1) / repeat;
+    }
+
+    /**
+     * Keeps document.status in step with the dates the user is shown. Runs ahead
+     * of the notification policy so the badge is correct even when no reminder is
+     * sent this run.
+     */
+    private void syncStatus(Document doc, long days, List<Long> stages) {
+        DocumentStatus target;
+        if (days < 0) {
+            target = DocumentStatus.EXPIRED;
+        } else if (days <= stages.get(stages.size() - 1)) {
+            target = DocumentStatus.EXPIRING_SOON;
+        } else {
+            return;                                     // leave UPLOADED/VALID untouched
+        }
+        if (doc.getStatus() != target) {
+            doc.setStatus(target);
+            documentRepository.save(doc);
+        }
     }
 
     private long smallestStageAtLeast(List<Long> stagesDesc, long days) {

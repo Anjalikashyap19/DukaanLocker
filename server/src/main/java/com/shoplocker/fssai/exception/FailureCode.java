@@ -29,6 +29,9 @@ public enum FailureCode {
     /** OCR succeeded but the document strongly resembles a *different* document type (cross-contamination detected). */
     DOCUMENT_TYPE_MISMATCH     ("document_type_mismatch",     HttpStatus.UNPROCESSABLE_ENTITY),
 
+    /** Right document type, but it appears to have been issued to a different business than the shop. */
+    BUSINESS_NAME_MISMATCH      ("business_name_mismatch",     HttpStatus.UNPROCESSABLE_ENTITY),
+
     /** FSSAI portal scraper (Playwright) failed to fetch or parse a license on the government site. */
     SCRAPER_FAILURE            ("scraper_failure",            HttpStatus.BAD_GATEWAY),
 

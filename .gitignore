@@ -49,3 +49,7 @@ server/data/
 sample.txt
 root cause and solutions.txt
 secrets/
+
+### Production artefacts (never commit: contains user documents and DB dumps) ###
+Documents/
+backups/

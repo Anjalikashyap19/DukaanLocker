@@ -152,6 +152,15 @@ public class ShopController {
         String ocrText = documentValidationService.validateContentWithOcr(
                 docType, fileBytes, file.getOriginalFilename());
 
+        // The document is the right *type*, but is it this shop's? A valid FSSAI
+        // licence belonging to another business passes the type check, so compare
+        // the shop name against the OCR text before anything is persisted.
+        documentValidationService.validateBusinessOwnership(
+                docType,
+                shopService.getShopById(shopId).getShopName(),
+                ocrText,
+                file.getOriginalFilename());
+
         // Build file key: relative path within the shop folder
         // Structure: {doc-type}/{sanitized-filename}
         // e.g., "gst/gst_certificate.pdf" or "fssai_food_license/my_license.pdf"

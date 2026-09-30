@@ -37,6 +37,46 @@ public class DocumentValidationService {
     // ─── Minimum confidence threshold ───────────────────────────────────────
     private static final int MIN_EXTRACTED_TEXT_LENGTH = 100;
 
+    // ─── Business-name matching ─────────────────────────────────────────────
+    /**
+     * Escape hatch for the ownership check. It only ever *adds* a rejection, so
+     * turning it off reverts to the previous behaviour (type check only) without
+     * a deploy.
+     */
+    @org.springframework.beans.factory.annotation.Value("${app.validation.business-name-check.enabled:true}")
+    private boolean businessNameCheckEnabled = true;
+
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(DocumentValidationService.class);
+
+    /** Legal-entity suffixes: present on the certificate, usually absent from the trade name. */
+    private static final Set<String> LEGAL_SUFFIX_TOKENS = new HashSet<>(Arrays.asList(
+            "pvt", "private", "ltd", "limited", "llp", "inc", "incorporated", "corp",
+            "corporation", "company", "co", "plc", "gmbh", "pty", "enterprises",
+            "enterprise", "trading", "traders", "industries", "holdings", "group",
+            "and", "the", "firm", "brothers", "sons"));
+
+    /**
+     * Words too generic to identify a business on their own. A shop name made
+     * only of these leaves nothing to compare, so the check is skipped rather
+     * than blocking every document.
+ */    private static final Set<String> GENERIC_BUSINESS_TOKENS = new HashSet<>(Arrays.asList(
+            "shop", "store", "business", "firm", "company", "restaurant", "cafe", "hotel",
+            "trading", "services", "enterprises", "establishment"));
+
+    /**
+     * Name tokens shorter than this are matched exactly. One misread character
+     * in a 3-letter token ("day" vs "dat") would otherwise match unrelated
+     * documents, so short tokens get no tolerance at all.
+     */
+    private static final int FUZZY_MATCH_MIN_LENGTH = 5;
+
+    /**
+     * Name tokens longer than this are matched exactly too: by then a single
+     * differing character means a genuinely different business, not an OCR glitch.
+     */
+    private static final int FUZZY_MATCH_MAX_LENGTH = 8;
+
     // ─── Conflict Signatures ───────────────────────────────────────────────
     private static final Map<String, List<String>> CONFLICT_SIGNATURES = new LinkedHashMap<>();
     static {
@@ -679,5 +719,159 @@ public class DocumentValidationService {
         String extractedText = textractService.extractText(fileBytes, fileName);
         validate(docType, extractedText, fileName);
         return extractedText;
+    }
+
+    // ─── Business ownership (does this certificate belong to THIS shop?) ───
+
+    /**
+     * Verifies that the uploaded certificate actually belongs to the shop being
+     * onboarded, by looking for the shop's name in the OCR text.
+     *
+     * <p>Complements {@link #checkDocumentConflict(DocumentType, String, String)},
+     * which only asks "is this the right <em>kind</em> of document?". A genuine
+     * FSSAI licence belonging to somebody else's shop passes that check, so this
+     * is the cross-business check the upload flow was missing.</p>
+     *
+     * <p>Matching is deliberately <b>lenient</b>: a certificate prints the
+     * registered legal entity, which routinely differs from the trade name the
+     * seller typed into their profile ("cafe Coffee Day" vs "Coffee Day
+     * Enterprises Pvt Ltd"). So the check fails only on a <b>confident
+     * mismatch</b> — none of the name's distinctive words appear anywhere in
+     * the document. That is the case the user means by "the document is some
+     * other business". Formatting noise, OCR mangling of a single character, and
+     * added legal suffixes all still pass.</p>
+     *
+     * @param docType       expected document type, used for the error message
+     * @param shopName      the shop's trade name as registered on the profile
+     * @param extractedText OCR text of the uploaded file
+     * @param fileName      original file name, used for the error message
+     * @throws FssaiException {@link FailureCode#BUSINESS_NAME_MISMATCH} when the
+     *                        document does not look like it belongs to this shop
+     */
+    public void validateBusinessOwnership(DocumentType docType,
+                                          String shopName,
+                                          String extractedText,
+                                          String fileName) {
+        if (!businessNameCheckEnabled) return;
+
+        // No profile name to check against: never block on missing data.
+        if (shopName == null || shopName.isBlank()) {
+            log.warn("Skipping business-name check: shop has no name configured (file={})", fileName);
+            return;
+        }
+
+        // Too little OCR text to judge. validateContentWithOcr already requires
+        // 100+ chars, so this only guards direct callers; erring toward
+        // accepting is deliberate — a bad scan must not read as "wrong business".
+        if (extractedText == null || extractedText.length() < MIN_EXTRACTED_TEXT_LENGTH) {
+            log.warn("Skipping business-name check for {}: only {} chars of OCR text",
+                    fileName, extractedText == null ? 0 : extractedText.length());
+            return;
+        }
+
+        List<String> nameTokens = significantTokens(shopName);
+        if (nameTokens.isEmpty()) {
+            log.warn("Skipping business-name check: '{}' has no significant words", shopName);
+            return;
+        }
+
+        String normalizedText = normalizeForMatching(extractedText);
+        boolean anyMatch = nameTokens.stream()
+                .anyMatch(token -> containsToken(normalizedText, token));
+
+        if (!anyMatch) {
+            String expectedName = getDisplayName(docType);
+            throw new FssaiException(
+                    "This document does not appear to belong to your shop \"" + shopName.trim() + "\". "
+                            + "Your shop name was not found in the " + expectedName
+                            + ", so it looks like this certificate was issued to a different business. "
+                            + "Please upload a " + expectedName + " issued to \"" + shopName.trim() + "\".",
+                    FailureCode.BUSINESS_NAME_MISMATCH,
+                    java.util.List.of(
+                            "shop_name: " + shopName.trim(),
+                            "document_type: " + expectedName
+                    ));
+        }
+    }
+
+    /**
+     * Normalises text for tolerant name matching: lower-cases, folds the common
+     * ampersand/spelling variants, and strips punctuation so "cafe-coffee-day",
+     * "Café Coffee Day" and "cafe coffee day" all reduce to the same shape.
+     */
+    private String normalizeForMatching(String text) {
+        String s = text.toLowerCase(Locale.ENGLISH)
+                .replace("&", " and ")
+                .replaceAll("[^a-z0-9\\s]", " ");
+        // Collapse the spacing the substitutions above leave behind.
+        return s.replaceAll("\\s+", " ").trim();
+    }
+
+    /**
+     * Splits a shop name into the words that actually identify it.
+     *
+     * <p>Drops legal suffixes (the certificate will carry its own, and the trade
+     * name typed on the profile usually will not) and short filler words, so
+     * "Maruthi Traders Private Limited" is compared as just {maruthi, traders}.
+     * </p>
+     */
+    private List<String> significantTokens(String shopName) {
+        String normalized = normalizeForMatching(shopName);
+        List<String> tokens = new ArrayList<>();
+        for (String token : normalized.split("\\s+")) {
+            if (token.isBlank()) continue;
+            if (token.length() < 3 && !token.chars().anyMatch(Character::isDigit)) continue;
+            if (LEGAL_SUFFIX_TOKENS.contains(token)) continue;
+            if (GENERIC_BUSINESS_TOKENS.contains(token)) continue;
+            tokens.add(token);
+        }
+        return tokens;
+    }
+
+    /**
+     * True when {@code token} appears in the document text.
+     *
+     * <p>Exact substring first. Failing that, a mid-length token is allowed one
+     * character of OCR noise, because single-word shop names ("Verma", "Shah")
+     * are exactly the ones where a single misread character would otherwise read
+     * as a completely different business. Very short and very long tokens stay
+     * exact - see {@link #FUZZY_MATCH_MIN_LENGTH}.</p>
+     */
+    private boolean containsToken(String normalizedText, String token) {
+        if (normalizedText.contains(token)) return true;
+
+        if (token.length() < FUZZY_MATCH_MIN_LENGTH || token.length() > FUZZY_MATCH_MAX_LENGTH) {
+            return false;
+        }
+
+        int width = token.length();
+        for (int i = 0; i + width <= normalizedText.length(); i++) {
+            String window = normalizedText.substring(i, i + width);
+            if (editDistanceWithin(token, window, 1)) return true;
+        }
+        return false;
+    }
+
+    /** Bounded Levenshtein: true when {@code a} and {@code b} are within {@code max} edits. */
+    private boolean editDistanceWithin(String a, String b, int max) {
+        int[] previous = new int[b.length() + 1];
+        int[] current = new int[b.length() + 1];
+        for (int j = 0; j <= b.length(); j++) previous[j] = j;
+
+        for (int i = 1; i <= a.length(); i++) {
+            current[0] = i;
+            int rowBest = current[0];
+            for (int j = 1; j <= b.length(); j++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                current[j] = Math.min(Math.min(current[j - 1] + 1, previous[j] + 1),
+                        previous[j - 1] + cost);
+                rowBest = Math.min(rowBest, current[j]);
+            }
+            if (rowBest > max) return false;
+            int[] swap = previous;
+            previous = current;
+            current = swap;
+        }
+        return previous[b.length()] <= max;
     }
 }

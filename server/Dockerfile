@@ -7,6 +7,17 @@ RUN mvn clean package -DskipTests -B
 
 # Runtime stage: pinned JRE image, non-root user.
 FROM eclipse-temurin:21-jre-noble
+# tesseract-ocr(+eng): OCR for expiry-date extraction at upload. tess4j loads the
+#   system libtesseract.so and findTessDataPath() resolves
+#   /usr/share/tesseract-ocr/5/tessdata, so no TESSDATA_PATH is needed.
+# tzdata: the notification schedulers and their crons are written for IST, so the
+#   container needs a real zone database rather than defaulting to UTC.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+        tzdata \
+    && rm -rf /var/lib/apt/lists/*
 RUN useradd -m -u 1001 appuser
 WORKDIR /app
 RUN mkdir -p /app/Documents && chown -R appuser:appuser /app/Documents

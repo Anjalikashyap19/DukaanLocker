@@ -12,6 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -22,8 +23,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Escalation behavior: T-30 / T-15 / T-7 stage messages fire once each whenever
  * first seen (a missed calendar day is not a permanent skip), daily reminders
- * run from 6 days out through expiry day, expired nags stop after the cap,
- * and referenceId is the SHOP id so in-app taps navigate correctly.
+ * run from 6 days out through expiry day, an expired document nags daily for
+ * expired-max-days and then once per expired-repeat-days window (never falling
+ * permanently silent), and referenceId is the SHOP id so in-app taps navigate
+ * correctly.
+ *
+ * The catch-up pass (expiredOnly=true) reports only already-expired documents,
+ * so an upload that is expired on arrival surfaces within minutes at any hour,
+ * while the daily countdown never fires overnight.
  */
 @SpringBootTest
 @Transactional
@@ -79,10 +86,14 @@ class DocumentExpirySchedulerTest {
     }
 
     private Document createDoc(long daysUntilExpiry) {
-        Document doc = new Document(shop, DocumentType.FSSAI_FOOD_LICENSE);
+        return createDoc(DocumentType.FSSAI_FOOD_LICENSE, daysUntilExpiry);
+    }
+
+    private Document createDoc(DocumentType type, long daysUntilExpiry) {
+        Document doc = new Document(shop, type);
         doc.setStatus(DocumentStatus.UPLOADED);
-        doc.setFileName("fssai.pdf");
-        doc.setFileUrl("documents/1111_1/fssai/fssai.pdf");
+        doc.setFileName(type.name().toLowerCase() + ".pdf");
+        doc.setFileUrl("documents/1111_1/" + type.name().toLowerCase() + "/" + type.name().toLowerCase() + ".pdf");
         if (daysUntilExpiry >= 0) {
             doc.setExpiryDate(LocalDate.now().plusDays(daysUntilExpiry).atStartOfDay());
         } else {
@@ -93,6 +104,11 @@ class DocumentExpirySchedulerTest {
 
     private List<Notification> run() {
         scheduler.checkExpiringDocuments();
+        return notificationRepository.findAll();
+    }
+
+    private List<Notification> runCatchUp() {
+        scheduler.checkExpiringDocuments(true);
         return notificationRepository.findAll();
     }
 
@@ -199,11 +215,106 @@ class DocumentExpirySchedulerTest {
     }
 
     @Test
-    @DisplayName("Expired beyond the cap (10 days) stays silent")
-    void expiredPastCapStaysSilent() {
-        createDoc(-10);
+    @DisplayName("Past the daily cap the first repeat window still notifies (10 days out)")
+    void expiredJustPastCapSendsFirstRepeat() {
+        Document doc = createDoc(-10);
 
-        assertThat(run()).isEmpty();
+        List<Notification> notifs = run();
+
+        assertThat(notifs).hasSize(1);
+        assertThat(notifs.get(0).getType()).isEqualTo("EXPIRED");
+        assertThat(notifs.get(0).getDedupeKey()).isEqualTo("expiry:" + doc.getId() + ":XR0");
+    }
+
+    @Test
+    @DisplayName("Repeat window: every run inside the same window is suppressed")
+    void expiredRepeatWindowFiresOnce() {
+        Document doc = createDoc(-10);
+
+        assertThat(run()).hasSize(1);
+        assertThat(run()).hasSize(1);
+        assertThat(run()).hasSize(1);
+
+        assertThat(notificationRepository.findAll())
+                .allMatch(n -> ("expiry:" + doc.getId() + ":XR0").equals(n.getDedupeKey()));
+    }
+
+    @Test
+    @DisplayName("A much older document lands in a later repeat window and notifies again")
+    void longExpiredDocUsesLaterRepeatWindow() {
+        Document doc = createDoc(-30);
+
+        List<Notification> notifs = run();
+
+        // (30 - 7 - 1) / 14 = 1 -> second repeat window
+        assertThat(notifs).hasSize(1);
+        assertThat(notifs.get(0).getDedupeKey()).isEqualTo("expiry:" + doc.getId() + ":XR1");
+        assertThat(notifs.get(0).getBody()).contains("30");
+    }
+
+    @Test
+    @DisplayName("A suppressed long-expired document is still marked EXPIRED")
+    void suppressedExpiredDocStillGetsExpiredStatus() {
+        Document doc = createDoc(-10);
+
+        run();                                   // first repeat fires
+        run();                                   // suppressed by the dedupe key
+
+        assertThat(documentRepository.findById(doc.getId())).hasValueSatisfying(
+                d -> assertThat(d.getStatus()).isEqualTo(DocumentStatus.EXPIRED));
+    }
+
+    @Test
+    @DisplayName("Runs with no open session (as the cron does) without lazy-proxy failures")
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void runsOutsideAnyTransaction() {
+        createDoc(-27);
+        createDoc(DocumentType.GST, 25);
+
+        // Document.shop is LAZY, so a plain findAll() here would hand back
+        // uninitializable proxies and blow up on doc.getShop().getOwner().
+        // This is the guard for the bug that stopped every expiry notification
+        // from ever being sent in production.
+        List<Notification> notifs = runCatchUp();
+
+        assertThat(notifs).hasSize(1);
+        assertThat(notifs.get(0).getType()).isEqualTo("EXPIRED");
+        assertThat(notificationRepository.findAll()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("Catch-up pass reports an already-expired document outside waking hours")
+    void catchUpPassNotifiesExpiredDoc() {
+        Document doc = createDoc(-27);
+
+        List<Notification> notifs = runCatchUp();
+
+        assertThat(notifs).hasSize(1);
+        assertThat(notifs.get(0).getType()).isEqualTo("EXPIRED");
+        assertThat(notifs.get(0).getCategory()).isEqualTo("ALERT");
+        assertThat(notifs.get(0).getReferenceId()).isEqualTo(shop.getId());
+        assertThat(notifs.get(0).getDedupeKey()).isEqualTo("expiry:" + doc.getId() + ":XR1");
+        assertThat(documentRepository.findById(doc.getId())).hasValueSatisfying(
+                d -> assertThat(d.getStatus()).isEqualTo(DocumentStatus.EXPIRED));
+    }
+
+    @Test
+    @DisplayName("Catch-up pass stays silent for documents that have not expired yet")
+    void catchUpPassIgnoresUpcomingDocs() {
+        createDoc(DocumentType.FSSAI_FOOD_LICENSE, 25);
+        createDoc(DocumentType.GST, 5);
+        createDoc(DocumentType.PAN, 0);
+
+        assertThat(runCatchUp()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Catch-up pass does not double-send what the main pass already sent")
+    void catchUpSharesDedupeKeysWithMainPass() {
+        createDoc(-27);
+
+        assertThat(run()).hasSize(1);
+        assertThat(runCatchUp()).hasSize(1);        // same XR key, still just the one
     }
 
     @Test

@@ -226,7 +226,7 @@ public class ShopService {
         doc.setDocumentNumber(documentNumber);
         doc.setIssueDate(issueDate);
         doc.setExpiryDate(expiryDate);
-        doc.setStatus(DocumentStatus.UPLOADED);
+        doc.setStatus(statusForUploadedDoc(expiryDate));
 
         if (isNew) {
             doc.setUploadedAt(java.time.LocalDateTime.now());
@@ -235,6 +235,18 @@ public class ShopService {
 
         Document saved = documentRepository.save(doc);
         return toDocumentResponse(saved);
+    }
+
+    /**
+     * A file that arrives with an expiry date already in the past is EXPIRED the
+     * moment it is uploaded, not UPLOADED - otherwise the document reads as fine
+     * in the locker until the expiry scheduler next runs and corrects it.
+     */
+    private DocumentStatus statusForUploadedDoc(java.time.LocalDateTime expiryDate) {
+        if (expiryDate != null && expiryDate.toLocalDate().isBefore(java.time.LocalDate.now())) {
+            return DocumentStatus.EXPIRED;
+        }
+        return DocumentStatus.UPLOADED;
     }
 
     public ShopResponse toShopResponse(Shop shop) {
