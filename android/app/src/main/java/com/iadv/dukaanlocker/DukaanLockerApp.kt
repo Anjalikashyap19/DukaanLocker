@@ -641,6 +641,8 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                             FetchDocumentDialog(
                                 doc = fetchDoc,
                                 shopName = shop?.shopName ?: "Business",
+                                toasts = state.toastQueue,
+                                onDismissToast = { vm.dismissToast(it) },
                                 onDismiss = { vm.dismissFetchDialog() },
                                 onSuccess = { regNum, issue, expiry ->
                                     vm.dismissFetchDialog()
@@ -763,8 +765,10 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                     }
 
                     // ── Toast Overlay (bottom notifications) ──
+                    // While the fetch dialog (its own window) is open the toast is rendered
+                    // inside that dialog instead, so suppress it here to avoid a dimmed duplicate.
                     ToastOverlay(
-                        toasts = state.toastQueue,
+                        toasts = if (state.showFetchDialog) emptyList() else state.toastQueue,
                         onDismiss = { vm.dismissToast(it) }
                     )
 

@@ -1171,6 +1171,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 if (response == null) {
                     android.util.Log.w("FSSAI_FETCH", "<<< TIMED OUT after ${FETCH_TIMEOUT_MS}ms")
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        showToast("FSSAI fetch timed out. Please try again.", ToastType.ERROR)
                         onResult(false, null)
                     }
                     return@launch
@@ -1182,6 +1183,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         if (body != null && body.success) {
                             onResult(true, body)
                         } else {
+                            showToast(
+                                body?.errorMessage
+                                    ?: "FSSAI verification failed. Please check the license number and try again.",
+                                ToastType.ERROR
+                            )
                             onResult(false, body)
                         }
                     } else {
