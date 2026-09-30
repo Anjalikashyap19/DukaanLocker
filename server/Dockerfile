@@ -6,7 +6,7 @@ COPY server/src ./src
 RUN mvn clean package -DskipTests -B
 
 # Runtime stage: pinned JRE image, non-root user.
-FROM eclipse-temurin:21-jre-noble
+FROM eclipse-temurin:24-jre-noble
 # tesseract-ocr(+eng): OCR for expiry-date extraction at upload. tess4j loads the
 #   system libtesseract.so and findTessDataPath() resolves
 #   /usr/share/tesseract-ocr/5/tessdata, so no TESSDATA_PATH is needed.
