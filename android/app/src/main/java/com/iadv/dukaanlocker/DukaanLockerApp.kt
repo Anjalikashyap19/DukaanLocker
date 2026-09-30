@@ -634,41 +634,76 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                             }
                         }
 
-                        // ── Fetch Document Dialog ──
+                        // ── Fetch Document Dialog / Unsupported-type popup ──
                         if (state.showFetchDialog && state.fetchTargetDoc != null) {
                             val fetchDoc = state.fetchTargetDoc!!
                             val shop = state.shops.find { it.id.toString() == fetchDoc.businessId }
-                            FetchDocumentDialog(
-                                doc = fetchDoc,
-                                shopName = shop?.shopName ?: "Business",
-                                toasts = state.toastQueue,
-                                onDismissToast = { vm.dismissToast(it) },
-                                onDismiss = { vm.dismissFetchDialog() },
-                                onSuccess = { regNum, issue, expiry ->
-                                    vm.dismissFetchDialog()
-                                    if (shop != null) {
-                                        vm.loadDocuments(shop.id)
+                            if (fetchDoc.type in SUPPORTED_FETCH_TYPES) {
+                                FetchDocumentDialog(
+                                    doc = fetchDoc,
+                                    shopName = shop?.shopName ?: "Business",
+                                    toasts = state.toastQueue,
+                                    onDismissToast = { vm.dismissToast(it) },
+                                    onDismiss = { vm.dismissFetchDialog() },
+                                    onSuccess = { regNum, issue, expiry ->
+                                        vm.dismissFetchDialog()
+                                        if (shop != null) {
+                                            vm.loadDocuments(shop.id)
+                                        }
+                                    },
+                                    onFetchGst = { shopId, gstin, result ->
+                                        vm.fetchGst(shopId, gstin) { success, response ->
+                                            result(success, response)
+                                        }
+                                    },
+                                    onInitMsmeCaptcha = { onResult ->
+                                        vm.initUdyamCaptcha(onResult)
+                                    },
+                                    onFetchMsme = { shopId, udyamNumber, sessionId, captchaText, result ->
+                                        vm.fetchMsme(shopId, udyamNumber, sessionId, captchaText) { success, response ->
+                                            result(success, response)
+                                        }
+                                    },
+                                    onFetchFssai = { shopId, licenseNumber, result ->
+                                        vm.fetchFssai(shopId, licenseNumber) { success, response ->
+                                            result(success, response)
+                                        }
                                     }
-                                },
-                                onFetchGst = { shopId, gstin, result ->
-                                    vm.fetchGst(shopId, gstin) { success, response ->
-                                        result(success, response)
-                                    }
-                                },
-                                onInitMsmeCaptcha = { onResult ->
-                                    vm.initUdyamCaptcha(onResult)
-                                },
-                                onFetchMsme = { shopId, udyamNumber, sessionId, captchaText, result ->
-                                    vm.fetchMsme(shopId, udyamNumber, sessionId, captchaText) { success, response ->
-                                        result(success, response)
-                                    }
-                                },
-                                onFetchFssai = { shopId, licenseNumber, result ->
-                                    vm.fetchFssai(shopId, licenseNumber) { success, response ->
-                                        result(success, response)
-                                    }
-                                }
-                            )
+                                )
+                            } else {
+                                // Auto-fetch is only wired up for GST / MSME / FSSAI — tell the user
+                                // instead of opening a dialog that can never finish.
+                                AlertDialog(
+                                    onDismissRequest = { vm.dismissFetchDialog() },
+                                    containerColor = if (state.isDarkTheme) Color(0xFF1E293B) else Color.White,
+                                    shape = RoundedCornerShape(20.dp),
+                                    title = {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                                            Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text("Coming Soon", fontWeight = FontWeight.Bold, color = if (state.isDarkTheme) Color.White else Color.Black)
+                                        }
+                                    },
+                                    text = {
+                                        Text(
+                                            "We are unable to serve this service currently.\nAuto-fetch for ${fetchDoc.name} will be available soon.",
+                                            color = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    },
+                                    confirmButton = {
+                                        Button(
+                                            onClick = { vm.dismissFetchDialog() },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                        ) {
+                                            Text("OK", fontWeight = FontWeight.Bold)
+                                        }
+                                    },
+                                    dismissButton = null
+                                )
+                            }
                         }
 
                         // ── Certificate Viewer Dialog ──

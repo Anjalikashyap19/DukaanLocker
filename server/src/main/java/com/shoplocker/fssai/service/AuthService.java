@@ -105,6 +105,7 @@ public class AuthService {
     private final OtpService otpService;
     private final NotificationService notificationService;
     private final DocumentMissingScheduler documentMissingScheduler;
+    private final ShopService shopService;
 
     /**
      * Self-reference (via the Spring proxy) so the DB-creation phase can run
@@ -128,7 +129,8 @@ public class AuthService {
                        LoginAttemptService loginAttemptService,
                        OtpService otpService,
                        NotificationService notificationService,
-                       DocumentMissingScheduler documentMissingScheduler) {
+                       DocumentMissingScheduler documentMissingScheduler,
+                       ShopService shopService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -141,6 +143,7 @@ public class AuthService {
         this.otpService = otpService;
         this.notificationService = notificationService;
         this.documentMissingScheduler = documentMissingScheduler;
+        this.shopService = shopService;
     }
 
     @Transactional
@@ -767,6 +770,10 @@ public class AuthService {
         }
 
         shop.setOwner(user);
+
+        // Same duplicate rule as ShopService.createShop: catch a user who
+        // registers via Udyam and then tries to add the same business again.
+        shopService.assertNoDuplicateShop(user.getId(), shop.getShopName(), shop.getBranchName(), null);
 
         return shopRepository.save(shop);
     }

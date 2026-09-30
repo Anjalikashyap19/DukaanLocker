@@ -837,8 +837,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Normalized duplicate key mirroring the server rule (ShopService.assertNoDuplicateShop):
+     * trim + collapse whitespace + lowercase, branch null treated as empty.
+     */
+    private fun shopDuplicateKey(name: String?, branch: String?): String {
+        fun norm(v: String?) = v?.trim()?.lowercase()?.replace(Regex("\\s+"), " ") ?: ""
+        return "${norm(name)} | ${norm(branch)}"
+    }
+
+    private fun isDuplicateShopName(
+        name: String?, branch: String?, excludeShopId: Long? = null
+    ): Boolean = _uiState.value.shops.any {
+        it.id != excludeShopId && shopDuplicateKey(it.shopName, it.branchName) == shopDuplicateKey(name, branch)
+    }
+
     fun createShop(biz: BusinessProfile, pendingManagerId: String?, onDone: () -> Unit) {
         viewModelScope.launch {
+            // Instant pre-check against the shops already in memory so the user
+            // gets feedback without a server round-trip (server re-checks anyway).
+            if (isDuplicateShopName(biz.name, biz.branchName.ifBlank { null })) {
+                showToast("A business named \"${biz.name.trim()}\" already exists", ToastType.ERROR)
+                onDone()
+                return@launch
+            }
             updateState { it.copy(isLoading = true) }
             try {
                 val response = api.createShop(CreateShopRequest(
@@ -878,6 +900,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateShop(shopId: Long, biz: BusinessProfile, pendingManagerId: String?, onDone: () -> Unit) {
         viewModelScope.launch {
+            if (isDuplicateShopName(biz.name, biz.branchName.ifBlank { null }, excludeShopId = shopId)) {
+                showToast("A business named \"${biz.name.trim()}\" already exists", ToastType.ERROR)
+                onDone()
+                return@launch
+            }
             updateState { it.copy(isLoading = true) }
             try {
                 val response = api.updateShop(shopId, UpdateShopRequest(

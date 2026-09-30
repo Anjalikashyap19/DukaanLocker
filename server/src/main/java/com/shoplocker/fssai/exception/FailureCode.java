@@ -78,6 +78,8 @@ public enum FailureCode {
     // ---- Shop / Manager / Assignment errors ----
     /** Shop not found. */
     SHOP_NOT_FOUND             ("shop_not_found",             HttpStatus.NOT_FOUND),
+    /** Shop create/update rejected: the owner already has a shop with this name + branch. */
+    DUPLICATE_SHOP             ("duplicate_shop",             HttpStatus.CONFLICT),
     /** Manager not found. */
     MANAGER_NOT_FOUND          ("manager_not_found",          HttpStatus.NOT_FOUND),
     /** User not found. */

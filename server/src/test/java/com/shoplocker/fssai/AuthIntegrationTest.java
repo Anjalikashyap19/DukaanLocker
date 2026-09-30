@@ -28,6 +28,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -1201,5 +1202,148 @@ class AuthIntegrationTest {
         mockMvc.perform(get("/api/shops/" + shopId)
                         .header("Authorization", "Bearer " + token2))
                 .andExpect(status().isForbidden());
+    }
+
+    // ========================================================================
+    // Duplicate shop prevention (same owner + name + branch)
+    // ========================================================================
+
+    private String registerToken(String emailId, String mobileNumber) throws Exception {
+        String body = """
+                {
+                  "userName": "Test Admin",
+                  "mobileNumber": "%s",
+                  "emailId": "%s",
+                  "password": "Strong@123"
+                }""".formatted(mobileNumber, emailId);
+        MvcResult reg = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return objectMapper.readTree(reg.getResponse().getContentAsString()).get("token").asText();
+    }
+
+    @Test
+    @DisplayName("33. Creating the same shop name + branch twice returns 409 duplicate_shop")
+    void duplicateShopCreateRejected() throws Exception {
+        String token = registerToken("dup@example.com", "9876543210");
+
+        mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_SHOP_BODY))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_SHOP_BODY))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("duplicate_shop"))
+                .andExpect(jsonPath("$.message").value(
+                        containsString("already exists")));
+    }
+
+    @Test
+    @DisplayName("34. Duplicate check ignores case and extra whitespace")
+    void duplicateShopCheckNormalizesCaseAndWhitespace() throws Exception {
+        String token = registerToken("dup2@example.com", "9876543210");
+
+        mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_SHOP_BODY))
+                .andExpect(status().isCreated());
+
+        String variantBody = VALID_SHOP_BODY
+                .replace("Anjali General Store", "  anjali   GENERAL store  ");
+        mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(variantBody))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("duplicate_shop"));
+    }
+
+    @Test
+    @DisplayName("35. Same shop name with a different branch is allowed (multi-branch)")
+    void sameNameDifferentBranchAllowed() throws Exception {
+        String token = registerToken("dup3@example.com", "9876543210");
+
+        mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_SHOP_BODY))
+                .andExpect(status().isCreated());
+
+        String branchBody = VALID_SHOP_BODY.replace("Main Branch", "Anna Nagar Branch");
+        mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(branchBody))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @DisplayName("36. Different owner may create a shop with the same name + branch")
+    void differentOwnerSameNameAllowed() throws Exception {
+        String token1 = registerToken("owner1@example.com", "9876543210");
+        mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token1)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_SHOP_BODY))
+                .andExpect(status().isCreated());
+
+        String token2 = registerToken("owner2@example.com", "9988776655");
+        mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token2)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_SHOP_BODY))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @DisplayName("37. Renaming a shop onto another shop of the same owner returns 409")
+    void renameOntoExistingShopRejected() throws Exception {
+        String token = registerToken("owner3@example.com", "9876543210");
+
+        MvcResult shop1 = mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_SHOP_BODY))
+                .andExpect(status().isCreated())
+                .andReturn();
+        long shop1Id = objectMapper.readTree(shop1.getResponse().getContentAsString()).get("id").asLong();
+
+        String shop2Body = VALID_SHOP_BODY.replace("Anjali General Store", "Anjali Electronics");
+        MvcResult shop2 = mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(shop2Body))
+                .andExpect(status().isCreated())
+                .andReturn();
+        long shop2Id = objectMapper.readTree(shop2.getResponse().getContentAsString()).get("id").asLong();
+
+        // Rename shop2 onto shop1's name + branch -> conflict
+        String collideBody = """
+                {"shopName": "Anjali General Store", "branchName": "Main Branch"}""";
+        mockMvc.perform(put("/api/shops/" + shop2Id)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(collideBody))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("duplicate_shop"));
+
+        // Keeping a shop's own name+branch on edit stays legal
+        String ownBody = """
+                {"shopName": "Anjali Electronics", "branchName": "Main Branch"}""";
+        mockMvc.perform(put("/api/shops/" + shop2Id)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(ownBody))
+                .andExpect(status().isOk());
+
+        assertThat(shop1Id).isNotEqualTo(shop2Id);
     }
 }

@@ -57,6 +57,42 @@ public class ShopService {
         }
     }
 
+    /**
+     * Rejects a shop whose name + branch (normalized: trimmed, internal
+     * whitespace collapsed, lowercased — branch {@code null} counts as empty)
+     * already exists for the same owner. Scoped per owner so different
+     * accounts and same-owner multi-branch setups (different branch name)
+     * stay legal. {@code excludeShopId} lets a shop keep its own values on edit.
+     *
+     * App-level check only — deliberately no DB unique constraint, so
+     * pre-existing duplicates in the database are left untouched.
+     */
+    public void assertNoDuplicateShop(Long ownerId, String shopName, String branchName, Long excludeShopId) {
+        String wanted = duplicateKey(shopName, branchName);
+        for (Shop existing : shopRepository.findByOwnerId(ownerId)) {
+            if (excludeShopId != null && excludeShopId.equals(existing.getId())) {
+                continue;
+            }
+            if (wanted.equals(duplicateKey(existing.getShopName(), existing.getBranchName()))) {
+                String display = shopName == null ? "" : shopName.trim();
+                throw new FssaiException(
+                        "A business named '" + display + "' already exists for your account",
+                        FailureCode.DUPLICATE_SHOP);
+            }
+        }
+    }
+
+    private static String duplicateKey(String shopName, String branchName) {
+        return normalize(shopName) + " | " + normalize(branchName);
+    }
+
+    private static String normalize(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+    }
+
     @Transactional
     public ShopResponse updateShop(Long id, UpdateShopRequest request) {
 
@@ -97,6 +133,10 @@ public class ShopService {
             shop.setPincode(request.getPincode());
         }
 
+        // Same rule as create: a rename must not collide with another shop of
+        // the same owner (the shop being edited is excluded from the check).
+        assertNoDuplicateShop(shop.getOwner().getId(), shop.getShopName(), shop.getBranchName(), id);
+
         Shop updated = shopRepository.save(shop);
 
         return toShopResponse(updated);
@@ -114,6 +154,8 @@ public class ShopService {
         }
 
         BusinessScale scale = parseScale(request.getScale());
+
+        assertNoDuplicateShop(owner.getId(), request.getShopName(), request.getBranchName(), null);
 
         Shop shop = new Shop();
         shop.setShopName(request.getShopName());

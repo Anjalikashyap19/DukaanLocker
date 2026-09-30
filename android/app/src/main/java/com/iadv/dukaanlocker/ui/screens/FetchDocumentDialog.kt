@@ -43,6 +43,9 @@ import java.util.*
 /** User-facing fetch budget: the dialog shows a 1-minute countdown. */
 private const val FETCH_COUNTDOWN_SECONDS = 60
 
+/** Document types that have a working auto-fetch flow. Anything else shows a "Coming Soon" popup. */
+val SUPPORTED_FETCH_TYPES = setOf("GST", "MSME_CERTIFICATE", "FSSAI_FOOD_LICENSE")
+
 @Composable
 fun FetchDocumentDialog(
     doc: DocumentItem,
