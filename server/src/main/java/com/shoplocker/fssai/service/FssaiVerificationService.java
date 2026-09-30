@@ -73,6 +73,24 @@ public class FssaiVerificationService {
      * @return FssaiVerificationResponse with FBO details, PDF URL and HTML certificate
      */
     public FssaiVerificationResponse verifyLicense(String licenseNumber, Long userId, Long shopId) {
+        return verifyLicense(licenseNumber, userId, shopId, null);
+    }
+
+    /**
+     * Verifies an FSSAI license number, generates a PDF certificate, and uploads it to local storage.
+     *
+     * <p>When {@code expectedBusinessName} (the shop name the user created) is supplied, the
+     * FBO name returned by the FSSAI API must match it before any certificate is generated
+     * or uploaded. A mismatch aborts the flow with a user-facing error.</p>
+     *
+     * @param licenseNumber         the 14-digit FSSAI license number (e.g., "21221160000115")
+     * @param userId                the DL user ID for folder structure
+     * @param shopId                the shop ID for folder structure
+     * @param expectedBusinessName  the shop / business name the user created (null = skip validation)
+     * @return FssaiVerificationResponse with FBO details, PDF URL and HTML certificate
+     */
+    public FssaiVerificationResponse verifyLicense(String licenseNumber, Long userId, Long shopId,
+                                                   String expectedBusinessName) {
         String normalized = licenseNumber.trim();
 
         // Step 1: primary details API (throws on transport failure)
@@ -84,7 +102,17 @@ public class FssaiVerificationService {
         // Step 3: merge + map
         FssaiVerificationResponse parsed = parseAndMerge(detailsBody, licenseBody, normalized);
 
-        // Step 4: generate PDF and upload to the VPS document path
+        // Step 4: the certificate must belong to the user's own business — compare the
+        // FBO name from the API with the shop name the user created. Checked BEFORE the
+        // PDF is generated / uploaded so nothing is created on a mismatch.
+        if (parsed.isSuccess() && !businessNameMatches(expectedBusinessName, parsed.getCompanyName())) {
+            log.info("FSSAI license {} rejected: FBO name '{}' does not match shop name '{}'",
+                    normalized, parsed.getCompanyName(), expectedBusinessName);
+            return FssaiVerificationResponse.error(
+                    "Seems like this certificate doesn't belong to your business.");
+        }
+
+        // Step 5: generate PDF and upload to the VPS document path
         if (parsed.isSuccess()) {
             try {
                 String certificateHtml = FssaiHtmlGenerator.generateCertificateHtml(
@@ -311,6 +339,45 @@ public class FssaiVerificationService {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    /**
+     * Matches the shop / business name the user created against the FBO name returned
+     * by the FSSAI API. The API frequently returns {@code "OWNER / SHOP NAME"}, so both
+     * the full string and each {@code /}-separated segment are compared after
+     * normalization (case-insensitive, punctuation-free, corporate suffixes stripped,
+     * containment in either direction).
+     *
+     * <p>Returns {@code true} when either name is missing — there is nothing to compare,
+     * so the fetch is not blocked.</p>
+     */
+    static boolean businessNameMatches(String shopName, String apiCompanyName) {
+        if (shopName == null || shopName.trim().isEmpty()) return true;
+        if (apiCompanyName == null || apiCompanyName.trim().isEmpty()) return true;
+
+        String shop = normalizeName(shopName);
+        if (shop.isEmpty()) return true;
+
+        if (containsIgnoreCase(shop, normalizeName(apiCompanyName))) return true;
+
+        // FSSAI often returns "OWNER NAME / BUSINESS NAME" — try each segment too
+        for (String segment : apiCompanyName.split("[/|,&]")) {
+            if (containsIgnoreCase(shop, normalizeName(segment))) return true;
+        }
+        return false;
+    }
+
+    private static boolean containsIgnoreCase(String a, String b) {
+        if (b.isEmpty()) return false;
+        return a.equals(b) || a.contains(b) || b.contains(a);
+    }
+
+    private static String normalizeName(String name) {
+        return name.toLowerCase()
+                .replaceAll("\\b(private limited|pvt ltd|pvt\\. ltd\\.?|ltd\\.?|llp|inc\\.?|co\\.?|company|enterprise|enterprises|trading|traders)\\b", "")
+                .replaceAll("[^a-z0-9 ]", "")
+                .replaceAll("\\s+", " ")
+                .trim();
     }
 
     /**

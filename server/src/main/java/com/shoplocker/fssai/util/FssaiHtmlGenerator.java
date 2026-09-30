@@ -104,57 +104,57 @@ public class FssaiHtmlGenerator {
         return "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n" +
                 "<html xmlns=\"http://www.w3.org/1999/xhtml\"><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"/>\n" +
                 "<style>\n" +
-                "  @page { size: A4 portrait; margin: 14mm 16mm; }\n" +
+                "  @page { size: A4 portrait; margin: 10mm 14mm; }\n" +
                 "  * { box-sizing: border-box; margin:0; padding:0; }\n" +
-                "  body { font-family: 'Times New Roman', Times, Georgia, serif; font-size:10pt; color:#1a1a1a; line-height:1.45; background:#fff; }\n" +
+                "  body { font-family: 'Times New Roman', Times, Georgia, serif; font-size:9pt; color:#1a1a1a; line-height:1.3; background:#fff; }\n" +
                 "\n" +
                 "  /* ===== HEADER ===== */\n" +
-                "  .header { text-align:center; padding:14px 16px 10px; border-bottom:2px solid #1B3A5C; }\n" +
-                "  .header-ministry { font-size:8pt; letter-spacing:2px; text-transform:uppercase; color:#666; margin-bottom:2px; }\n" +
-                "  .header-govt { font-size:13pt; font-weight:bold; letter-spacing:1.5px; text-transform:uppercase; color:#1B3A5C; margin-bottom:3px; }\n" +
-                "  .header-dept { font-size:9pt; letter-spacing:1px; color:#444; margin-bottom:1px; }\n" +
-                "  .header-board { font-size:8.5pt; letter-spacing:0.8px; color:#666; }\n" +
+                "  .header { text-align:center; padding:8px 16px 6px; border-bottom:2px solid #1B3A5C; }\n" +
+                "  .header-ministry { font-size:7.5pt; letter-spacing:2px; text-transform:uppercase; color:#666; margin-bottom:1px; }\n" +
+                "  .header-govt { font-size:11.5pt; font-weight:bold; letter-spacing:1.5px; text-transform:uppercase; color:#1B3A5C; margin-bottom:2px; }\n" +
+                "  .header-dept { font-size:8.5pt; letter-spacing:1px; color:#444; margin-bottom:1px; }\n" +
+                "  .header-board { font-size:8pt; letter-spacing:0.8px; color:#666; }\n" +
                 "\n" +
                 "  /* ===== TITLE ===== */\n" +
-                "  .title { text-align:center; font-size:15pt; font-weight:bold; color:#1B3A5C; text-transform:uppercase; letter-spacing:2px; padding:12px 0 8px; border-bottom:1px solid #ccc; margin-bottom:10px; }\n" +
+                "  .title { text-align:center; font-size:13pt; font-weight:bold; color:#1B3A5C; text-transform:uppercase; letter-spacing:2px; padding:7px 0 5px; border-bottom:1px solid #ccc; margin-bottom:7px; }\n" +
                 "\n" +
                 "  /* ===== LICENSE NUMBER ===== */\n" +
-                "  .lic-box { text-align:center; padding:10px 16px; margin:0 0 12px; }\n" +
-                "  .lic-label { font-size:7.5pt; color:#666; text-transform:uppercase; letter-spacing:2px; margin-bottom:4px; }\n" +
-                "  .lic-value { font-family: 'Courier New', Courier, monospace; font-size:17pt; font-weight:bold; color:#1B3A5C; letter-spacing:3px; }\n" +
+                "  .lic-box { text-align:center; padding:5px 16px; margin:0 0 7px; }\n" +
+                "  .lic-label { font-size:7pt; color:#666; text-transform:uppercase; letter-spacing:2px; margin-bottom:2px; }\n" +
+                "  .lic-value { font-family: 'Courier New', Courier, monospace; font-size:14pt; font-weight:bold; color:#1B3A5C; letter-spacing:3px; }\n" +
                 "\n" +
                 "  /* ===== CONTENT ===== */\n" +
                 "  .content { padding: 0 4px; }\n" +
                 "\n" +
                 "  /* ===== SECTION HEADERS ===== */\n" +
-                "  .section { background:#1B3A5C; color:#fff; font-size:8.5pt; font-weight:bold; padding:5px 10px; margin:10px 0 0; letter-spacing:1.5px; text-transform:uppercase; }\n" +
+                "  .section { background:#1B3A5C; color:#fff; font-size:8pt; font-weight:bold; padding:4px 10px; margin-top:7px; letter-spacing:1.5px; text-transform:uppercase; }\n" +
                 "\n" +
                 "  /* ===== TABLES ===== */\n" +
                 "  table { width:100%; border-collapse:collapse; margin:0; }\n" +
-                "  td { padding:6px 10px; vertical-align:top; border-bottom:1px solid #E2E8F0; font-size:9.5pt; }\n" +
+                "  td { padding:4px 8px; vertical-align:top; border-bottom:1px solid #E2E8F0; font-size:8.5pt; }\n" +
                 "  tr:last-child td { border-bottom:none; }\n" +
                 "\n" +
                 "  /* ===== FIELD ROWS ===== */\n" +
-                "  .lbl { width:38%; font-weight:bold; color:#4A5568; font-size:9pt; text-transform:uppercase; letter-spacing:0.3px; padding-right:8px; vertical-align:middle; }\n" +
-                "  .val { color:#1a1a1a; font-weight:600; font-size:10pt; }\n" +
+                "  .lbl { width:36%; font-weight:bold; color:#4A5568; font-size:8pt; text-transform:uppercase; letter-spacing:0.3px; padding-right:8px; vertical-align:middle; }\n" +
+                "  .val { color:#1a1a1a; font-weight:600; font-size:9pt; }\n" +
                 "\n" +
                 "  /* Status */\n" +
-                "  .status-badge { display:inline-block; padding:1px 8px; border-radius:3px; font-size:8pt; font-weight:bold; letter-spacing:0.5px; }\n" +
+                "  .status-badge { display:inline-block; padding:1px 8px; border-radius:3px; font-size:7.5pt; font-weight:bold; letter-spacing:0.5px; }\n" +
                 "  .badge-active { background:#E6F4EA; color:#1B7A3D; border:1px solid #A8DAB5; }\n" +
                 "  .badge-inactive { background:#FEE2E2; color:#C53030; border:1px solid #F5B7B7; }\n" +
                 "\n" +
                 "  /* ===== CERTIFICATION ===== */\n" +
-                "  .cert-box { background:#FAFBFC; border:1px solid #E2E8F0; margin:10px 0; padding:10px 14px; font-size:9pt; color:#4A5568; line-height:1.5; }\n" +
-                "  .cert-box .heading { font-size:9pt; font-weight:bold; color:#1B3A5C; margin-bottom:6px; text-transform:uppercase; letter-spacing:1px; }\n" +
+                "  .cert-box { background:#FAFBFC; border:1px solid #E2E8F0; margin:7px 0; padding:7px 12px; font-size:8pt; color:#4A5568; line-height:1.35; }\n" +
+                "  .cert-box .heading { font-size:8pt; font-weight:bold; color:#1B3A5C; margin-bottom:4px; text-transform:uppercase; letter-spacing:1px; }\n" +
                 "\n" +
                 "  /* ===== SIGNATURE ===== */\n" +
-                "  .signature-area { margin-top:16px; padding-top:8px; border-top:1px solid #E2E8F0; }\n" +
+                "  .signature-area { margin-top:8px; padding-top:6px; border-top:1px solid #E2E8F0; }\n" +
                 "  .sig-row { display:flex; justify-content:space-between; }\n" +
                 "  .sig-box { width:45%; text-align:center; }\n" +
-                "  .sig-line { border-top:1px solid #1a1a1a; margin-top:30px; padding-top:4px; font-size:8pt; color:#666; text-transform:uppercase; letter-spacing:0.5px; }\n" +
+                "  .sig-line { border-top:1px solid #1a1a1a; margin-top:16px; padding-top:3px; font-size:7.5pt; color:#666; text-transform:uppercase; letter-spacing:0.5px; }\n" +
                 "\n" +
                 "  /* ===== FOOTER ===== */\n" +
-                "  .footer { border-top:1px solid #ccc; padding:8px 14px 4px; font-size:7.5pt; color:#999; text-align:center; letter-spacing:0.3px; margin-top:10px; }\n" +
+                "  .footer { border-top:1px solid #ccc; padding:6px 14px 2px; font-size:7pt; color:#999; text-align:center; letter-spacing:0.3px; margin-top:7px; }\n" +
                 "\n" +
                 "  .mb-0 { margin-bottom:0; }\n" +
                 "</style></head><body>\n" +

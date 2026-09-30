@@ -2,6 +2,7 @@ package com.shoplocker.fssai.service;
 
 import com.shoplocker.fssai.dto.FssaiVerificationResponse;
 import com.shoplocker.fssai.util.FssaiHtmlGenerator;
+import org.apache.pdfbox.pdmodel.PDDocument;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -185,5 +186,51 @@ public class FssaiVerificationServiceTest {
         assertTrue(pdf.length > 1000, "Expected a non-trivial PDF, got " + pdf.length + " bytes");
         assertEquals('%', (char) pdf[0]);
         assertEquals('P', (char) pdf[1]);
+    }
+
+    @Test
+    void certificateFitsOnASinglePage() throws Exception {
+        FssaiVerificationResponse response = merge(DETAILS_JSON, LICENSE_JSON);
+        String html = buildHtml(response);
+
+        FssaiVerificationService service = new FssaiVerificationService(null);
+        Method render = FssaiVerificationService.class
+                .getDeclaredMethod("convertHtmlToPdf", String.class, String.class);
+        render.setAccessible(true);
+        byte[] pdf = (byte[]) render.invoke(service, html, "21221160000115");
+
+        try (PDDocument document = PDDocument.load(pdf)) {
+            assertEquals(1, document.getNumberOfPages(),
+                    "FSSAI certificate must be rendered on a single page");
+        }
+    }
+
+    @Test
+    void shopNameMatchesApiFboNameVariants() {
+        // "OWNER / BUSINESS NAME" style FBO names match the business part
+        assertTrue(FssaiVerificationService.businessNameMatches(
+                "Canara Juice Junction", "SHYAM SUNDAR / CANARA JUICE JUNCTION"));
+        assertTrue(FssaiVerificationService.businessNameMatches(
+                "CANARA JUICE JUNCTION", "SHYAM SUNDAR / CANARA JUICE JUNCTION"));
+        // owner-name-only shop still matches the combined FBO name
+        assertTrue(FssaiVerificationService.businessNameMatches(
+                "Shyam Sundar", "SHYAM SUNDAR / CANARA JUICE JUNCTION"));
+        // case / punctuation / corporate suffix insensitive
+        assertTrue(FssaiVerificationService.businessNameMatches(
+                "Sharma Traders", "SHARMA TRADERS PRIVATE LIMITED"));
+        // nothing to compare against -> not blocked
+        assertTrue(FssaiVerificationService.businessNameMatches(null, "SHYAM SUNDAR"));
+        assertTrue(FssaiVerificationService.businessNameMatches("My Shop", null));
+        assertTrue(FssaiVerificationService.businessNameMatches("   ", "SHYAM SUNDAR"));
+    }
+
+    @Test
+    void shopNameMustMatchOtherwiseCertificateIsRejected() {
+        assertFalse(FssaiVerificationService.businessNameMatches(
+                "Reliance Fresh", "SHYAM SUNDAR / CANARA JUICE JUNCTION"));
+        assertFalse(FssaiVerificationService.businessNameMatches(
+                "Canara Juice Corner", "SHYAM SUNDAR / CANARA JUICE JUNCTION"));
+        assertFalse(FssaiVerificationService.businessNameMatches(
+                "Sharma Traders", "SHYAM SUNDAR / CANARA JUICE JUNCTION"));
     }
 }

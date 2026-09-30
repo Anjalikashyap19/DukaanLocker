@@ -3,6 +3,7 @@ package com.shoplocker.fssai.controller;
 import com.shoplocker.fssai.dto.FssaiFetchRequest;
 import com.shoplocker.fssai.dto.FssaiVerificationResponse;
 import com.shoplocker.fssai.entity.DocumentType;
+import com.shoplocker.fssai.entity.Shop;
 import com.shoplocker.fssai.entity.User;
 import com.shoplocker.fssai.service.FssaiVerificationService;
 import com.shoplocker.fssai.service.ShopAccessService;
@@ -55,6 +56,8 @@ public class FssaiVerificationController {
             description = "Verifies a 14-digit FSSAI license number, generates a PDF certificate, " +
                           "uploads it to local storage (VPS document path) and persists it as an " +
                           "FSSAI Food License document for the given shop, including the expiry date. " +
+                          "The FBO name returned by the FSSAI API must match the shop name the user " +
+                          "created — otherwise no certificate is created and an error is returned. " +
                           "Returns the verification details including the PDF URL."
     )
     @PostMapping("/fetch")
@@ -68,8 +71,13 @@ public class FssaiVerificationController {
         Long shopId = Long.parseLong(request.getShopId());
         shopAccessService.validateShopAccess(user, shopId);
 
+        // The certificate may only be created when the FBO name returned by the FSSAI
+        // API matches the shop / business name the user created.
+        Shop shop = shopService.getShopById(shopId);
+
         FssaiVerificationResponse verification =
-                fssaiService.verifyLicense(request.getLicenseNumber(), user.getId(), shopId);
+                fssaiService.verifyLicense(request.getLicenseNumber(), user.getId(), shopId,
+                        shop != null ? shop.getShopName() : null);
 
         if (!verification.isSuccess()) {
             return ResponseEntity.ok(verification);
