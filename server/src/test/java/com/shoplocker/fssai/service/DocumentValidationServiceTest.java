@@ -371,4 +371,52 @@ class DocumentValidationServiceTest {
                             .isEqualTo(FailureCode.DOCUMENT_TYPE_MISMATCH));
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("4. content hashing (the cross-shop duplicate-document key)")
+    class ContentHash {
+
+        @Test
+        @DisplayName("matches the published SHA-256 test vectors")
+        void matchesKnownVectors() {
+            assertThat(DocumentValidationService.sha256Hex(new byte[0]))
+                    .isEqualTo("e3b0c44298fc1c149afbf4c8996fb924"
+                            + "27ae41e4649b934ca495991b7852b855");
+            assertThat(DocumentValidationService.sha256Hex("abc".getBytes()))
+                    .isEqualTo("ba7816bf8f01cfea414140de5dae2223"
+                            + "b00361a396177a9cb410ff61f20015ad");
+        }
+
+        @Test
+        @DisplayName("is lower-case hex of exactly 64 characters")
+        void isLowerHexDigest() {
+            String hash = DocumentValidationService.sha256Hex(WB_ENLISTMENT_TEXT.getBytes());
+            assertThat(hash).hasSize(64).matches("[0-9a-f]{64}");
+        }
+
+        @Test
+        @DisplayName("is deterministic, so the same file always produces the same key")
+        void isDeterministic() {
+            byte[] first = WB_ENLISTMENT_TEXT.getBytes();
+            byte[] second = WB_ENLISTMENT_TEXT.getBytes();
+            assertThat(DocumentValidationService.sha256Hex(first))
+                    .isEqualTo(DocumentValidationService.sha256Hex(second));
+        }
+
+        @Test
+        @DisplayName("a single byte change produces a different key")
+        void differsForDifferentContent() {
+            byte[] a = "trade licence A".getBytes();
+            byte[] b = "trade licence B".getBytes();
+            assertThat(DocumentValidationService.sha256Hex(a))
+                    .isNotEqualTo(DocumentValidationService.sha256Hex(b));
+        }
+
+        @Test
+        @DisplayName("null input yields null, not a hash of nothing")
+        void nullInputYieldsNull() {
+            assertThat(DocumentValidationService.sha256Hex(null)).isNull();
+        }
+    }
 }

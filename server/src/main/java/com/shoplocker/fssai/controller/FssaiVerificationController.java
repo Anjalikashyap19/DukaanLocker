@@ -92,7 +92,8 @@ public class FssaiVerificationController {
                 verification.getPdfUrl(),
                 verification.getLicenseNumber(),
                 null,
-                expiryDate
+                expiryDate,
+                null
         );
 
         return ResponseEntity.ok(verification);

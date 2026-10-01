@@ -864,14 +864,48 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .replace(Regex("\\s+"), " ")
     }
 
-    private fun isDuplicateShopName(
-        name: String?, excludeShopId: Long? = null
-    ): Boolean {
-        val key = shopDuplicateKey(name)
-        if (key.isEmpty()) return false
-        return _uiState.value.shops.any {
-            it.id != excludeShopId && shopDuplicateKey(it.shopName) == key
-        }
+    /** Words of an already-folded name; mirrors ShopService.tokens(). */
+    private fun shopDuplicateTokens(name: String?): List<String> {
+        val folded = shopDuplicateKey(name)
+        return if (folded.isEmpty()) emptyList() else folded.split(" ")
+    }
+
+    /**
+     * Mirrors ShopService.isSameBusinessName(): the two names are the same
+     * business when their word sets are equal, or when one set is contained in
+     * the other. So "Sehgal" collides with "Sehgal Automobiles" in either
+     * direction — which is exactly the hole the exact-match check left open —
+     * while "Anjali General Store" and "Anjali Electronics" still do not, since
+     * neither word set contains the other. A name that folds to nothing never
+     * matches anything.
+     */
+    private fun isSameBusinessName(left: String?, right: String?): Boolean {
+        val leftTokens = shopDuplicateTokens(left)
+        val rightTokens = shopDuplicateTokens(right)
+        if (leftTokens.isEmpty() || rightTokens.isEmpty()) return false
+        return leftTokens == rightTokens ||
+            leftTokens.containsAll(rightTokens) ||
+            rightTokens.containsAll(leftTokens)
+    }
+
+    /**
+     * Returns the display name of the shop that already claims [name], or null
+     * when the name is free. Used both to decide "duplicate" and to tell the
+     * user *which* existing business they collided with — a subset match such as
+     * "Sehgal" against "Sehgal Automobiles" reads as a mistake otherwise.
+     */
+    private fun findDuplicateShopName(name: String?, excludeShopId: Long? = null): String? {
+        if (shopDuplicateKey(name).isEmpty()) return null
+        return _uiState.value.shops
+            .firstOrNull { it.id != excludeShopId && isSameBusinessName(name, it.shopName) }
+            ?.shopName
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun duplicateShopToast(name: String?, excludeShopId: Long? = null): String? {
+        val clash = findDuplicateShopName(name, excludeShopId) ?: return null
+        return "A business named \"$clash\" already exists"
     }
 
     fun createShop(biz: BusinessProfile, pendingManagerId: String?, onDone: () -> Unit) {
@@ -881,8 +915,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             updateState { it.copy(isLoading = true) }
             // Instant pre-check against the shops already in memory so the user
             // gets feedback without a server round-trip (server re-checks anyway).
-            if (isDuplicateShopName(biz.name)) {
-                showToast("A business named \"${biz.name.trim()}\" already exists", ToastType.ERROR)
+            duplicateShopToast(biz.name)?.let { toast ->
+                showToast(toast, ToastType.ERROR)
                 updateState { it.copy(isLoading = false) }
                 onDone()
                 return@launch
@@ -928,8 +962,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // Same ordering as createShop: latch the loader before the pre-check
             // so every return path clears it.
             updateState { it.copy(isLoading = true) }
-            if (isDuplicateShopName(biz.name, excludeShopId = shopId)) {
-                showToast("A business named \"${biz.name.trim()}\" already exists", ToastType.ERROR)
+            duplicateShopToast(biz.name, excludeShopId = shopId)?.let { toast ->
+                showToast(toast, ToastType.ERROR)
                 updateState { it.copy(isLoading = false) }
                 onDone()
                 return@launch

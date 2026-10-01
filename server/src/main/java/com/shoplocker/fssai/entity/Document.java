@@ -34,6 +34,12 @@ public class Document {
     @Column(name = "document_number")
     private String documentNumber;
 
+    /** SHA-256 of the stored file bytes, hex encoded. Null for rows written
+     *  before this column existed and for server-generated certificates. Used
+     *  to stop one physical document being filed under two different shops. */
+    @Column(name = "content_hash")
+    private String contentHash;
+
     @Column(name = "issue_date")
     private LocalDateTime issueDate;
 
@@ -92,6 +98,9 @@ public class Document {
 
     public String getDocumentNumber() { return documentNumber; }
     public void setDocumentNumber(String documentNumber) { this.documentNumber = documentNumber; }
+
+    public String getContentHash() { return contentHash; }
+    public void setContentHash(String contentHash) { this.contentHash = contentHash; }
 
     public LocalDateTime getIssueDate() { return issueDate; }
     public void setIssueDate(LocalDateTime issueDate) { this.issueDate = issueDate; }

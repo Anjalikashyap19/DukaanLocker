@@ -255,6 +255,33 @@ public class DocumentValidationService {
                 FailureCode.INVALID_FILE_FORMAT);
     }
 
+    /**
+     * SHA-256 of the file bytes, lower-case hex. Placed here, beside
+     * {@link #readBytes} and {@link #assertPdfMagicBytes}, because it is the
+     * third thing done to the byte[] the upload pipeline reads exactly once.
+     *
+     * <p>Used to recognise "this is the same physical document I already hold
+     * on another of your shops" — content-addressed, so it needs no OCR, no
+     * licence-number extraction, and no reliance on the client sending a
+     * documentNumber (the Android app never does).
+     *
+     * <p>Never returns null and never throws for well-formed input: a hash
+     * algorithm is mandated by the JVM spec. {@code null} input returns null so
+     * callers can treat "no bytes, no hash" uniformly.
+     */
+    public static String sha256Hex(byte[] fileBytes) {
+        if (fileBytes == null) {
+            return null;
+        }
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            return java.util.HexFormat.of().formatHex(digest.digest(fileBytes));
+        } catch (java.security.NoSuchAlgorithmException e) {
+            // SHA-256 is required of every JVM; unreachable.
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
+    }
+
     // =========================================================================
     //  CONTENT VALIDATION (post-OCR)
     // =========================================================================

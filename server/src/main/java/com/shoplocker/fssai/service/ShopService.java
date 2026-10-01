@@ -74,8 +74,16 @@ public class ShopService {
      * diacritics stripped, punctuation folded to spaces, whitespace
      * collapsed, lowercased. So "Caf\u00e9-X" and "Cafe X" collide.
      *
+     * <p>A match is exact equality <b>or</b> a token subset in either direction,
+     * so the shorter of two names cannot be used to sneak a second copy past the
+     * check: "Sehgal" collides with "Sehgal Automobiles" and vice versa, while
+     * "Anjali General Store" and "Anjali Electronics" still do not (neither
+     * word set contains the other). See {@link #isSameBusinessName}.
+     *
      * <p>App-level check only — deliberately no DB unique constraint, so
      * pre-existing duplicates in the database are left untouched.
+     *
+     * @param branchName unused: a branch is only a label, never a second business
      */
     public void assertNoDuplicateShop(Long ownerId, String shopName, String branchName, Long excludeShopId) {
         String wanted = normalize(shopName);
@@ -86,13 +94,50 @@ public class ShopService {
             if (excludeShopId != null && excludeShopId.equals(existing.getId())) {
                 continue;
             }
-            if (wanted.equals(normalize(existing.getShopName()))) {
-                String display = shopName == null ? "" : shopName.trim();
+            if (isSameBusinessName(shopName, existing.getShopName())) {
+                String display = existing.getShopName() == null ? "" : existing.getShopName().trim();
                 throw new FssaiException(
                         "A business named '" + display + "' already exists for your account",
                         FailureCode.DUPLICATE_SHOP);
             }
         }
+    }
+
+    /**
+     * True when two business names denote the same business: equal word sets,
+     * or one word set contained in the other.
+     *
+     * <p>Both inputs are folded through {@link #normalize} first, so casing,
+     * accents, punctuation and stray whitespace are already gone by the time
+     * words are compared. A name that folds to nothing is treated as absent
+     * rather than as "matches everything".
+     *
+     * <p>No token filtering is applied on purpose: a one-letter difference in
+     * stop-word handling would reopen the exact hole this exists to close.
+     * The cost is that "Sehgal Automobiles Spare Parts" is rejected against
+     * "Sehgal Automobiles", which is the intended reading of "one account, one
+     * business per name".
+     */
+    static boolean isSameBusinessName(String left, String right) {
+        List<String> leftTokens = tokens(normalize(left));
+        List<String> rightTokens = tokens(normalize(right));
+        if (leftTokens.isEmpty() || rightTokens.isEmpty()) {
+            return false;
+        }
+        return leftTokens.equals(rightTokens)
+                || leftTokens.containsAll(rightTokens)
+                || rightTokens.containsAll(leftTokens);
+    }
+
+    /**
+     * Splits an already-{@link #normalize normalized} name into its words.
+     * Returns an empty list for null/blank input.
+     */
+    private static List<String> tokens(String folded) {
+        if (folded == null || folded.isEmpty()) {
+            return List.of();
+        }
+        return List.of(folded.split(" "));
     }
 
     /**
@@ -258,15 +303,58 @@ public class ShopService {
     }
 
     /**
+     * Rejects an upload whose bytes are already filed under a different shop of
+     * the same account.
+     *
+     * <p>This is the backstop for the accidental-duplicate case: a user creates
+     * a second copy of an existing business, then re-attaches the very same
+     * certificate to it. The type check and the ownership check both pass
+     * legitimately there — the document really is theirs and really is the right
+     * kind — so only content equality catches it.
+     *
+     * <p>A {@code null} or blank hash means "nothing to compare against" (a
+     * server-generated certificate, or a row written before the column existed)
+     * and is always accepted.
+     *
+     * <p>Read-only and self-contained: safe to call from a controller with no
+     * surrounding transaction. The transaction is what makes reading the
+     * colliding row's lazy {@code shop.shopName} for the error message legal.
+     */
+    @Transactional(readOnly = true)
+    public void assertDocumentNotReused(Long shopId, String contentHash) {
+        if (contentHash == null || contentHash.isBlank()) {
+            return;
+        }
+        documentRepository.findByContentHashForOtherShopOfSameOwner(contentHash, shopId)
+                .stream()
+                .findFirst()
+                .ifPresent(existing -> {
+                    String otherShop = existing.getShop() == null ? "another shop" : existing.getShop().getShopName();
+                    throw new FssaiException(
+                            "This document is already filed under another of your businesses ('"
+                                    + otherShop + "'). A document belongs to only one business.",
+                            FailureCode.DUPLICATE_DOCUMENT);
+                });
+    }
+
+    /**
      * Handles first-time upload or re-upload of a document for a shop.
      * Increments version on re-upload. Does NOT delete old records.
+     *
+     * @param contentHash SHA-256 of the stored file, or null when the bytes are
+     *                    not available to the caller (server-generated
+     *                    certificates). Persisted so the next upload to another
+     *                    shop can be recognised as the same physical document —
+     *                    the caller is responsible for having already run
+     *                    {@link #assertDocumentNotReused}.
      */
     @Transactional
     public DocumentResponse uploadOrReuploadDocument(Long shopId, DocumentType documentType,
                                                       String fileName, String fileUrl,
                                                       String documentNumber,
                                                       java.time.LocalDateTime issueDate,
-                                                      java.time.LocalDateTime expiryDate) {
+                                                      java.time.LocalDateTime expiryDate,
+                                                      String contentHash) {
         Shop shop = getShopById(shopId);
 
         Optional<Document> existing = documentRepository.findByShopIdAndDocumentType(shopId, documentType);
@@ -285,6 +373,7 @@ public class ShopService {
         doc.setFileName(fileName);
         doc.setFileUrl(fileUrl);
         doc.setDocumentNumber(documentNumber);
+        doc.setContentHash(contentHash);
         doc.setIssueDate(issueDate);
         doc.setExpiryDate(expiryDate);
         doc.setStatus(statusForUploadedDoc(expiryDate));

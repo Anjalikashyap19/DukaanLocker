@@ -178,6 +178,14 @@ public class ShopController {
                 ocrText,
                 file.getOriginalFilename());
 
+        // The document is theirs and of the right kind — but is it already on
+        // file somewhere else in their account? Detect that from the bytes
+        // rather than from a licence number: the app never sends one, and a
+        // number can be re-typed onto different scans. Runs BEFORE the storage
+        // write so a rejected upload leaves no orphan file behind.
+        String contentHash = documentValidationService.sha256Hex(fileBytes);
+        shopService.assertDocumentNotReused(shopId, contentHash);
+
         // Build file key: relative path within the shop folder
         // Structure: {doc-type}/{sanitized-filename}
         // e.g., "gst/gst_certificate.pdf" or "fssai_food_license/my_license.pdf"
@@ -227,7 +235,8 @@ public class ShopController {
         DocumentResponse response = shopService.uploadOrReuploadDocument(
                 shopId, docType,
                 file.getOriginalFilename(), fileUrl,
-                documentNumber, issueDate, expiryDate);
+                documentNumber, issueDate, expiryDate,
+                contentHash);
 
         return ResponseEntity.ok(response);
     }

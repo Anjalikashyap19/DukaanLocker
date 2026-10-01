@@ -12,6 +12,7 @@ import com.shoplocker.fssai.repository.ManagerShopAssignmentRepository;
 import com.shoplocker.fssai.repository.ShopRepository;
 import com.shoplocker.fssai.repository.UserRepository;
 import com.shoplocker.fssai.service.GoogleOAuthService;
+import com.shoplocker.fssai.service.TextractService;
 import com.shoplocker.fssai.service.VerifiedGoogleToken;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,16 +20,21 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -56,6 +62,13 @@ class AuthIntegrationTest {
     @Autowired private ManagerShopAssignmentRepository assignmentRepository;
     @Autowired private PasswordEncoder passwordEncoder;
     @MockitoBean private GoogleOAuthService googleOAuthService;
+    /**
+     * OCR is stubbed at the Textract seam so upload tests exercise the
+     * validation and duplicate guards rather than Tesseract's accuracy, and
+     * need no real PDF. Unstubbed calls return null, which no test relies on:
+     * nothing else in this class drives the OCR pipeline.
+     */
+    @MockitoBean private TextractService textractService;
 
     private static final String VALID_REGISTER_BODY = """
             {
@@ -78,6 +91,41 @@ class AuthIntegrationTest {
               "address": "123 Main St, Chennai",
               "pincode": "600001"
             }""";
+
+    /**
+     * The West Bengal Certificate of Enlistment the upload tests stub OCR with.
+     * Identical to {@code DocumentValidationServiceTest.WB_ENLISTMENT_TEXT},
+     * which already proves this text passes the TRADE_LICENSE validator: it is
+     * numbered "TRADE LICENCE NO" rather than "License Number" and issued by a
+     * Municipality rather than a Municipal Corporation.
+     *
+     * <p>It carries the proprietor's name ("KAVINDER SEHGAL") but not the trade
+     * name of any shop in this class, so ownership passes on the proprietor
+     * branch of the check while the shop names below stay free to be whatever
+     * the test needs.</p>
+     */
+    private static final String WB_ENLISTMENT_TEXT = """
+            GOVERNMENT OF WEST BENGAL
+            PERMANENT CERTIFICATE OF ENLISTMENT
+            Form-24, Rule 82, Sec 118, West Bengal Municipal Act, 1993
+            Issuing Authority: Baranagar (Municipality)
+            TRADE LICENCE NO: 0917P1008125372790
+            Name of the Enlistee: KAVINDER SEHGAL
+            Business: MOTOR SPARE PARTS AND LUBRICATING OIL
+            This certificate will be in force until the 03-Oct-2026 and is liable
+            to be produced at the time of renewal.
+            Date of Issue: 04-Oct-2025
+            """;
+
+    /** Two byte-strings that both start with a PDF magic header but are not
+     *  identical, so they hash differently. OCR is stubbed, so their contents
+     *  beyond the magic bytes are never examined. */
+    private static final byte[] PDF_A = (
+            "%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n")
+            .getBytes(StandardCharsets.UTF_8);
+    private static final byte[] PDF_B = (
+            "%PDF-1.4\n1 0 obj << /Type /Catalog /Variant 1 >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n")
+            .getBytes(StandardCharsets.UTF_8);
 
     @BeforeEach
     void clean() {
@@ -1328,6 +1376,49 @@ class AuthIntegrationTest {
     }
 
     @Test
+    @DisplayName("35d. A shortened name is a duplicate of the existing longer one")
+    void shorterNameAgainstLongerRejected() throws Exception {
+        String token = registerToken("dup6@example.com", "9876543210");
+
+        String longBody = VALID_SHOP_BODY.replace("Anjali General Store", "Sehgal Automobiles");
+        mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(longBody))
+                .andExpect(status().isCreated());
+
+        String shortBody = VALID_SHOP_BODY.replace("Anjali General Store", "Sehgal");
+        mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(shortBody))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("duplicate_shop"))
+                .andExpect(jsonPath("$.message").value(containsString("Sehgal Automobiles")));
+    }
+
+    @Test
+    @DisplayName("35e. A lengthened name is a duplicate of the existing shorter one")
+    void longerNameAgainstShorterRejected() throws Exception {
+        String token = registerToken("dup7@example.com", "9876543210");
+
+        String shortBody = VALID_SHOP_BODY.replace("Anjali General Store", "Sehgal");
+        mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(shortBody))
+                .andExpect(status().isCreated());
+
+        String longBody = VALID_SHOP_BODY.replace("Anjali General Store", "Sehgal Automobiles");
+        mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(longBody))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("duplicate_shop"));
+    }
+
+    @Test
     @DisplayName("36. Different owner may create a shop with the same name + branch")
     void differentOwnerSameNameAllowed() throws Exception {
         String token1 = registerToken("owner1@example.com", "9876543210");
@@ -1388,6 +1479,20 @@ class AuthIntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("duplicate_shop"));
 
+        // Renaming onto a strict word-subset of an existing name is also a
+        // conflict — "Anjali" must not become a second copy of "Anjali General
+        // Store" just by dropping two words.
+        String collideSubset = """
+                {"shopName": "Anjali", "branchName": "Main Branch"}""";
+        mockMvc.perform(put("/api/shops/" + shop2Id)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(collideSubset))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("duplicate_shop"))
+                .andExpect(jsonPath("$.message").value(
+                        containsString("Anjali General Store")));
+
         // Keeping a shop's own name+branch on edit stays legal
         String ownBody = """
                 {"shopName": "Anjali Electronics", "branchName": "Main Branch"}""";
@@ -1398,5 +1503,75 @@ class AuthIntegrationTest {
                 .andExpect(status().isOk());
 
         assertThat(shop1Id).isNotEqualTo(shop2Id);
+    }
+
+    // ========================================================================
+    // Cross-shop document reuse (content hash)
+    // ========================================================================
+
+    @Test
+    @DisplayName("38. The same file cannot be filed under two shops of one account")
+    void duplicateDocumentContentRejected() throws Exception {
+        String token = registerToken("dupdoc@example.com", "9876543210");
+
+        // OCR is stubbed so the pipeline sees the enlistment certificate whatever
+        // bytes are uploaded. "New Market" with proprietor "Kavinder Sehgal" is
+        // the documented trade-name-vs-proprietor case the ownership gate accepts.
+        when(textractService.extractText(any(byte[].class), anyString()))
+                .thenReturn(WB_ENLISTMENT_TEXT);
+
+        long shop1Id = createShop(token, VALID_SHOP_BODY
+                .replace("Anjali General Store", "New Market")
+                .replace("Anjali Kashyap", "Kavinder Sehgal"));
+        long shop2Id = createShop(token, VALID_SHOP_BODY
+                .replace("Anjali General Store", "Kavinder Sehgal")
+                .replace("Anjali Kashyap", "Kavinder Sehgal")
+                .replace("Main Branch", "Howrah Branch")
+                .replace("1234567890", "1234567891"));
+
+        // 1. The first shop takes the document. version counts re-uploads, so a
+        //    first-time upload is 0 and one re-upload takes it to 1.
+        mockMvc.perform(reupload(token, shop1Id, PDF_A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(0));
+
+        // 2. The second shop may not take identical bytes — even though the type
+        //    check passes and the ownership check passes legitimately, because
+        //    the certificate really is this proprietor's.
+        mockMvc.perform(reupload(token, shop2Id, PDF_A))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("duplicate_document"))
+                .andExpect(jsonPath("$.message").value(containsString("New Market")));
+
+        // 3. Re-uploading to the shop that already holds the file stays legal
+        //    and still bumps the version.
+        mockMvc.perform(reupload(token, shop1Id, PDF_A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(1));
+
+        // 4. A genuinely different file reaches the second shop.
+        mockMvc.perform(reupload(token, shop2Id, PDF_B))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(0));
+    }
+
+    /** Multipart PUT to the re-upload endpoint; the endpoint is a PUT, not a POST. */
+    private static MockHttpServletRequestBuilder reupload(String token, long shopId, byte[] bytes) {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "trade_license.pdf", MediaType.APPLICATION_PDF_VALUE, bytes);
+        return multipart(HttpMethod.PUT,
+                        "/api/shops/" + shopId + "/documents/TRADE_LICENSE/reupload")
+                .file(file)
+                .header("Authorization", "Bearer " + token);
+    }
+
+    private long createShop(String token, String body) throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asLong();
     }
 }
