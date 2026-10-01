@@ -4,6 +4,8 @@
 
 
 
+package com.shoplocker.fssai.service;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

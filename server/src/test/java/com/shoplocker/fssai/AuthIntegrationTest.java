@@ -1267,8 +1267,8 @@ class AuthIntegrationTest {
     }
 
     @Test
-    @DisplayName("35. Same shop name with a different branch is allowed (multi-branch)")
-    void sameNameDifferentBranchAllowed() throws Exception {
+    @DisplayName("35. Same shop name with a different branch is still a duplicate (branch is only a label)")
+    void sameNameDifferentBranchRejected() throws Exception {
         String token = registerToken("dup3@example.com", "9876543210");
 
         mockMvc.perform(post("/api/shops")
@@ -1282,6 +1282,48 @@ class AuthIntegrationTest {
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(branchBody))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("duplicate_shop"));
+    }
+
+    @Test
+    @DisplayName("35b. Punctuation and diacritics do not let a duplicate through")
+    void punctuationAndDiacriticsDoNotBypassDuplicateCheck() throws Exception {
+        String token = registerToken("dup4@example.com", "9876543210");
+
+        mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_SHOP_BODY))
+                .andExpect(status().isCreated());
+
+        // "Anjali General Store" -> accents + hyphen + stray punctuation.
+        String punctuated = VALID_SHOP_BODY.replace(
+                "Anjali General Store", "Ánjali General–Store!!");
+        mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(punctuated))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("duplicate_shop"));
+    }
+
+    @Test
+    @DisplayName("35c. A genuinely different business name is still accepted")
+    void distinctNameStillAllowed() throws Exception {
+        String token = registerToken("dup5@example.com", "9876543210");
+
+        mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_SHOP_BODY))
+                .andExpect(status().isCreated());
+
+        String otherBody = VALID_SHOP_BODY.replace("Anjali General Store", "Anjali Electronics");
+        mockMvc.perform(post("/api/shops")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(otherBody))
                 .andExpect(status().isCreated());
     }
 
@@ -1332,6 +1374,17 @@ class AuthIntegrationTest {
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(collideBody))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("duplicate_shop"));
+
+        // Same rename with a DIFFERENT branch is still a conflict — branch no
+        // longer distinguishes two businesses.
+        String collideOtherBranch = """
+                {"shopName": "Anjali General Store", "branchName": "T. Nagar Branch"}""";
+        mockMvc.perform(put("/api/shops/" + shop2Id)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(collideOtherBranch))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("duplicate_shop"));
 

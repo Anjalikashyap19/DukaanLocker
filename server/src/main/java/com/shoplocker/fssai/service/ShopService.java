@@ -1,5 +1,6 @@
 package com.shoplocker.fssai.service;
 
+import java.text.Normalizer;
 import java.util.List;
 
 import com.shoplocker.fssai.dto.CreateShopRequest;
@@ -58,22 +59,34 @@ public class ShopService {
     }
 
     /**
-     * Rejects a shop whose name + branch (normalized: trimmed, internal
-     * whitespace collapsed, lowercased — branch {@code null} counts as empty)
-     * already exists for the same owner. Scoped per owner so different
-     * accounts and same-owner multi-branch setups (different branch name)
-     * stay legal. {@code excludeShopId} lets a shop keep its own values on edit.
+     * Rejects a shop whose name already exists for the same owner. Scoped per
+     * owner (user id) so different accounts may use the same business name;
+     * the owner name is implied by the account and is not part of the key.
      *
-     * App-level check only — deliberately no DB unique constraint, so
+     * <p>The branch is deliberately NOT part of the key — it is a display
+     * label, not an identity. Requiring a different branch name to add a
+     * "new" business was the hole that let identical shops through, because
+     * the Android form auto-fills branch from a map suggestion and two
+     * attempts easily disagree. {@code excludeShopId} lets a shop keep its
+     * own name on edit.
+     *
+     * <p>Names are compared after {@link #normalize(String)}: Unicode NFD,
+     * diacritics stripped, punctuation folded to spaces, whitespace
+     * collapsed, lowercased. So "Caf\u00e9-X" and "Cafe X" collide.
+     *
+     * <p>App-level check only — deliberately no DB unique constraint, so
      * pre-existing duplicates in the database are left untouched.
      */
     public void assertNoDuplicateShop(Long ownerId, String shopName, String branchName, Long excludeShopId) {
-        String wanted = duplicateKey(shopName, branchName);
+        String wanted = normalize(shopName);
+        if (wanted.isEmpty()) {
+            return;
+        }
         for (Shop existing : shopRepository.findByOwnerId(ownerId)) {
             if (excludeShopId != null && excludeShopId.equals(existing.getId())) {
                 continue;
             }
-            if (wanted.equals(duplicateKey(existing.getShopName(), existing.getBranchName()))) {
+            if (wanted.equals(normalize(existing.getShopName()))) {
                 String display = shopName == null ? "" : shopName.trim();
                 throw new FssaiException(
                         "A business named '" + display + "' already exists for your account",
@@ -82,15 +95,21 @@ public class ShopService {
         }
     }
 
-    private static String duplicateKey(String shopName, String branchName) {
-        return normalize(shopName) + " | " + normalize(branchName);
-    }
-
-    private static String normalize(String value) {
-        if (value == null) {
+    /**
+     * Folds a business name to a comparable form: decompose Unicode (NFD),
+     * drop combining marks (accents), replace every non-alphanumeric run
+     * with a single space, collapse whitespace, lowercase, trim. Never
+     * returns null; a name that folds to nothing is treated as absent by
+     * {@link #assertNoDuplicateShop}.
+     */
+    static String normalize(String value) {
+        if (value == null || value.isBlank()) {
             return "";
         }
-        return value.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+        String decomposed = Normalizer.normalize(value, Normalizer.Form.NFD);
+        String noMarks = decomposed.replaceAll("\\p{M}+", "");
+        String folded = noMarks.replaceAll("[^\\p{L}\\p{N}]+", " ");
+        return folded.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
     }
 
     @Transactional

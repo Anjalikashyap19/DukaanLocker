@@ -341,6 +341,7 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                     },
                                     assignedManagerId = currentManagerId,
                                     defaultOwnerName = state.currentUserName,
+                                    isLoading = state.isLoading,
                                     onManagerSelected = { managerId -> pendingManagerId = managerId },
                                     onSave = { biz ->
                                         if (state.editShopTarget != null) {

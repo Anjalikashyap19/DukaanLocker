@@ -849,29 +849,44 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * Normalized duplicate key mirroring the server rule (ShopService.assertNoDuplicateShop):
-     * trim + collapse whitespace + lowercase, branch null treated as empty.
+     * the shop NAME only — branch is a display label, not an identity. Folds the
+     * name the same way the server does (strip accents, punctuation -> space,
+     * collapse whitespace, lowercase) so the instant pre-check agrees with the
+     * 409 the server would send anyway.
      */
-    private fun shopDuplicateKey(name: String?, branch: String?): String {
-        fun norm(v: String?) = v?.trim()?.lowercase()?.replace(Regex("\\s+"), " ") ?: ""
-        return "${norm(name)} | ${norm(branch)}"
+    private fun shopDuplicateKey(name: String?): String {
+        if (name.isNullOrBlank()) return ""
+        return java.text.Normalizer.normalize(name, java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{M}+"), "")
+            .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+            .trim()
+            .lowercase()
+            .replace(Regex("\\s+"), " ")
     }
 
     private fun isDuplicateShopName(
-        name: String?, branch: String?, excludeShopId: Long? = null
-    ): Boolean = _uiState.value.shops.any {
-        it.id != excludeShopId && shopDuplicateKey(it.shopName, it.branchName) == shopDuplicateKey(name, branch)
+        name: String?, excludeShopId: Long? = null
+    ): Boolean {
+        val key = shopDuplicateKey(name)
+        if (key.isEmpty()) return false
+        return _uiState.value.shops.any {
+            it.id != excludeShopId && shopDuplicateKey(it.shopName) == key
+        }
     }
 
     fun createShop(biz: BusinessProfile, pendingManagerId: String?, onDone: () -> Unit) {
         viewModelScope.launch {
+            // Flip isLoading first: the AddBusiness Save latch is released when
+            // isLoading drops, so every exit path below must clear it too.
+            updateState { it.copy(isLoading = true) }
             // Instant pre-check against the shops already in memory so the user
             // gets feedback without a server round-trip (server re-checks anyway).
-            if (isDuplicateShopName(biz.name, biz.branchName.ifBlank { null })) {
+            if (isDuplicateShopName(biz.name)) {
                 showToast("A business named \"${biz.name.trim()}\" already exists", ToastType.ERROR)
+                updateState { it.copy(isLoading = false) }
                 onDone()
                 return@launch
             }
-            updateState { it.copy(isLoading = true) }
             try {
                 val response = api.createShop(CreateShopRequest(
                     shopName = biz.name, ownerName = biz.ownerName,
@@ -910,12 +925,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateShop(shopId: Long, biz: BusinessProfile, pendingManagerId: String?, onDone: () -> Unit) {
         viewModelScope.launch {
-            if (isDuplicateShopName(biz.name, biz.branchName.ifBlank { null }, excludeShopId = shopId)) {
+            // Same ordering as createShop: latch the loader before the pre-check
+            // so every return path clears it.
+            updateState { it.copy(isLoading = true) }
+            if (isDuplicateShopName(biz.name, excludeShopId = shopId)) {
                 showToast("A business named \"${biz.name.trim()}\" already exists", ToastType.ERROR)
+                updateState { it.copy(isLoading = false) }
                 onDone()
                 return@launch
             }
-            updateState { it.copy(isLoading = true) }
             try {
                 val response = api.updateShop(shopId, UpdateShopRequest(
                     shopName = biz.name, ownerName = biz.ownerName, category = biz.category,

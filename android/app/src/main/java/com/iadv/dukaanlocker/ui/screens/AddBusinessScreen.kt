@@ -64,6 +64,7 @@ fun AddBusinessScreen(
     managers: List<ManagerAccess> = emptyList(),
     assignedManagerId: String? = null,
     defaultOwnerName: String = "",
+    isLoading: Boolean = false,
     onSave: (BusinessProfile) -> Unit,
     onManagerSelected: ((managerId: String?) -> Unit)? = null,
     onCancel: () -> Unit
@@ -85,6 +86,13 @@ fun AddBusinessScreen(
     var locationSelected by remember { mutableStateOf(false) }
     var selectedManagerId by remember { mutableStateOf(assignedManagerId) }
     var showManagerDropdown by remember { mutableStateOf(false) }
+    // Local latch: set the instant Save is tapped so a second tap in the same
+    // frame cannot fire a second POST before the ViewModel flips isLoading.
+    // Released when the caller reports isLoading again (success navigates away).
+    var isSaving by remember { mutableStateOf(false) }
+    LaunchedEffect(isLoading) {
+        if (!isLoading) isSaving = false
+    }
 
     val context = LocalContext.current
     val apiService = remember { ApiClient.getApiService(context) }
@@ -497,7 +505,8 @@ fun AddBusinessScreen(
                     && category.isNotBlank() && branchName.isNotBlank()
             Button(
                 onClick = {
-                    if (formValid) {
+                    if (formValid && !isSaving && !isLoading) {
+                        isSaving = true
                         if (onManagerSelected != null) {
                             onManagerSelected(selectedManagerId)
                         }
@@ -511,7 +520,7 @@ fun AddBusinessScreen(
                         )
                     }
                 },
-                enabled = formValid,
+                enabled = formValid && !isSaving && !isLoading,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
@@ -520,8 +529,17 @@ fun AddBusinessScreen(
                     containerColor = colors.primary, contentColor = colors.background
                 )
             ) {
-                Icon(Icons.Default.Save, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
+                if (isSaving || isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = colors.background,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                } else {
+                    Icon(Icons.Default.Save, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
                 Text(AppStrings.get(lang, "SAVE BUSINESS"), fontWeight = FontWeight.Bold, fontSize = 16.sp, letterSpacing = 1.sp)
             }
 
