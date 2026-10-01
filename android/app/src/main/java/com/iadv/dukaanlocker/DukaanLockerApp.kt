@@ -364,7 +364,7 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                     OwnerHomeScreen(
                                         isDarkTheme = state.isDarkTheme,
                                         onToggleTheme = onToggleTheme,
-                                        isBiometricLoginEnabled = state.isBiometricLoginEnabled,
+                                        isBiometricLoginEnabled = state.isBiometricLoginEnabled && BiometricCredentialManager.hasStoredCredentials(context),
                                         isBiometricAvailable = onBiometricLogin != null,
                                         onAuthenticateForBiometric = {
                                             onAuthenticateForEnable?.invoke(

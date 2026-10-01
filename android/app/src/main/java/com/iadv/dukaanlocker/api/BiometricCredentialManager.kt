@@ -206,10 +206,13 @@ object BiometricCredentialManager {
 
     /**
      * Clear stored credentials (called on logout or key invalidation).
+     * Also drops the biometric-login preference so the setting can never stay
+     * "enabled" while its credentials are gone (re-enables only via user action).
      */
     fun clearCredentials(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().clear().apply()
+        com.iadv.dukaanlocker.LockerStorage.clearBiometricLoginPreference(context)
     }
 }
 

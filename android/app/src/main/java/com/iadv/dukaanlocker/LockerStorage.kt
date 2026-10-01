@@ -95,6 +95,7 @@ object LockerStorage {
     private const val K_THEME = "dark_theme"
     private const val K_BIOMETRIC_ENABLED = "biometric_enabled"
     private const val K_BIOMETRIC_LOGIN_ENABLED = "biometric_login_enabled"
+    private const val K_BIOMETRIC_LOGIN_DEFAULTS_V1 = "biometric_login_defaults_v1"
 
     // ── User ──────────────────────────────────────────────────────────────────
     private const val SECURE_PREFS = "dukaan_locker_secure"
@@ -297,6 +298,17 @@ object LockerStorage {
 
     fun clearBiometricLoginPreference(ctx: Context) =
         pref(ctx).edit().remove(K_BIOMETRIC_LOGIN_ENABLED).apply()
+
+    // One-time migration: biometric login must start disabled on every install
+    // and only turn on when the user explicitly enables it.
+    fun ensureBiometricLoginDefaultDisabled(ctx: Context) {
+        val p = pref(ctx)
+        if (p.getBoolean(K_BIOMETRIC_LOGIN_DEFAULTS_V1, false)) return
+        p.edit()
+            .remove(K_BIOMETRIC_LOGIN_ENABLED)
+            .putBoolean(K_BIOMETRIC_LOGIN_DEFAULTS_V1, true)
+            .apply()
+    }
 
     // ── Legacy biometric preference (kept for backward compatibility) ──────
     fun saveBiometricEnabled(ctx: Context, enabled: Boolean) =

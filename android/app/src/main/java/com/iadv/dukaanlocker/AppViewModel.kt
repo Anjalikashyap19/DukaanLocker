@@ -88,6 +88,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             role == "MANAGER" -> Screen.ManagerHome
             else -> Screen.OwnerHome
         }
+        // Biometric login is disabled by default and stays disabled until the user
+        // explicitly enables it. A pref without valid stored credentials is stale
+        // (credentials were wiped on key invalidation/decrypt failure) -> heal to OFF.
+        LockerStorage.ensureBiometricLoginDefaultDisabled(application)
+        val biometricPrefEnabled = LockerStorage.isBiometricLoginEnabled(application)
+        val biometricLoginEnabled = biometricPrefEnabled &&
+            BiometricCredentialManager.hasStoredCredentials(application)
+        if (biometricPrefEnabled && !biometricLoginEnabled) {
+            LockerStorage.clearBiometricLoginPreference(application)
+        }
         _uiState.value = AppUiState(
             isLoggedIn = isLoggedIn,
             currentScreen = homeScreen,
@@ -99,7 +109,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             currentUserManagerCode = ApiClient.getManagerCode(application),
             isDarkTheme = LockerStorage.getTheme(application),
             language = LockerStorage.getLanguage(application),
-            isBiometricLoginEnabled = LockerStorage.isBiometricLoginEnabled(application)
+            isBiometricLoginEnabled = biometricLoginEnabled
         )
         if (isLoggedIn) {
             loadShops()
