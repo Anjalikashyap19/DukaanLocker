@@ -13,6 +13,8 @@ import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
 import com.shoplocker.fssai.service.DocumentValidationService;
 import com.shoplocker.fssai.service.ExpiryDateExtractor;
+import com.shoplocker.fssai.service.FssaiLicenseNumberExtractor;
+import com.shoplocker.fssai.service.FssaiVerificationService;
 import com.shoplocker.fssai.service.LocalFileStorageService;
 import com.shoplocker.fssai.service.ShopAccessService;
 import com.shoplocker.fssai.service.ShopService;
@@ -23,6 +25,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -37,22 +41,30 @@ import java.nio.file.Paths;
 @Tag(name = "Shops", description = "Shop management — create, list, and manage documents")
 public class ShopController {
 
+    private static final Logger log = LoggerFactory.getLogger(ShopController.class);
+
     private final ShopService shopService;
     private final ShopAccessService shopAccessService;
     private final DocumentValidationService documentValidationService;
     private final LocalFileStorageService localFileStorageService;
     private final ExpiryDateExtractor expiryDateExtractor;
+    private final FssaiVerificationService fssaiVerificationService;
+    private final FssaiLicenseNumberExtractor fssaiLicenseNumberExtractor;
 
     public ShopController(ShopService shopService,
                           ShopAccessService shopAccessService,
                           DocumentValidationService documentValidationService,
                           LocalFileStorageService localFileStorageService,
-                          ExpiryDateExtractor expiryDateExtractor) {
+                          ExpiryDateExtractor expiryDateExtractor,
+                          FssaiVerificationService fssaiVerificationService,
+                          FssaiLicenseNumberExtractor fssaiLicenseNumberExtractor) {
         this.shopService = shopService;
         this.shopAccessService = shopAccessService;
         this.documentValidationService = documentValidationService;
         this.localFileStorageService = localFileStorageService;
         this.expiryDateExtractor = expiryDateExtractor;
+        this.fssaiVerificationService = fssaiVerificationService;
+        this.fssaiLicenseNumberExtractor = fssaiLicenseNumberExtractor;
     }
 
     @Operation(summary = "Create a shop", description = "ADMIN only. Creates a new shop and links it to " +
@@ -182,10 +194,29 @@ public class ShopController {
             expiryDate = LocalDateTime.parse(expiryDateStr);
         }
 
+        // A GST registration is permanent - it has no expiry, so never let a date
+        // (OCR-picked or client-supplied) turn it into an expiring document.
+        if (docType == DocumentType.GST) {
+            expiryDate = null;
+        }
+
         // The mobile app never sends expiryDate - mine it from the OCR text so
         // the expiry-alert escalation actually has data to work with.
-        if (expiryDate == null) {
+        if (expiryDate == null && docType != DocumentType.GST) {
             expiryDate = expiryDateExtractor.extract(ocrText).orElse(null);
+        }
+
+        // State / registration licences print no expiry date on the certificate,
+        // so OCR legitimately finds nothing. Without a date the whole alert
+        // ladder never starts for a licence that really does expire, so fall
+        // back to the upstream lookup keyed by the licence number on the file.
+        if (expiryDate == null && docType == DocumentType.FSSAI_FOOD_LICENSE) {
+            String licenseNumber = resolveLicenseNumber(documentNumber, ocrText);
+            if (licenseNumber != null) {
+                expiryDate = fssaiVerificationService.fetchExpiryDateOnly(licenseNumber).orElse(null);
+            } else {
+                log.info("No FSSAI licence number found for shop {} upload; expiry lookup skipped", shopId);
+            }
         }
 
         DocumentResponse response = shopService.uploadOrReuploadDocument(
@@ -194,5 +225,19 @@ public class ShopController {
                 documentNumber, issueDate, expiryDate);
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Prefers the licence number the app supplied, otherwise recovers it from the
+     * document text. Returns null when neither yields a 14-digit number.
+     */
+    private String resolveLicenseNumber(String suppliedNumber, String ocrText) {
+        if (suppliedNumber != null && !suppliedNumber.isBlank()) {
+            String trimmed = suppliedNumber.trim();
+            if (trimmed.matches("\\d{14}")) {
+                return trimmed;
+            }
+        }
+        return fssaiLicenseNumberExtractor.extract(ocrText).orElse(null);
     }
 }

@@ -89,6 +89,11 @@ public class DocumentExpiryScheduler {
         for (Document doc : allDocs) {
             if (doc.getExpiryDate() == null) continue;
             if (doc.getStatus() == DocumentStatus.NOT_UPLOADED) continue;
+            // GST registration is permanent. Upload paths no longer give it an
+            // expiry date, but older rows may still carry one that OCR scraped
+            // from the certificate's date fields - ignore those rather than
+            // alerting on a date that does not exist.
+            if (doc.getDocumentType() == DocumentType.GST) continue;
             try {
                 if (processDocument(doc, stages, expiredOnly)) notificationsSent++;
             } catch (Exception e) {

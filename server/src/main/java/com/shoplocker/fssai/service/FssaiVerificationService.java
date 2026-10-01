@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 
@@ -49,8 +50,23 @@ public class FssaiVerificationService {
 
     private static final Logger log = LoggerFactory.getLogger(FssaiVerificationService.class);
 
-    private static final String DETAILS_API_URL = "https://iadv.in/tracker/dist/lnchk.php?ln=";
-    private static final String LICENSE_API_URL = "https://iadv.in/tracker/dist/check-details.php?lic_num=";
+    /**
+     * Upstream endpoints. Externalised to {@code application.properties} (which
+     * reads them from {@code FSSAI_DETAILS_API_URL} / {@code FSSAI_LICENSE_API_URL})
+     * so the iadv.in host and paths can be changed per environment without a
+     * rebuild. The defaults keep today's behaviour when nothing is set.
+     */
+    @org.springframework.beans.factory.annotation.Value("${app.fssai.details-url}")
+    private String detailsApiUrl;
+
+    @org.springframework.beans.factory.annotation.Value("${app.fssai.license-url}")
+    private String licenseApiUrl;
+
+    @org.springframework.beans.factory.annotation.Value("${app.fssai.referer}")
+    private String referer;
+
+    @org.springframework.beans.factory.annotation.Value("${app.fssai.pdf-base-uri}")
+    private String pdfBaseUri;
 
     private static final String USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -162,11 +178,72 @@ public class FssaiVerificationService {
     }
 
     /**
+     * Looks up <b>only</b> the expiry date for a license number.
+     *
+     * <p>Exists for the self-upload path. A state/registration licence prints no
+     * expiry on the certificate, so OCR finds nothing and the document would sit
+     * in the locker with no expiry date - meaning the expiry-alert ladder
+     * (T-30, daily, expired catch-up) never starts for it even though the
+     * licence really does expire. The upstream lookup recovers that date.</p>
+     *
+     * <p>Deliberately narrower than {@link #verifyLicense(String, Long, Long,
+     * String)}: it calls only the supplementary API (the sole source of the
+     * expiry date), generates no certificate PDF, writes nothing to storage and
+     * skips the business-name check - the user has just uploaded the document
+     * itself, so re-verifying ownership here would only add latency.</p>
+     *
+     * <p>Never throws. A lookup failure just means the document keeps a null
+     * expiry and behaves exactly as it did before.</p>
+     *
+     * @param licenseNumber the 14-digit FSSAI license number
+     * @return the expiry date, or empty when the number is unknown or the
+     *         upstream call fails
+     */
+    public Optional<LocalDateTime> fetchExpiryDateOnly(String licenseNumber) {
+        if (licenseNumber == null || licenseNumber.isBlank()) {
+            return Optional.empty();
+        }
+        String normalized = licenseNumber.trim();
+        try {
+            String licenseBody = callLicenseApi(normalized);
+            if (licenseBody == null || licenseBody.isBlank()) {
+                log.info("No expiry data returned for FSSAI license {}", normalized);
+                return Optional.empty();
+            }
+            LocalDateTime expiry = extractExpiryDate(licenseBody);
+            log.info("FSSAI expiry lookup for license {} -> {}",
+                    normalized, expiry == null ? "none" : expiry.toLocalDate());
+            return Optional.ofNullable(expiry);
+        } catch (Exception e) {
+            log.warn("FSSAI expiry lookup failed for license {}: {}", normalized, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Pulls the expiry date out of a raw supplementary-API ({@code check-details.php})
+     * payload. Package-private so it can be unit tested against real captured
+     * payloads without any network access.
+     */
+    LocalDateTime extractExpiryDate(String licenseBody) {
+        try {
+            JsonNode lic = objectMapper.readTree(licenseBody).path("license");
+            if (lic.isMissingNode() || lic.isNull()) {
+                return null;
+            }
+            return parseExpiryDate(text(lic, "expiryDate"));
+        } catch (Exception e) {
+            log.warn("Could not read expiry date from FSSAI license payload: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
      * Calls the primary details API ({@code lnchk.php}) and returns the raw response body.
      * Transport / HTTP failures raise {@link FssaiException} with {@link FailureCode#FSSAI_VERIFICATION_FAILED}.
      */
     private String callDetailsApi(String licenseNumber) {
-        String url = DETAILS_API_URL + licenseNumber;
+        String url = detailsApiUrl + licenseNumber;
         log.info("FSSAI details request for license: {}, URL: {}", licenseNumber, url);
         return executeGet(url, licenseNumber, true);
     }
@@ -177,7 +254,7 @@ public class FssaiVerificationService {
      * so a failure degrades gracefully instead of failing the whole verification.
      */
     private String callLicenseApi(String licenseNumber) {
-        String url = LICENSE_API_URL + licenseNumber;
+        String url = licenseApiUrl + licenseNumber;
         log.info("FSSAI license/expiry request for license: {}, URL: {}", licenseNumber, url);
         try {
             return executeGet(url, licenseNumber, false);
@@ -202,7 +279,7 @@ public class FssaiVerificationService {
             HttpGet request = new HttpGet(url);
             request.setHeader("User-Agent", USER_AGENT);
             request.setHeader("Accept", "application/json, text/plain, */*");
-            request.setHeader("Referer", "https://iadv.in/");
+            request.setHeader("Referer", referer);
 
             return client.execute(request, response -> {
                 int status = response.getCode();
@@ -402,7 +479,7 @@ public class FssaiVerificationService {
         try {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             PdfRendererBuilder builder = new PdfRendererBuilder();
-            builder.withHtmlContent(xhtml, "https://iadv.in/");
+            builder.withHtmlContent(xhtml, pdfBaseUri);
             builder.toStream(baos);
 
             // Try system fonts, fall back gracefully if not found
