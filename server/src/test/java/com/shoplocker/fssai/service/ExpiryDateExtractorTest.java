@@ -1,4 +1,8 @@
-package com.shoplocker.fssai.service;
+
+
+
+
+
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -101,5 +105,27 @@ class ExpiryDateExtractorTest {
         Optional<LocalDateTime> result = extractor.extract(
                 "Date of Issue: 01/04/2023\nDate of Expiry: 31/03/2027");
         assertThat(result).contains(LocalDateTime.of(2027, 3, 31, 0, 0));
+    }
+
+    @Test
+    @DisplayName("state trade licences say 'in force until', not 'valid till'")
+    void inForceUntilPhrasing() {
+        Optional<LocalDateTime> result = extractor.extract(
+                "PERMANENT CERTIFICATE OF ENLISTMENT\n"
+                        + "This certificate will be in force until the 03-Oct-2026.\n"
+                        + "Date of Issue: 04-Oct-2025");
+        assertThat(result).contains(LocalDateTime.of(2026, 10, 3, 0, 0));
+    }
+
+    @Test
+    @DisplayName("a trailing 'to' in the surrounding prose must not discard the date")
+    void trailingToDoesNotDestroyTheDate() {
+        // Before the "only truncate when a date follows" rule, the " to " inside
+        // "liable to be produced" re-scoped the window onto prose and the expiry
+        // came back empty, so no renewal notification was ever scheduled.
+        Optional<LocalDateTime> result = extractor.extract(
+                "in force until the 03-Oct-2026 and is liable to be produced"
+                        + " at the time of renewal");
+        assertThat(result).contains(LocalDateTime.of(2026, 10, 3, 0, 0));
     }
 }

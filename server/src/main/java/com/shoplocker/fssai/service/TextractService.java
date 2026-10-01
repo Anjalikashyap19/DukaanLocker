@@ -18,6 +18,7 @@ import software.amazon.awssdk.services.textract.model.Document;
 import software.amazon.awssdk.services.textract.model.UnsupportedDocumentException;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * OCR service that delegates to either AWS Textract or local Tesseract
@@ -52,7 +53,14 @@ public class TextractService {
     }
 
     /**
-     * Extracts text from a PDF document using the configured OCR provider.
+     * Extracts text from a PDF document.
+     *
+     * <p>A born-digital PDF's embedded text layer is preferred over OCR: it is
+     * exactly what the issuing authority printed, so a licence number, an
+     * authority name such as "Municipality" and an expiry date such as
+     * "03-Oct-2026" all survive verbatim instead of depending on Tesseract's
+     * accuracy. Scanned / image-only PDFs have no usable layer and fall through
+     * to the configured OCR provider as before.</p>
      *
      * @param fileBytes PDF file content
      * @param fileName  original file name (for error messages)
@@ -64,6 +72,13 @@ public class TextractService {
                     "The uploaded file \"" + (fileName == null ? "" : fileName)
                             + "\" is empty. Please upload a non-empty PDF document.",
                     FailureCode.INVALID_FILE_FORMAT);
+        }
+
+        Optional<String> textLayer = pdfPreprocessor.extractTextLayer(fileBytes);
+        if (textLayer.isPresent()) {
+            log.debug("Using the PDF's embedded text layer ({} chars) instead of OCR",
+                    textLayer.get().length());
+            return textLayer.get();
         }
 
         if ("textract".equalsIgnoreCase(ocrProvider)) {

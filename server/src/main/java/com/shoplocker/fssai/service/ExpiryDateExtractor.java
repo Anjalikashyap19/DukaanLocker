@@ -30,7 +30,12 @@ public class ExpiryDateExtractor {
     private static final List<String> KEYWORDS = List.of(
             "valid up to", "valid upto", "valid till", "valid until", "validity till",
             "date of expiry", "expiry date", "expires on", "expire on", "expiry",
-            "valid from", "period of validity", "validity");
+            "valid from", "period of validity", "validity",
+            // State trade licences / certificates of enlistment say the licence
+            // "will be in force until 03-Oct-2026" rather than "valid till ...".
+            "in force until", "in force upto", "in force up to", "in force till",
+            "in force on or before", "shall remain in force", "remain in force",
+            "renewable on or before");
 
     private static final List<String> PERMANENT = List.of(
             "lifetime", "life time", "permanent", "valid for life");
@@ -80,11 +85,27 @@ public class ExpiryDateExtractor {
         return PERMANENT.stream().anyMatch(lower::contains);
     }
 
+    /**
+     * True when {@code text} contains a date precise enough to be the end of a
+     * "valid from A to B" range. {@link #MONTH_YEAR} is deliberately excluded:
+     * "Oct 2025" matches far too easily, so a trailing issue date could decide
+     * the truncation and swap the expiry for the issue date.
+     */
+    private boolean hasPreciseDate(String text) {
+        return DAY_FIRST.matcher(text).find()
+                || YEAR_FIRST.matcher(text).find()
+                || DAY_MONTH_YEAR.matcher(text).find()
+                || MONTH_DAY_YEAR.matcher(text).find();
+    }
+
     private Optional<LocalDate> parseWindow(String window) {
-        // "valid from A to B" - the expiry is the date after the last " to "
+        // "valid from A to B" - the expiry is the date after the last " to ".
+        // Only truncate when a date actually follows it: "... in force until
+        // 03-Oct-2026 and to be produced ..." also contains " to ", and
+        // truncating there would throw the real expiry away and report no date.
         String scope = window;
         int toIdx = lastIndexIgnoreCase(scope, " to ");
-        if (toIdx >= 0) {
+        if (toIdx >= 0 && hasPreciseDate(scope.substring(toIdx + 4))) {
             scope = scope.substring(toIdx + 4);
         }
 

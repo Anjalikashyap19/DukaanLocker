@@ -166,10 +166,15 @@ public class ShopController {
 
         // The document is the right *type*, but is it this shop's? A valid FSSAI
         // licence belonging to another business passes the type check, so compare
-        // the shop name against the OCR text before anything is persisted.
+        // the shop against the OCR text before anything is persisted. Both the
+        // trade name and the proprietor are accepted: a state trade licence is
+        // routinely issued in the owner's personal name while the shop carries a
+        // brand name, or vice versa.
+        Shop shop = shopService.getShopById(shopId);
         documentValidationService.validateBusinessOwnership(
                 docType,
-                shopService.getShopById(shopId).getShopName(),
+                shop.getShopName(),
+                shop.getOwnerName(),
                 ocrText,
                 file.getOriginalFilename());
 

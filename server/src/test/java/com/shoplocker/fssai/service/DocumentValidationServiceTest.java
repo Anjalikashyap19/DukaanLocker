@@ -61,6 +61,40 @@ class DocumentValidationServiceTest {
             date mentioned against it.
             """;
 
+    /**
+     * A West Bengal Certificate of Enlistment - the shape of trade licence that
+     * the strict "Municipal Corporation" requirement used to reject. Issued by a
+     * <b>Municipality</b> (not a Corporation), numbered as a {@code TRADE LICENCE
+     * NO} (never "License Number"), and worded as "in force until" rather than
+     * "valid till".
+     */
+    private static final String WB_ENLISTMENT_TEXT = """
+            GOVERNMENT OF WEST BENGAL
+            PERMANENT CERTIFICATE OF ENLISTMENT
+            Form-24, Rule 82, Sec 118, West Bengal Municipal Act, 1993
+            Issuing Authority: Baranagar (Municipality)
+            TRADE LICENCE NO: 0917P1008125372790
+            Name of the Enlistee: KAVINDER SEHGAL
+            Business: MOTOR SPARE PARTS AND LUBRICATING OIL
+            This certificate will be in force until the 03-Oct-2026 and is liable
+            to be produced at the time of renewal.
+            Date of Issue: 04-Oct-2025
+            """;
+
+    /**
+     * A neutral certificate that matches no other document type's signatures, so
+     * it reaches the trade-licence validator instead of the conflict check.
+     */
+    private static final String UNRELATED_CERTIFICATE_TEXT = """
+            Certificate of Registration
+            This is to certify that the holder named below has been registered
+            under the applicable rules and the entry stands in the register.
+            Name of the Holder: Maruthi Traders
+            Registration Number: ABC-12345/2024
+            Date of Issue: 01/04/2024
+            Valid upto: 31/03/2027
+            """;
+
     private DocumentValidationService service;
 
     @BeforeEach
@@ -249,6 +283,92 @@ class DocumentValidationServiceTest {
             assertThatCode(() -> service.validateBusinessOwnership(
                     DocumentType.FSSAI_FOOD_LICENSE, "cafe Coffee Day", otherBusiness, FILE))
                     .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("accepts a match on the proprietor's name alone")
+        void acceptsProprietorName() {
+            // A state trade licence is commonly issued in the proprietor's
+            // personal name while the profile carries the brand name.
+            assertThatCode(() -> service.validateBusinessOwnership(
+                    DocumentType.TRADE_LICENSE, "New Market", "Kavinder Sehgal",
+                    WB_ENLISTMENT_TEXT, FILE))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("still blocks when neither the shop nor the proprietor appears")
+        void blocksWhenNeitherNameAppears() {
+            assertThatThrownBy(() -> service.validateBusinessOwnership(
+                    DocumentType.TRADE_LICENSE, "New Market", "Diya",
+                    WB_ENLISTMENT_TEXT, FILE))
+                    .isInstanceOf(FssaiException.class)
+                    .hasMessageContaining("does not appear to belong to your shop")
+                    .satisfies(ex -> assertThat(((FssaiException) ex).getFailureCode())
+                            .isEqualTo(FailureCode.BUSINESS_NAME_MISMATCH));
+        }
+
+        @Test
+        @DisplayName("does not match a name token buried inside a longer word")
+        void doesNotMatchInsideLongerWords() {
+            // "New Market" reduces to {new, market}; "new" occurs inside every
+            // "renewal" clause of a licence. An interior match is a coincidence
+            // of spelling, never an identity.
+            String renewalProse = """
+                    Certificate of Enlistment issued under the Municipal Act
+                    The licence is renewable on or before the due date and must be
+                    produced at the time of renewal. Renewal fees are payable
+                    annually at the municipal office of the district.
+                    Name of the Enlistee: Maruthi Traders
+                    Licence No: 12345678901234
+                    Date of Issue: 01/04/2024
+                    Valid upto: 31/03/2027
+                    """;
+
+            assertThatThrownBy(() -> checkOwnership("New Market", renewalProse))
+                    .isInstanceOf(FssaiException.class)
+                    .satisfies(ex -> assertThat(((FssaiException) ex).getFailureCode())
+                            .isEqualTo(FailureCode.BUSINESS_NAME_MISMATCH));
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("3. trade licence validation")
+    class TradeLicenseValidation {
+
+        @Test
+        @DisplayName("accepts a West Bengal Certificate of Enlistment")
+        void acceptsWestBengalEnlistment() {
+            // Issued by a Municipality rather than a Municipal Corporation, and
+            // numbered "TRADE LICENCE NO" rather than "License Number" - the
+            // exact wording that used to return 422.
+            assertThatCode(() -> runOcrAndValidate(DocumentType.TRADE_LICENSE,
+                    WB_ENLISTMENT_TEXT))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("rejects a certificate that is not a trade licence at all")
+        void rejectsUnrelatedCertificate() {
+            assertThatThrownBy(() -> runOcrAndValidate(DocumentType.TRADE_LICENSE,
+                    UNRELATED_CERTIFICATE_TEXT))
+                    .isInstanceOf(FssaiException.class)
+                    .hasMessageContaining("not a valid Trade License")
+                    .hasMessageContaining("Document title")
+                    .satisfies(ex -> assertThat(((FssaiException) ex).getFailureCode())
+                            .isEqualTo(FailureCode.DOCUMENT_VALIDATION_FAILED));
+        }
+
+        @Test
+        @DisplayName("still surfaces the type mismatch for an FSSAI licence")
+        void stillRejectsFssaiAsTradeLicense() {
+            assertThatThrownBy(() -> runOcrAndValidate(DocumentType.TRADE_LICENSE,
+                    FSSAI_TEXT.formatted("cafe Coffee Day", "MG Road")))
+                    .isInstanceOf(FssaiException.class)
+                    .hasMessageContaining("FSSAI Food License")
+                    .satisfies(ex -> assertThat(((FssaiException) ex).getFailureCode())
+                            .isEqualTo(FailureCode.DOCUMENT_TYPE_MISMATCH));
         }
     }
 }

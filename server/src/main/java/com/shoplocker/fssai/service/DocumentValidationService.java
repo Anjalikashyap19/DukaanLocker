@@ -35,7 +35,9 @@ public class DocumentValidationService {
     private TextractService textractService;
 
     // ─── Minimum confidence threshold ───────────────────────────────────────
-    private static final int MIN_EXTRACTED_TEXT_LENGTH = 100;
+    /** Shared with {@link PdfPreprocessor}, which mirrors this floor when it
+     *  decides whether a PDF's embedded text layer is usable. */
+    static final int MIN_EXTRACTED_TEXT_LENGTH = 100;
 
     // ─── Business-name matching ─────────────────────────────────────────────
     /**
@@ -154,8 +156,15 @@ public class DocumentValidationService {
             Pattern.compile("(?i)(?:License|Registration)\\s*(?:Number|No|:)?\\s*[A-Za-z0-9/\\-]+");
     private static final Pattern SHOP_EST_PATTERN =
             Pattern.compile("(?i)(?:Registration|License)\\s*(?:Number|No|:)?\\s*[A-Za-z0-9/-]+");
+    // Label + number as Indian trade licences actually print it:
+    //   "OLD TRADE LICENCE NO: 20004112613"   (West Bengal, British spelling)
+    //   "Certificate No.- 0917P1008125372790"  (enlistment certificates)
+    //   "License No: MH/12345"                 (Municipal Corporation format)
+    // "Licen[cs]e" covers both spellings; the {4,} floor keeps a bare label
+    // ("License No.") from satisfying the pattern on its own.
     private static final Pattern TRADE_LICENSE_PATTERN =
-            Pattern.compile("(?i)(?:Trade License|License)\\s*(?:Number|No|:)?\\s*[A-Za-z0-9/-]+");
+            Pattern.compile("(?i)(?:trade\\s+licen[cs]e|licen[cs]e|enlistment|certificate)"
+                    + "\\s*(?:no|number|#)?\\.?\\s*[:.\\-]?\\s*[A-Za-z0-9/-]{4,}");
 
     private static final long MAX_FILE_SIZE_BYTES = 5L * 1024 * 1024;
     private static final byte[] PDF_MAGIC  = {0x25, 0x50, 0x44, 0x46}; // "%PDF"
@@ -465,18 +474,44 @@ public class DocumentValidationService {
     }
 
     private void validateTradeLicense(String text, String fileName) {
-        requireAllKeywords(text, "Trade License", fileName,
-                "Trade License",
-                "Municipal Corporation");
+        // Title. Indian states word this differently: "Trade License" (most),
+        // "Trade Licence" (British spelling), or a "Certificate of Enlistment"
+        // (West Bengal Municipal Act, Form-24). No single phrasing may be
+        // required or a genuine state licence is rejected out of hand.
+        requireAnyKeyword(text, "Trade License", fileName,
+                "Document title",
+                "Trade License", "Trade Licence", "Certificate of Enlistment",
+                "Shops & Establishments", "Registration of Trade",
+                "Licensing of Trades");
+
+        // Issuing authority. A trade licence can come from a Municipal
+        // Corporation, a Municipality, a Nagar Nigam / Palika, a Panchayat or a
+        // state department - and it is frequently state-level, so neither a
+        // particular state nor a particular body may be assumed.
+        requireAnyKeyword(text, "Trade License", fileName,
+                "Issuing authority",
+                "Municipal Corporation", "Municipality", "Municipal",
+                "Corporation", "Nagar Nigam", "Nagar Palika", "Nagar Panchayat",
+                "Gram Panchayat", "Panchayat", "Government of", "State Government",
+                "Urban Development", "Labour Department", "Directorate",
+                "Regional Transport Authority", "District Magistrate");
+
+        // Licence-number label. "Licence" is as common as "License" on the
+        // originals, and enlistment certificates label it differently again.
         requireAnyKeyword(text, "Trade License", fileName, "License Number",
-                "License Number", "License No", "Trade License Number");
+                "License Number", "Licence Number", "License No", "Licence No",
+                "Trade License Number", "Trade Licence Number",
+                "Enlistment No", "Certificate No", "Unique Number");
+
         requirePattern(text, "Trade License", fileName,
                 "Trade License Number",
                 TRADE_LICENSE_PATTERN,
                 "An alphanumeric license number");
+
         requireAnyKeyword(text, "Trade License", fileName,
                 "Validity / Issuing Details",
-                "Valid", "Validity", "Issue Date", "Issued");
+                "Valid", "Validity", "Issue Date", "Issued",
+                "in force", "Issuance", "Date of Issuance", "until", "renewal");
     }
 
     private void validateMSME(String text, String fileName) {
@@ -727,22 +762,44 @@ public class DocumentValidationService {
      * Verifies that the uploaded certificate actually belongs to the shop being
      * onboarded, by looking for the shop's name in the OCR text.
      *
+     * <p>See {@link #validateBusinessOwnership(DocumentType, String, String,
+     * String, String)}; this form passes no proprietor name.</p>
+     */
+    public void validateBusinessOwnership(DocumentType docType,
+                                          String shopName,
+                                          String extractedText,
+                                          String fileName) {
+        validateBusinessOwnership(docType, shopName, null, extractedText, fileName);
+    }
+
+    /**
+     * Verifies that the uploaded certificate actually belongs to the shop being
+     * onboarded, by looking for the shop's trade name <em>or</em> its proprietor's
+     * name in the OCR text.
+     *
      * <p>Complements {@link #checkDocumentConflict(DocumentType, String, String)},
      * which only asks "is this the right <em>kind</em> of document?". A genuine
      * FSSAI licence belonging to somebody else's shop passes that check, so this
      * is the cross-business check the upload flow was missing.</p>
      *
+     * <p>A match on <b>either</b> identity passes. State trade licences and
+     * certificates of enlistment are frequently issued in the proprietor's
+     * personal name while the profile carries the brand name ("New Market",
+     * proprietor "Kavinder Sehgal"), and the reverse happens just as often with
+     * proprietary firms.</p>
+     *
      * <p>Matching is deliberately <b>lenient</b>: a certificate prints the
      * registered legal entity, which routinely differs from the trade name the
      * seller typed into their profile ("cafe Coffee Day" vs "Coffee Day
      * Enterprises Pvt Ltd"). So the check fails only on a <b>confident
-     * mismatch</b> — none of the name's distinctive words appear anywhere in
-     * the document. That is the case the user means by "the document is some
-     * other business". Formatting noise, OCR mangling of a single character, and
-     * added legal suffixes all still pass.</p>
+     * mismatch</b> — neither name's distinctive words appear anywhere in the
+     * document. That is the case the user means by "the document is some other
+     * business". Formatting noise, OCR mangling of a single character, and added
+     * legal suffixes all still pass.</p>
      *
      * @param docType       expected document type, used for the error message
      * @param shopName      the shop's trade name as registered on the profile
+     * @param ownerName     the proprietor's name on the profile, or null
      * @param extractedText OCR text of the uploaded file
      * @param fileName      original file name, used for the error message
      * @throws FssaiException {@link FailureCode#BUSINESS_NAME_MISMATCH} when the
@@ -750,15 +807,10 @@ public class DocumentValidationService {
      */
     public void validateBusinessOwnership(DocumentType docType,
                                           String shopName,
+                                          String ownerName,
                                           String extractedText,
                                           String fileName) {
         if (!businessNameCheckEnabled) return;
-
-        // No profile name to check against: never block on missing data.
-        if (shopName == null || shopName.isBlank()) {
-            log.warn("Skipping business-name check: shop has no name configured (file={})", fileName);
-            return;
-        }
 
         // Too little OCR text to judge. validateContentWithOcr already requires
         // 100+ chars, so this only guards direct callers; erring toward
@@ -769,29 +821,45 @@ public class DocumentValidationService {
             return;
         }
 
-        List<String> nameTokens = significantTokens(shopName);
-        if (nameTokens.isEmpty()) {
-            log.warn("Skipping business-name check: '{}' has no significant words", shopName);
+        // No profile name to check against: never block on missing data.
+        List<String> shopTokens = significantTokens(shopName);
+        List<String> ownerTokens = significantTokens(ownerName);
+        if (shopTokens.isEmpty() && ownerTokens.isEmpty()) {
+            log.warn("Skipping business-name check: shop name '{}' and owner name '{}'"
+                            + " have no significant words (file={})",
+                    shopName, ownerName, fileName);
             return;
         }
 
         String normalizedText = normalizeForMatching(extractedText);
-        boolean anyMatch = nameTokens.stream()
-                .anyMatch(token -> containsToken(normalizedText, token));
+        boolean anyMatch = anyTokenPresent(normalizedText, shopTokens)
+                || anyTokenPresent(normalizedText, ownerTokens);
 
         if (!anyMatch) {
             String expectedName = getDisplayName(docType);
+            String display = displayName(shopName, ownerName);
             throw new FssaiException(
-                    "This document does not appear to belong to your shop \"" + shopName.trim() + "\". "
+                    "This document does not appear to belong to your shop \"" + display + "\". "
                             + "Your shop name was not found in the " + expectedName
                             + ", so it looks like this certificate was issued to a different business. "
-                            + "Please upload a " + expectedName + " issued to \"" + shopName.trim() + "\".",
+                            + "Please upload a " + expectedName + " issued to \"" + display + "\".",
                     FailureCode.BUSINESS_NAME_MISMATCH,
                     java.util.List.of(
-                            "shop_name: " + shopName.trim(),
+                            "shop_name: " + display,
                             "document_type: " + expectedName
                     ));
         }
+    }
+
+    private boolean anyTokenPresent(String normalizedText, List<String> tokens) {
+        return tokens.stream().anyMatch(token -> containsToken(normalizedText, token));
+    }
+
+    /** The name to quote back to the seller: the trade name, else the proprietor. */
+    private String displayName(String shopName, String ownerName) {
+        if (shopName != null && !shopName.isBlank()) return shopName.trim();
+        if (ownerName != null && !ownerName.isBlank()) return ownerName.trim();
+        return "";
     }
 
     /**
@@ -815,8 +883,9 @@ public class DocumentValidationService {
      * "Maruthi Traders Private Limited" is compared as just {maruthi, traders}.
      * </p>
      */
-    private List<String> significantTokens(String shopName) {
-        String normalized = normalizeForMatching(shopName);
+    private List<String> significantTokens(String name) {
+        if (name == null || name.isBlank()) return new ArrayList<>();
+        String normalized = normalizeForMatching(name);
         List<String> tokens = new ArrayList<>();
         for (String token : normalized.split("\\s+")) {
             if (token.isBlank()) continue;
@@ -829,16 +898,22 @@ public class DocumentValidationService {
     }
 
     /**
-     * True when {@code token} appears in the document text.
+     * True when {@code token} appears in the document text as a <em>word</em>.
      *
-     * <p>Exact substring first. Failing that, a mid-length token is allowed one
-     * character of OCR noise, because single-word shop names ("Verma", "Shah")
-     * are exactly the ones where a single misread character would otherwise read
-     * as a completely different business. Very short and very long tokens stay
-     * exact - see {@link #FUZZY_MATCH_MIN_LENGTH}.</p>
+     * <p>At least one edge of the match must touch a word boundary, so the shop
+     * "New Market" does not match every "renew**al**" clause in a licence while
+     * "cafe" still matches the "cafe" in "cafes". An interior match is a
+     * coincidence of spelling, never an identity.</p>
+     *
+     * <p>Failing that, a mid-length token is allowed one character of OCR noise,
+     * because single-word shop names ("Verma", "Shah") are exactly the ones
+     * where a single misread character would otherwise read as a completely
+     * different business. Very short and very long tokens stay exact - see
+     * {@link #FUZZY_MATCH_MIN_LENGTH}.</p>
      */
     private boolean containsToken(String normalizedText, String token) {
-        if (normalizedText.contains(token)) return true;
+        if (token == null || token.isEmpty()) return false;
+        if (matchesAtWordEdge(normalizedText, token)) return true;
 
         if (token.length() < FUZZY_MATCH_MIN_LENGTH || token.length() > FUZZY_MATCH_MAX_LENGTH) {
             return false;
@@ -846,10 +921,39 @@ public class DocumentValidationService {
 
         int width = token.length();
         for (int i = 0; i + width <= normalizedText.length(); i++) {
+            if (!isWordEdge(normalizedText, i, i + width)) continue;
             String window = normalizedText.substring(i, i + width);
             if (editDistanceWithin(token, window, 1)) return true;
         }
         return false;
+    }
+
+    /** True when some occurrence of {@code token} sits at a word edge. */
+    private boolean matchesAtWordEdge(String text, String token) {
+        int from = 0;
+        while (from <= text.length() - token.length()) {
+            int idx = text.indexOf(token, from);
+            if (idx < 0) return false;
+            if (isWordEdge(text, idx, idx + token.length())) return true;
+            from = idx + 1;
+        }
+        return false;
+    }
+
+    /**
+     * True when {@code [start, end)} abuts a non-word character (or the ends of
+     * the text) on either side. The text has already been reduced to letters,
+     * digits and spaces by {@link #normalizeForMatching(String)}, so a word
+     * character is simply a letter or digit.
+     */
+    private boolean isWordEdge(String text, int start, int end) {
+        boolean before = start == 0 || !isWordChar(text.charAt(start - 1));
+        boolean after = end == text.length() || !isWordChar(text.charAt(end));
+        return before || after;
+    }
+
+    private boolean isWordChar(char c) {
+        return Character.isLetterOrDigit(c);
     }
 
     /** Bounded Levenshtein: true when {@code a} and {@code b} are within {@code max} edits. */
