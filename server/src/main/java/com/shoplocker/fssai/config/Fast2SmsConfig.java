@@ -30,6 +30,19 @@ public class Fast2SmsConfig {
     @Value("${fast2sms.template-id:${FAST2SMS_TEMPLATE_ID:}}")
     private String templateId;
 
+    /**
+     * DLT Message / Content Template ID for the forgot-password OTP SMS, sent on
+     * Fast2SMS's DLT route. Kept separate from {@link #templateId} (the Smart-OTP
+     * template used by the MSME login) because the two flows are approved as
+     * different DLT content templates.
+     */
+    @Value("${fast2sms.reset-message-id:${FAST2SMS_RESET_MESSAGE_ID:}}")
+    private String resetMessageId;
+
+    /** DLT Principal Entity ID required by the DLT route for the reset SMS. */
+    @Value("${fast2sms.reset-entity-id:${FAST2SMS_RESET_ENTITY_ID:}}")
+    private String resetEntityId;
+
     @Value("${fast2sms.otp-expiry-minutes:5}")
     private int otpExpiryMinutes;
 
@@ -49,6 +62,8 @@ public class Fast2SmsConfig {
     public String getApiKey() { return apiKey; }
     public String getSenderId() { return senderId; }
     public String getTemplateId() { return templateId; }
+    public String getResetMessageId() { return resetMessageId; }
+    public String getResetEntityId() { return resetEntityId; }
     public int getOtpExpiryMinutes() { return otpExpiryMinutes; }
     public int getOtpLength() { return otpLength; }
     public String getBaseUrl() { return baseUrl; }

@@ -95,6 +95,11 @@ public class OtpService {
      *  written and before the gateway is called, so a throttled request costs nothing and
      *  sends no SMS.</p> */
     public OtpRequestResult requestOtp(String msmeNumber, String mobile) {
+        return requestOtp(OtpChallenge.PURPOSE_MSME_LOGIN, msmeNumber, mobile);
+    }
+
+    /** Same as {@link #requestOtp(String, String)} for an arbitrary flow ({@code purpose}). */
+    public OtpRequestResult requestOtp(String purpose, String msmeNumber, String mobile) {
         OtpRateLimitService.Decision rateLimit = rateLimitService.acquireSendSlot(mobile);
         // Only fall back to the durable cooldown when Redis did not actually enforce
         // anything. Running both unconditionally meant two overlapping 120s windows: the
@@ -102,7 +107,7 @@ public class OtpService {
         // incremented, so a user could burn all 5 sends without receiving a single SMS,
         // and the rejection came back without retry metadata the client needs.
         if (rateLimit.degraded()) {
-            self.assertDbCooldown(mobile);
+            self.assertDbCooldown(mobile, purpose);
         }
 
         String otp = generateOtp();
@@ -110,7 +115,7 @@ public class OtpService {
         challenge.setMsmeNumber(msmeNumber);
         challenge.setMobile(mobile);
         challenge.setOtpHash(passwordEncoder.encode(otp));
-        challenge.setPurpose(OtpChallenge.PURPOSE_MSME_LOGIN);
+        challenge.setPurpose(purpose);
         challenge.setExpiresAt(LocalDateTime.now().plusMinutes(fast2SmsConfig.getOtpExpiryMinutes()));
         challenge.setAttempts(0);
         challenge.setVerified(false);
@@ -119,7 +124,11 @@ public class OtpService {
         OtpChallenge saved = self.persistChallenge(challenge);
 
         try {
-            smsService.sendOtp(mobile, otp);
+            if (OtpChallenge.PURPOSE_PASSWORD_RESET.equals(purpose)) {
+                smsService.sendPasswordResetOtp(mobile, otp);
+            } else {
+                smsService.sendOtp(mobile, otp);
+            }
         } catch (OtpRateLimitedException e) {
             // The gateway applied its own resend cooldown. The request was valid and no
             // SMS was billed, so hand the send credit back instead of letting a timing
@@ -129,7 +138,7 @@ public class OtpService {
         }
         return new OtpRequestResult(
                 saved.getId().toString(),
-                isDevMode() ? otp : null,
+                isDevMode(purpose) ? otp : null,
                 rateLimit.remainingSends(),
                 rateLimit.retryAfterSeconds());
     }
@@ -151,7 +160,13 @@ public class OtpService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
     public void assertDbCooldown(String mobile) {
-        otpRepository.findTopByMobileAndPurposeOrderByCreatedAtDesc(mobile, OtpChallenge.PURPOSE_MSME_LOGIN)
+        assertDbCooldown(mobile, OtpChallenge.PURPOSE_MSME_LOGIN);
+    }
+
+    /** Durable resend-cooldown fallback scoped to a single flow. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+    public void assertDbCooldown(String mobile, String purpose) {
+        otpRepository.findTopByMobileAndPurposeOrderByCreatedAtDesc(mobile, purpose)
                 .ifPresent(recent -> {
                     long ageSeconds = Duration.between(recent.getCreatedAt(), LocalDateTime.now()).getSeconds();
                     if (ageSeconds < resendCooldownSeconds) {
@@ -178,16 +193,27 @@ public class OtpService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public OtpChallenge persistChallenge(OtpChallenge challenge) {
-        String mobile = challenge.getMobile();
-
-        otpRepository.deleteByMobileAndPurpose(mobile, OtpChallenge.PURPOSE_MSME_LOGIN);
+        // Scoped to the challenge's own flow so a password-reset send never
+        // clobbers an active MSME-login challenge for the same mobile (and vice versa).
+        otpRepository.deleteByMobileAndPurpose(challenge.getMobile(), challenge.getPurpose());
         return otpRepository.save(challenge);
     }
 
-    private boolean isDevMode() {
+    /**
+     * Whether the OTP may be echoed back to the client because no SMS can possibly
+     * leave the gateway.
+     *
+     * <p>Deliberately gated on the API key alone. A configured key with a missing
+     * template id means a real deployment with a misconfiguration: echoing the OTP
+     * there would let anyone read it from the response and take over the account,
+     * so that path fails loudly instead (see {@link SmsService#sendPasswordResetOtp}).</p>
+     */
+    private boolean isDevMode(String purpose) {
         String key = fast2SmsConfig.getApiKey();
+        if (key == null || key.isBlank()) return true;
+        if (OtpChallenge.PURPOSE_PASSWORD_RESET.equals(purpose)) return false;
         String tpl = fast2SmsConfig.getTemplateId();
-        return (key == null || key.isBlank()) || (tpl == null || tpl.isBlank());
+        return tpl == null || tpl.isBlank();
     }
 
     /**
@@ -204,9 +230,23 @@ public class OtpService {
     }
 
     /**
-     * Verifies the OTP for the given mobile + Udyam number. Throws on
+     * Verifies the MSME-login OTP for the given mobile + Udyam number.
+     *
+     * @see #verifyOtp(String, String, String, String)
+     */
+    public void verifyOtp(String mobile, String msmeNumber, String otp) {
+        verifyOtp(OtpChallenge.PURPOSE_MSME_LOGIN, mobile, msmeNumber, otp);
+    }
+
+    /**
+     * Verifies the OTP for the given flow ({@code purpose}). Throws on
      * missing/expired/used/wrong OTP or when the attempt ceiling is hit. On
      * success the challenge is consumed.
+     *
+     * <p>When {@code msmeNumber} is {@code null} (password reset) the challenge is
+     * looked up by mobile + purpose alone; otherwise it is additionally bound to the
+     * Udyam number so an OTP issued for one MSME account cannot be used against
+     * another account that shares the mobile.</p>
      *
      * <p>Deliberately NOT {@code @Transactional}: the attempt counter must survive
      * the exception that reports the failure. Incrementing it inside a transaction
@@ -215,10 +255,11 @@ public class OtpService {
      * mutation therefore happens in {@link #applyVerification} (own transaction,
      * always commits) and the exception is raised here, afterwards.</p>
      */
-    public void verifyOtp(String mobile, String msmeNumber, String otp) {
-        Long challengeId = otpRepository
-                .findTopByMobileAndMsmeNumberAndPurposeOrderByCreatedAtDesc(
-                        mobile, msmeNumber, OtpChallenge.PURPOSE_MSME_LOGIN)
+    public void verifyOtp(String purpose, String mobile, String msmeNumber, String otp) {
+        Long challengeId = (msmeNumber == null || msmeNumber.isBlank()
+                        ? otpRepository.findTopByMobileAndPurposeOrderByCreatedAtDesc(mobile, purpose)
+                        : otpRepository.findTopByMobileAndMsmeNumberAndPurposeOrderByCreatedAtDesc(
+                                mobile, msmeNumber, purpose))
                 .map(OtpChallenge::getId)
                 .orElseThrow(() -> new FssaiException(
                         "Invalid or expired OTP. Please request a new one.",
@@ -239,7 +280,7 @@ public class OtpService {
             case INCORRECT -> throw new FssaiException(
                     "Incorrect OTP. Please try again.",
                     FailureCode.INVALID_OTP);
-            case VERIFIED -> log.info("OTP verified for mobile {} udyam {}", mobile, msmeNumber);
+            case VERIFIED -> log.info("OTP verified for mobile {} purpose {} udyam {}", mobile, purpose, msmeNumber);
         }
     }
 

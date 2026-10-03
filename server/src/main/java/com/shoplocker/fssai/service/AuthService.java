@@ -4,16 +4,20 @@ import com.shoplocker.fssai.dto.AuthResponse;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import com.shoplocker.fssai.dto.BiometricLoginRequest;
+import com.shoplocker.fssai.dto.ForgotPasswordRequest;
 import com.shoplocker.fssai.dto.GoogleRegisterRequest;
 import com.shoplocker.fssai.dto.LoginRequest;
 import com.shoplocker.fssai.dto.ManagerCodeLoginRequest;
+import com.shoplocker.fssai.dto.MessageResponse;
 import com.shoplocker.fssai.dto.MsmeAuthResponse;
 import com.shoplocker.fssai.dto.MsmeOtpRequest;
 import com.shoplocker.fssai.dto.MsmeOtpResponse;
 import com.shoplocker.fssai.dto.MsmeOtpVerifyRequest;
 import com.shoplocker.fssai.dto.MsmeParsedData;
+import com.shoplocker.fssai.dto.OtpSendResponse;
 import com.shoplocker.fssai.dto.RegisterRequest;
 import com.shoplocker.fssai.dto.RegisterWithMsmeRequest;
+import com.shoplocker.fssai.dto.ResetPasswordRequest;
 import com.shoplocker.fssai.dto.UdyamVerifyRequest;
 import com.shoplocker.fssai.dto.UdyamVerifyResponse;
 import com.shoplocker.fssai.service.UdyamVerificationService;
@@ -92,6 +96,13 @@ public class AuthService {
         if (mobile == null || mobile.length() < 4) return "***";
         return mobile.substring(0, 2) + "***" + mobile.substring(mobile.length() - 3);
     }
+
+    /**
+     * The forgot-password response body, shared by the eligible and ineligible
+     * paths so the endpoint cannot be used to enumerate registered mobiles.
+     */
+    private static final String PASSWORD_RESET_REQUEST_MESSAGE =
+            "If this mobile number is registered to an owner account, an OTP has been sent to it.";
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -976,12 +987,98 @@ public class AuthService {
     }
 
     /**
+     * Forgot password — step 1: send an OTP to the account's registered mobile.
+     *
+     * <p>Only ADMIN accounts that actually have a password are served; MSME (Udyam)
+     * users have no password and are told nothing. The response is byte-for-byte
+     * identical whether the mobile exists, is eligible, or is entirely unknown —
+     * probing the endpoint never reveals which mobile numbers hold owner accounts.</p>
+     *
+     * <p>Rate limiting lives inside {@link OtpService#requestOtp}, so an ineligible
+     * probe costs no SMS and no send credit.</p>
+     */
+    public OtpSendResponse forgotPassword(ForgotPasswordRequest request) {
+        String mobile = request.getMobileNumber().trim();
+        User user = userRepository.findByMobileNumber(mobile).orElse(null);
+
+        if (!canResetPassword(user)) {
+            log.info("Forgot-password request for {} rejected: {}",
+                    maskMobile(mobile), user == null ? "no such mobile" : "account not eligible");
+            return new OtpSendResponse(null, PASSWORD_RESET_REQUEST_MESSAGE);
+        }
+
+        OtpService.OtpRequestResult result = otpService.requestOtp(
+                OtpChallenge.PURPOSE_PASSWORD_RESET, null, mobile);
+
+        log.info("Forgot-password OTP requested for userId={} mobile={}", user.getId(), maskMobile(mobile));
+        String message = result.devOtp() != null
+                ? "DEV MODE — your OTP is " + result.devOtp()
+                : PASSWORD_RESET_REQUEST_MESSAGE;
+
+        OtpSendResponse response = new OtpSendResponse(result.requestId(), message);
+        response.setResendAvailableInSeconds(result.resendAvailableInSeconds());
+        response.setRemainingSends(result.remainingSends());
+        return response;
+    }
+
+    /**
+     * Forgot password — step 2: verify the OTP and store the new password.
+     *
+     * <p>The OTP is verified <i>before</i> the account is looked at, so nothing about
+     * the account (existence, role, eligibility) is disclosed to a caller who cannot
+     * first prove control of the registered mobile. The password is BCrypt-encoded
+     * like every other write.</p>
+     */
+    @Transactional
+    public MessageResponse resetPassword(ResetPasswordRequest request) {
+        String mobile = request.getMobileNumber().trim();
+
+        otpService.verifyOtp(OtpChallenge.PURPOSE_PASSWORD_RESET, mobile, null, request.getOtp());
+
+        User user = userRepository.findByMobileNumber(mobile)
+                .orElseThrow(() -> {
+                    log.warn("Password reset: OTP verified but no user for mobile {}", maskMobile(mobile));
+                    return new FssaiException("Account not found.", FailureCode.USER_NOT_FOUND);
+                });
+
+        if (!canResetPassword(user)) {
+            throw new FssaiException(
+                    "This account does not use password login, so its password can't be reset here.",
+                    FailureCode.PASSWORD_RESET_NOT_ALLOWED);
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        userRepository.save(user);
+
+        // A completed reset clears the send budget so a legitimate owner is not
+        // left locked out by their own earlier resends.
+        otpService.clearRateLimit(mobile);
+        log.info("Password reset successful for userId={} mobile={}", user.getId(), maskMobile(mobile));
+
+        return new MessageResponse(true,
+                "Your password has been updated. Please sign in with your new password.");
+    }
+
+    /**
+     * Only ADMIN accounts that actually hold a password may self-service reset:
+     * managers sign in with an access code, MSME (Udyam) users sign in with an
+     * OTP, and disabled accounts must not be resurrected through this flow.
+     */
+    private static boolean canResetPassword(User user) {
+        if (user == null) return false;
+        if (user.getRole() != Role.ADMIN) return false;
+        if (user.isMsmeUser()) return false;
+        if (!user.isEnabled()) return false;
+        String password = user.getPassword();
+        return password != null && !password.isBlank();
+    }
+
+    /**
      * Resolves a Udyam (MSME) number to its owning user via the verified
      * MSME_CERTIFICATE document. Returns {@code null} if the number is not
      * registered or does not belong to an MSME user.
      */
-    private User resolveMsmeUser(String udyamNumber) {
-        return documentRepository
+    private User resolveMsmeUser(String udyamNumber) {        return documentRepository
                 .findByDocumentNumberAndDocumentType(udyamNumber, DocumentType.MSME_CERTIFICATE)
                 .map(doc -> {
                     Shop shop = doc.getShop();

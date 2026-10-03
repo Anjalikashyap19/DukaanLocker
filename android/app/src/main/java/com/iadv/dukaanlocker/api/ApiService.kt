@@ -23,6 +23,12 @@ interface ApiService {
     @POST("api/auth/biometric-login")
     suspend fun biometricLogin(@Body request: BiometricLoginRequest): Response<AuthResponse>
 
+    @POST("api/auth/forgot-password")
+    suspend fun forgotPassword(@Body request: ForgotPasswordRequest): Response<OtpSendResponse>
+
+    @POST("api/auth/reset-password")
+    suspend fun resetPassword(@Body request: ResetPasswordRequest): Response<MessageResponse>
+
     // ── Shops ────────────────────────────────────────────────────────────────
 
     @POST("api/shops")

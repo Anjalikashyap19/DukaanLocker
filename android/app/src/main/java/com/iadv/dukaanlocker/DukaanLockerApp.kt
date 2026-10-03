@@ -315,6 +315,8 @@ fun DukaanLockerApp(
                                     onRegisterWithMsme = { msmeNumber, mobile, sessionId, captchaText, onDone -> vm.registerWithMsme(msmeNumber, mobile, sessionId, captchaText, onDone) },
                                     onMsmeLoginRequest = { msmeNumber, onResult -> vm.msmeLoginRequest(msmeNumber, onResult) },
                                     onMsmeLoginVerify = { msmeNumber, otp, onResult -> vm.msmeLoginVerify(msmeNumber, otp, onResult) },
+                                    onForgotPasswordRequest = { mobile, onResult -> vm.forgotPasswordRequest(mobile, onResult) },
+                                    onForgotPasswordReset = { mobile, otp, password, onResult -> vm.resetPassword(mobile, otp, password, onResult) },
                                     onManagerLogin = { code -> vm.loginByCode(code) }
                                 )
                             }

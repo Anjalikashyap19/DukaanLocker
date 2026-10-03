@@ -379,7 +379,7 @@ enabled = !isChecking && !isWaiting,
 }
 
 /** Formats a countdown as mm:ss, e.g. 125 -> "2:05", 599 -> "9:59". */
-private fun formatCountdown(totalSeconds: Int): String {
+internal fun formatCountdown(totalSeconds: Int): String {
     val safe = totalSeconds.coerceAtLeast(0)
     return String.format("%d:%02d", safe / 60, safe % 60)
 }

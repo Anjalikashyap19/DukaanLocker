@@ -725,6 +725,62 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Requests a password-reset OTP for a registered owner mobile number.
+     *
+     * The server answers identically whether or not the number holds an eligible
+     * account, so [onResult] success means "the request was accepted", not "an OTP
+     * was sent to a real account" — the UI must never claim otherwise.
+     */
+    fun forgotPasswordRequest(
+        mobileNumber: String,
+        onResult: (Boolean, String?, RateLimitInfo?) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val response = api.forgotPassword(ForgotPasswordRequest(mobileNumber = mobileNumber))
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    onResult(
+                        true,
+                        body?.message,
+                        RateLimitInfo(
+                            retryAfterSeconds = body?.resendAvailableInSeconds ?: 0,
+                            remainingSends = body?.remainingSends ?: 0
+                        )
+                    )
+                } else {
+                    val parsed = response.parseOtpError()
+                    onResult(false, parsed.message, parsed.limit)
+                }
+            } catch (e: Exception) {
+                onResult(false, "Network error: ${e.message}", null)
+            }
+        }
+    }
+
+    /** Verifies the reset OTP and stores the new password. Success means sign in. */
+    fun resetPassword(mobileNumber: String, otp: String, password: String, onResult: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            updateState { it.copy(isLoading = true) }
+            try {
+                val response = api.resetPassword(
+                    ResetPasswordRequest(mobileNumber = mobileNumber, otp = otp, password = password)
+                )
+                if (response.isSuccessful) {
+                    val msg = response.body()?.message
+                    showToast(msg ?: "Password updated. Sign in with your new password.", ToastType.SUCCESS)
+                    onResult(true, msg)
+                } else {
+                    onResult(false, response.parseErrorMessage())
+                }
+            } catch (e: Exception) {
+                onResult(false, "Network error: ${e.message}")
+            }
+            updateState { it.copy(isLoading = false) }
+        }
+    }
+
     fun biometricLogin(credentials: BiometricCredentials, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             updateState { it.copy(isLoading = true) }

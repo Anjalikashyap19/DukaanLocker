@@ -5,22 +5,27 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 /**
- * A single-use OTP challenge for a login flow (currently MSME number + OTP).
+ * A single-use OTP challenge for a flow identified by {@code purpose}
+ * (MSME number + OTP login, or password reset by registered mobile).
  * The OTP itself is stored ONLY as a BCrypt hash — the plaintext is discarded
  * immediately after the SMS is sent. Lookups are keyed by {@code mobile} +
  * {@code purpose} (one active challenge per mobile/purpose at a time).
+ *
+ * <p>{@code msmeNumber} is only meaningful for {@link #PURPOSE_MSME_LOGIN} and is
+ * {@code null} for password reset, where the mobile alone identifies the account.</p>
  */
 @Entity
 @Table(name = "otp_challenges")
 public class OtpChallenge {
 
     public static final String PURPOSE_MSME_LOGIN = "MSME_LOGIN";
+    public static final String PURPOSE_PASSWORD_RESET = "PASSWORD_RESET";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "msme_number", nullable = false)
+    @Column(name = "msme_number")
     private String msmeNumber;
 
     @Column(name = "mobile", nullable = false)

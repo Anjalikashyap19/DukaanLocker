@@ -2,15 +2,19 @@ package com.shoplocker.fssai.controller;
 
 import com.shoplocker.fssai.dto.AuthResponse;
 import com.shoplocker.fssai.dto.BiometricLoginRequest;
+import com.shoplocker.fssai.dto.ForgotPasswordRequest;
 import com.shoplocker.fssai.dto.GoogleRegisterRequest;
 import com.shoplocker.fssai.dto.LoginRequest;
 import com.shoplocker.fssai.dto.ManagerCodeLoginRequest;
+import com.shoplocker.fssai.dto.MessageResponse;
 import com.shoplocker.fssai.dto.MsmeAuthResponse;
 import com.shoplocker.fssai.dto.MsmeOtpRequest;
 import com.shoplocker.fssai.dto.MsmeOtpVerifyRequest;
 import com.shoplocker.fssai.dto.MsmeOtpResponse;
+import com.shoplocker.fssai.dto.OtpSendResponse;
 import com.shoplocker.fssai.dto.RegisterRequest;
 import com.shoplocker.fssai.dto.RegisterWithMsmeRequest;
+import com.shoplocker.fssai.dto.ResetPasswordRequest;
 import com.shoplocker.fssai.service.AuthService;
 import com.shoplocker.fssai.service.UdyamVerificationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -164,6 +168,34 @@ public class AuthController {
     public ResponseEntity<AuthResponse> msmeLoginVerify(
             @Valid @RequestBody MsmeOtpVerifyRequest request) {
         AuthResponse response = authService.msmeLoginVerify(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+            summary = "Forgot password — request OTP",
+            description = "Sends a one-time code to the registered mobile of an owner (ADMIN) account so its " +
+                          "password can be reset. The response is identical whether or not the mobile is registered, " +
+                          "so the endpoint cannot be used to enumerate accounts. Rate-limited like any other OTP send."
+    )
+    @SecurityRequirements
+    @PostMapping("/forgot-password")
+    public ResponseEntity<OtpSendResponse> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request) {
+        OtpSendResponse response = authService.forgotPassword(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+            summary = "Forgot password — reset with OTP",
+            description = "Verifies the OTP sent to the registered mobile and stores the new BCrypt-encoded " +
+                          "password. The OTP is checked before any account detail is revealed, so a caller must " +
+                          "first prove control of the mobile. Password rules match registration."
+    )
+    @SecurityRequirements
+    @PostMapping("/reset-password")
+    public ResponseEntity<MessageResponse> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request) {
+        MessageResponse response = authService.resetPassword(request);
         return ResponseEntity.ok(response);
     }
 }

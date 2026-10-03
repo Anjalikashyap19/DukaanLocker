@@ -20,19 +20,26 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Sends OTP SMS via the Fast2SMS dedicated OTP endpoint
- * ({@code POST https://www.fast2sms.com/dev/otp/send}).
+ * Sends OTP SMS through Fast2SMS.
  *
- * <p>Used for OTP delivery in the MSME login flow. Unlike the legacy
- * {@code /dev/bulkV2?route=otp} form endpoint, this API takes a JSON body with
- * the DLT-approved OTP template id ({@code otp_id}), lets us pass our own OTP
- * value, and returns a {@code status_code} that pinpoints the failure reason
- * (KYC not done, wallet not topped up, template not approved, spam gate,
- * etc.) so the cause is never swallowed.</p>
+ * <p>Two distinct routes are used, because the two flows are approved as two
+ * different DLT content templates:</p>
+ * <ul>
+ *   <li>{@link #sendOtp} — MSME login, via the dedicated Smart-OTP endpoint
+ *       {@code POST /dev/otp/send} with the Smart-OTP {@code otp_id}.</li>
+ *   <li>{@link #sendPasswordResetOtp} — forgot password, via the DLT route
+ *       {@code POST /dev/bulkV2} ({@code route=dlt}) addressed by DLT message id +
+ *       principal entity id + sender id.</li>
+ * </ul>
  *
- * <p>If the API key or template id is not configured (local dev), the send is
- * skipped (logged) so the rest of the flow stays exercisable; it does NOT
- * throw, to avoid hard failures when SMS is not provisioned.</p>
+ * <p>Unlike the legacy {@code /dev/bulkV2?route=otp} form endpoint, both take a
+ * JSON body and an {@code authorization} header, and return a {@code status_code}
+ * that pinpoints the failure reason (KYC not done, wallet not topped up, template
+ * not approved, spam gate, etc.) so the cause is never swallowed.</p>
+ *
+ * <p>If the API key is not configured (local dev), the send is skipped (logged)
+ * so the rest of the flow stays exercisable; it does NOT throw, to avoid hard
+ * failures when SMS is not provisioned.</p>
  */
 @Service
 public class SmsService {
@@ -48,7 +55,7 @@ public class SmsService {
         this.config = config;
     }
 
-    /** Sends an OTP SMS to the given mobile. Throws {@link FailureCode#SMS_FAILURE} on gateway rejection. */
+    /** Sends the MSME-login OTP SMS to the given mobile. Throws {@link FailureCode#SMS_FAILURE} on gateway rejection. */
     public void sendOtp(String mobile, String otp) {
         if (config.getApiKey() == null || config.getApiKey().isBlank()) {
             log.warn("Fast2SMS API key not configured — DEV MODE: OTP for {} is {}", mask(mobile), otp);
@@ -65,17 +72,68 @@ public class SmsService {
         body.put("otp_expiry", config.getOtpExpiryMinutes());
         body.put("otp_length", config.getOtpLength());
         body.put("otp", otp);
-        if (config.getSenderId() != null && !config.getSenderId().isBlank()) {
-            body.put("sender_id", config.getSenderId());
+        putIfPresent(body, "sender_id", config.getSenderId());
+
+        send("/dev/otp/send", body, "login");
+    }
+
+    /**
+     * Sends the forgot-password OTP SMS over Fast2SMS's <b>DLT route</b>
+     * ({@code POST /dev/bulkV2}, {@code route=dlt}) rather than the Smart-OTP
+     * endpoint used by {@link #sendOtp}.
+     *
+     * <p>The DLT route addresses a message by its approved
+     * {@code message} (content-template) id together with the {@code entity_id}
+     * (principal entity) and {@code sender_id} (header), and fills the template's
+     * {@code {#var#}} placeholders from {@code variables_values}. The OTP is that
+     * first (and only) variable.</p>
+     *
+     * <p>Unlike {@link #sendOtp}, a missing DLT credential is a hard failure rather
+     * than a silent dev-mode skip: the API key being present means this is a real
+     * deployment, and swallowing the send there would tell the user "OTP sent"
+     * while nothing was delivered.</p>
+     */
+    public void sendPasswordResetOtp(String mobile, String otp) {
+        if (config.getApiKey() == null || config.getApiKey().isBlank()) {
+            log.warn("Fast2SMS API key not configured — DEV MODE: password-reset OTP for {} is {}", mask(mobile), otp);
+            return;
+        }
+        if (config.getResetMessageId() == null || config.getResetMessageId().isBlank()
+                || config.getResetEntityId() == null || config.getResetEntityId().isBlank()) {
+            log.error("Fast2SMS password-reset DLT credentials not configured "
+                    + "(FAST2SMS_RESET_MESSAGE_ID / FAST2SMS_RESET_ENTITY_ID)");
+            throw new FssaiException(
+                    "Password reset SMS is not configured on the server. Please contact support.",
+                    FailureCode.SMS_FAILURE);
+        }
+        if (config.getSenderId() == null || config.getSenderId().isBlank()) {
+            log.error("Fast2SMS sender id not configured (FAST2SMS_SENDER_ID) — required by the DLT route");
+            throw new FssaiException(
+                    "Password reset SMS is not configured on the server. Please contact support.",
+                    FailureCode.SMS_FAILURE);
         }
 
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("route", "dlt");
+        body.put("sender_id", config.getSenderId());
+        body.put("message", config.getResetMessageId());
+        body.put("entity_id", config.getResetEntityId());
+        // The DLT template's variables, in order, pipe-separated. This template
+        // carries exactly one: the OTP.
+        body.put("variables_values", otp);
+        body.put("numbers", mobile);
+
+        send("/dev/bulkV2", body, "password-reset");
+    }
+
+    private void send(String uri, Map<String, Object> body, String purpose) {
         try {
             String jsonBody = objectMapper.writeValueAsString(body);
 
             // Use exchange() instead of retrieve() so 4xx/5xx bodies (which carry
             // the real Fast2SMS status_code) are read instead of thrown away.
             String rawResponse = restClient.post()
-                    .uri("/dev/otp/send")
+                    .uri(uri)
                     .header("authorization", config.getApiKey())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(jsonBody)
@@ -84,28 +142,53 @@ public class SmsService {
                         return new String(bytes, StandardCharsets.UTF_8);
                     });
 
-            log.info("Fast2SMS /dev/otp/send response for {}: {}", mask(mobile), rawResponse);
+            log.info("Fast2SMS {} ({}) response for {}: {}", uri, purpose, mask(
+                    (String) body.getOrDefault("numbers", body.getOrDefault("mobile", ""))), rawResponse);
 
             JsonNode node = (rawResponse == null || rawResponse.isBlank())
                     ? null : objectMapper.readTree(rawResponse);
 
             if (node == null || !node.path("return").asBoolean(false)) {
                 int statusCode = node != null ? node.path("status_code").asInt(0) : 0;
-                String f2sMessage = node != null ? node.path("message").asText("") : "";
-                log.error("Fast2SMS OTP send rejected: status_code={} message={}", statusCode, f2sMessage);
+                String f2sMessage = node != null ? messageOf(node) : "";
+                log.error("Fast2SMS OTP send rejected ({}): status_code={} message={}", purpose, statusCode, f2sMessage);
                 throw toSendException(statusCode, f2sMessage);
             }
 
-            log.info("Fast2SMS OTP sent to {} (request_id={})",
-                    mask(mobile), node.path("request_id").asText(""));
+            log.info("Fast2SMS OTP ({}) accepted (request_id={})",
+                    purpose, node.path("request_id").asText(""));
         } catch (FssaiException e) {
             throw e;
         } catch (Exception e) {
-            log.error("Fast2SMS OTP send error: {}", e.getMessage(), e);
+            log.error("Fast2SMS OTP send error ({}): {}", purpose, e.getMessage(), e);
             throw new FssaiException(
                     "We couldn't send the OTP right now. Please try again.",
                     FailureCode.SMS_FAILURE);
         }
+    }
+
+    /**
+     * Reads the gateway's {@code message} field. It is an array on the DLT route
+     * (e.g. {@code ["Message sent successfully"]}) and a plain string on the
+     * Smart-OTP route and on every error body.
+     */
+    private static String messageOf(JsonNode node) {
+        JsonNode message = node.get("message");
+        if (message == null || message.isNull()) return "";
+        if (message.isTextual()) return message.asText();
+        if (message.isArray()) {
+            StringBuilder joined = new StringBuilder();
+            for (JsonNode item : message) {
+                if (joined.length() > 0) joined.append(" ");
+                joined.append(item.asText());
+            }
+            return joined.toString();
+        }
+        return message.asText("");
+    }
+
+    private static void putIfPresent(Map<String, Object> body, String key, String value) {
+        if (value != null && !value.isBlank()) body.put(key, value);
     }
 
     private static String mask(String mobile) {

@@ -29,6 +29,8 @@ fun LoginScreen(
     onInitMsmeCaptcha: (onResult: (sessionId: String, captchaImage: String) -> Unit) -> Unit = { onResult -> onResult("", "") },
     onMsmeLoginRequest: (msmeNumber: String, onResult: (success: Boolean, message: String?, limit: RateLimitInfo?) -> Unit) -> Unit = { _, _ -> },
     onMsmeLoginVerify: (msmeNumber: String, otp: String, onResult: (success: Boolean, message: String?) -> Unit) -> Unit = { _, _, _ -> },
+    onForgotPasswordRequest: (mobile: String, onResult: (success: Boolean, message: String?, limit: RateLimitInfo?) -> Unit) -> Unit = { _, _ -> },
+    onForgotPasswordReset: (mobile: String, otp: String, password: String, onResult: (success: Boolean, message: String?) -> Unit) -> Unit = { _, _, _, _ -> },
     onGoogleSignIn: () -> Unit = {},
     onBackToMain: () -> Unit,
     isDarkTheme: Boolean = true,
@@ -207,7 +209,7 @@ fun LoginScreen(
             }
         }
 
-        val contentAlign = if (selectedView == null || selectedView == "register") Alignment.TopCenter else Alignment.Center
+        val contentAlign = if (selectedView == null || selectedView == "register" || selectedView == "forgot") Alignment.TopCenter else Alignment.Center
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -240,8 +242,24 @@ fun LoginScreen(
                     isChecking = loginIsChecking,
                     onBack = { selectedView = null; loginIsChecking = false },
                     onLogin = { validateAndLogin() },
+                    onForgotPassword = { selectedView = "forgot" },
                     onMsmeLoginRequest = onMsmeLoginRequest,
                     onMsmeLoginVerify = onMsmeLoginVerify
+                )
+
+                "forgot" -> ForgotPasswordScreen(
+                    colors = colors,
+                    lang = lang,
+                    onRequest = onForgotPasswordRequest,
+                    onReset = onForgotPasswordReset,
+                    onBack = { selectedView = true },
+                    onDone = {
+                        // The reset succeeded: land on the sign-in form with the stale
+                        // password cleared so the new one can be typed straight in.
+                        selectedView = true
+                        loginPassword = ""
+                        loginPasswordError = false
+                    }
                 )
 
                 "register" -> RegisterForm(

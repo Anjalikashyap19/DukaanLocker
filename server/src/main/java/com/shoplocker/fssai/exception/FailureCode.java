@@ -63,7 +63,10 @@ public enum FailureCode {
     /** Submitted OTP did not match the active challenge. */
     INVALID_OTP              ("invalid_otp",               HttpStatus.UNAUTHORIZED),
     /** Active OTP challenge expired or was already consumed. */
-    OTP_EXPIRED              ("otp_expired",               HttpStatus.UNAUTHORIZED),
+    OTP_EXPIRED              ("otp_expired",              HttpStatus.UNAUTHORIZED),
+    /** Password reset was attempted for an account that has no password to reset
+     *  (MSME / Udyam login, Google sign-in) or for a non-admin role. */
+    PASSWORD_RESET_NOT_ALLOWED("password_reset_not_allowed", HttpStatus.FORBIDDEN),
 
     /** Rasterizer itself crashed (native lib failure, OOM, etc.) - NOT for client-bad PDFs.
      *  Corrupted / encrypted / image-only PDFs use UNSUPPORTED_DOCUMENT_FORMAT (400) instead. */

@@ -46,6 +46,7 @@ fun OwnerLoginForm(
     isChecking: Boolean,
     onBack: () -> Unit,
     onLogin: () -> Unit,
+    onForgotPassword: () -> Unit = {},
     onMsmeLoginRequest: (msmeNumber: String, onResult: (Boolean, String?, RateLimitInfo?) -> Unit) -> Unit = { _, _ -> },
     onMsmeLoginVerify: (msmeNumber: String, otp: String, onResult: (Boolean, String?) -> Unit) -> Unit = { _, _, _ -> }
 ) {
@@ -188,6 +189,23 @@ fun OwnerLoginForm(
                 ),
                 shape = RoundedCornerShape(12.dp)
             )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(
+                    onClick = onForgotPassword,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    Text(
+                        AppStrings.get(lang, "Forgot password?"),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = colors.primary
+                    )
+                }
+            }
 
             Button(
                 onClick = onLogin,

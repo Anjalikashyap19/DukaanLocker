@@ -337,6 +337,38 @@ data class MsmeOtpResponse(
     @SerializedName("remainingSends") val remainingSends: Int? = null
 )
 
+// ── Owner password reset (forgot password) ───────────────────────────────
+
+/** Step 1: ask for an OTP against a registered owner mobile number. */
+data class ForgotPasswordRequest(
+    @SerializedName("mobileNumber") val mobileNumber: String
+)
+
+/** Step 2: verify the OTP and store the new password. */
+data class ResetPasswordRequest(
+    @SerializedName("mobileNumber") val mobileNumber: String,
+    @SerializedName("otp") val otp: String,
+    @SerializedName("password") val password: String
+)
+
+/**
+ * Sent by both `forgot-password` and `reset-password`'s send step. Fields mirror
+ * [MsmeOtpResponse] because both flows share the same server-side OTP machinery;
+ * `message` is deliberately opaque (it never confirms whether the mobile is a
+ * registered owner account).
+ */
+data class OtpSendResponse(
+    @SerializedName("requestId") val requestId: String?,
+    @SerializedName("message") val message: String?,
+    @SerializedName("resendAvailableInSeconds") val resendAvailableInSeconds: Int? = null,
+    @SerializedName("remainingSends") val remainingSends: Int? = null
+)
+
+data class MessageResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("message") val message: String?
+)
+
 // ── GST Verification ─────────────────────────────────────────────────────
 
 data class GstVerificationResponse(
