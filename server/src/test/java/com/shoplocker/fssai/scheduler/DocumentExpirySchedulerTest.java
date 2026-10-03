@@ -345,4 +345,29 @@ class DocumentExpirySchedulerTest {
 
         assertThat(run()).isEmpty();
     }
+
+    @Test
+    @DisplayName("GST is permanent: a stale expiry date never triggers an alert")
+    void gstNeverNotifiedEvenIfExpiryDatePresent() {
+        // Legacy row written before GST was treated as permanent.
+        Document doc = createDoc(DocumentType.GST, -500);
+        doc.setStatus(DocumentStatus.EXPIRED);
+        documentRepository.save(doc);
+
+        assertThat(run()).isEmpty();
+        assertThat(runCatchUp()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("GST is permanent: it is not flipped to EXPIRED either")
+    void gstStatusNotSyncedToExpired() {
+        Document doc = createDoc(DocumentType.GST, -500);
+        documentRepository.saveAndFlush(doc);
+
+        scheduler.checkExpiringDocuments();
+
+        // Status is untouched by the scheduler - nothing left it as expired.
+        assertThat(documentRepository.findById(doc.getId()).orElseThrow().getStatus())
+                .isNotEqualTo(DocumentStatus.EXPIRED);
+    }
 }

@@ -2,6 +2,7 @@ package com.shoplocker.fssai.service;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.util.Arrays;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service;
 import com.shoplocker.fssai.dto.GstVerificationResponse;
 import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
+import com.shoplocker.fssai.util.BusinessNameMatcher;
 import com.shoplocker.fssai.util.GstHtmlGenerator;
 
 import org.apache.hc.client5.http.classic.methods.HttpGet;
@@ -61,6 +63,27 @@ public class GstVerificationService {
      * @return GstVerificationResponse with taxpayer details, PDF URL, and HTML certificate
      */
     public GstVerificationResponse verifyGstNumber(String gstNumber, Long userId, Long shopId) {
+        return verifyGstNumber(gstNumber, userId, shopId, null, null);
+    }
+
+    /**
+     * Verifies a GST number against the API Setu GSTN Taxpayer Verification API,
+     * generates a PDF certificate, and uploads it to local storage.
+     *
+     * <p>When {@code shopName} or {@code ownerName} is supplied, the taxpayer name
+     * returned by GSTN must match it before any certificate is generated or uploaded.
+     * A mismatch aborts the flow with a user-facing error, so a GST certificate
+     * belonging to another business is never attached to this shop.</p>
+     *
+     * @param gstNumber   the GST number to verify (e.g., "27AAPFU0939F1ZV")
+     * @param userId      the DL user ID for folder structure
+     * @param shopId      the shop ID for folder structure
+     * @param shopName    the shop name the user created (null = skip validation)
+     * @param ownerName   the shop owner name (null = skip validation)
+     * @return GstVerificationResponse with taxpayer details, PDF URL and HTML certificate
+     */
+    public GstVerificationResponse verifyGstNumber(String gstNumber, Long userId, Long shopId,
+                                                   String shopName, String ownerName) {
         String normalizedGst = gstNumber.toUpperCase().trim();
 
         // Step 1: Call API Setu
@@ -69,7 +92,22 @@ public class GstVerificationService {
         // Step 2: Parse response
         GstVerificationResponse parsed = parseGstResponse(responseBody, normalizedGst);
 
-        // Step 3: If verification succeeded, generate PDF and upload to S3
+        // Step 3: the certificate must belong to the user's own shop — compare the
+        // legal / trade name from GSTN with the shop and owner names the user created.
+        // Checked BEFORE the PDF is generated / uploaded so nothing is created on a mismatch.
+        if (parsed.isSuccess() && !BusinessNameMatcher.matchesAny(
+                Arrays.asList(shopName, ownerName),
+                Arrays.asList(parsed.getLegalName(), parsed.getTradeName()))) {
+            String registeredName = firstNonBlank(parsed.getTradeName(), parsed.getLegalName());
+            log.info("GSTIN {} rejected: taxpayer name '{}' / '{}' does not match shop name '{}' (owner '{}')",
+                    normalizedGst, parsed.getLegalName(), parsed.getTradeName(), shopName, ownerName);
+            return GstVerificationResponse.error(
+                    "Seems like this GST certificate doesn't belong to your shop"
+                            + (registeredName != null ? ". It is registered to \"" + registeredName + "\"" : "")
+                            + ".");
+        }
+
+        // Step 4: If verification succeeded, generate PDF and upload to S3
         if (parsed.isSuccess()) {
             try {
                 String certificateHtml = GstHtmlGenerator.generateCertificateHtml(
@@ -261,6 +299,17 @@ public class GstVerificationService {
         JsonNode node = root.get(fieldName);
         if (node != null && !node.isNull()) {
             return node.asText();
+        }
+        return null;
+    }
+
+    /**
+     * Returns the first value that is neither null nor blank, or {@code null} when
+     * every candidate is empty. Used to show the taxpayer name in mismatch errors.
+     */
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.trim().isEmpty()) return value.trim();
         }
         return null;
     }

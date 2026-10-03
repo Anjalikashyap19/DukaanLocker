@@ -6,6 +6,7 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
+import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -232,5 +233,66 @@ public class FssaiVerificationServiceTest {
                 "Canara Juice Corner", "SHYAM SUNDAR / CANARA JUICE JUNCTION"));
         assertFalse(FssaiVerificationService.businessNameMatches(
                 "Sharma Traders", "SHYAM SUNDAR / CANARA JUICE JUNCTION"));
+    }
+
+    // ---- extractExpiryDate: the expiry-only lookup used by the upload fallback ----
+
+    @Test
+    void expiryOnlyLookupReadsExpiryFromLicensePayload() {
+        FssaiVerificationService service = new FssaiVerificationService(null);
+
+        assertEquals(LocalDateTime.of(2028, 9, 10, 0, 0), service.extractExpiryDate(LICENSE_JSON));
+    }
+
+    @Test
+    void expiryOnlyLookupReturnsNullWhenLicenseNodeMissing() {
+        FssaiVerificationService service = new FssaiVerificationService(null);
+
+        assertNull(service.extractExpiryDate("{\"details\":{\"companyName\":\"X\"}}"));
+        assertNull(service.extractExpiryDate("{}"));
+    }
+
+    @Test
+    void expiryOnlyLookupReturnsNullWhenExpiryAbsentOrUnusable() {
+        FssaiVerificationService service = new FssaiVerificationService(null);
+
+        // Registration-style licence with no expiry printed upstream
+        assertNull(service.extractExpiryDate("{\"license\":{\"LicenseNo\":\"21221160000115\"}}"));
+        assertNull(service.extractExpiryDate("{\"license\":{\"expiryDate\":null}}"));
+        assertNull(service.extractExpiryDate("{\"license\":{\"expiryDate\":\"  \"}}"));
+        assertNull(service.extractExpiryDate("{\"license\":{\"expiryDate\":\"not a date\"}}"));
+        assertNull(service.extractExpiryDate("{\"license\":{\"expiryDate\":\"10-09-202\"}}"));
+    }
+
+    /**
+     * The expiry formatter uses SMART resolution, so an impossible day is nudged
+     * into the month rather than rejected. Documented here because the fallback
+     * relies on it: a slightly-off upstream date still yields an alert instead of
+     * silently losing the expiry altogether.
+     */
+    @Test
+    void expiryOnlyLookupNormalisesImpossibleDayRatherThanDroppingIt() {
+        FssaiVerificationService service = new FssaiVerificationService(null);
+
+        // 31 Feb 2028 -> 29 Feb 2028 (2028 is a leap year)
+        assertEquals(LocalDateTime.of(2028, 2, 29, 0, 0),
+                service.extractExpiryDate("{\"license\":{\"expiryDate\":\"31-02-2028\"}}"));
+    }
+
+    @Test
+    void expiryOnlyLookupSwallowsMalformedPayloadInsteadOfThrowing() {
+        FssaiVerificationService service = new FssaiVerificationService(null);
+
+        assertNull(service.extractExpiryDate("not json at all"));
+        assertNull(service.extractExpiryDate(""));
+    }
+
+    @Test
+    void expiryOnlyLookupShortCircuitsOnBlankLicenseNumber() {
+        FssaiVerificationService service = new FssaiVerificationService(null);
+
+        // Must not attempt any upstream call for a missing number.
+        assertTrue(service.fetchExpiryDateOnly(null).isEmpty());
+        assertTrue(service.fetchExpiryDateOnly("   ").isEmpty());
     }
 }

@@ -3,6 +3,7 @@ package com.shoplocker.fssai.controller;
 import com.shoplocker.fssai.dto.GstFetchRequest;
 import com.shoplocker.fssai.dto.GstVerificationResponse;
 import com.shoplocker.fssai.entity.DocumentType;
+import com.shoplocker.fssai.entity.Shop;
 import com.shoplocker.fssai.entity.User;
 import com.shoplocker.fssai.service.GstVerificationService;
 import com.shoplocker.fssai.service.ShopAccessService;
@@ -53,6 +54,9 @@ public class GstVerificationController {
             description = "Verifies a GSTIN against the government portal via API Setu, " +
                           "generates a PDF certificate, uploads it to local storage, " +
                           "and persists it as a GST document for the given shop. " +
+                          "The taxpayer name returned by GSTN must match the shop / owner " +
+                          "name the user created — otherwise no certificate is created and " +
+                          "an error is returned. " +
                           "Returns the verification details including the PDF URL."
     )
     @PostMapping("/fetch")
@@ -66,7 +70,16 @@ public class GstVerificationController {
         Long shopId = Long.parseLong(request.getShopId());
         shopAccessService.validateShopAccess(user, shopId);
 
-        GstVerificationResponse verification = gstService.verifyGstNumber(request.getGstin(), user.getId(), shopId);
+        // The certificate may only be created when the taxpayer name returned by GSTN
+        // matches the shop / owner name the user created.
+        Shop shop = shopService.getShopById(shopId);
+
+        GstVerificationResponse verification = gstService.verifyGstNumber(
+                request.getGstin(),
+                user.getId(),
+                shopId,
+                shop != null ? shop.getShopName() : null,
+                shop != null ? shop.getOwnerName() : null);
 
         if (!verification.isSuccess()) {
             return ResponseEntity.ok(verification);

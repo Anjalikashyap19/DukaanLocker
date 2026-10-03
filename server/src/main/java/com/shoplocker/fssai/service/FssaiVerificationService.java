@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import com.shoplocker.fssai.dto.FssaiVerificationResponse;
 import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
+import com.shoplocker.fssai.util.BusinessNameMatcher;
 import com.shoplocker.fssai.util.FssaiHtmlGenerator;
 
 import org.apache.hc.client5.http.classic.methods.HttpGet;
@@ -429,32 +430,7 @@ public class FssaiVerificationService {
      * so the fetch is not blocked.</p>
      */
     static boolean businessNameMatches(String shopName, String apiCompanyName) {
-        if (shopName == null || shopName.trim().isEmpty()) return true;
-        if (apiCompanyName == null || apiCompanyName.trim().isEmpty()) return true;
-
-        String shop = normalizeName(shopName);
-        if (shop.isEmpty()) return true;
-
-        if (containsIgnoreCase(shop, normalizeName(apiCompanyName))) return true;
-
-        // FSSAI often returns "OWNER NAME / BUSINESS NAME" — try each segment too
-        for (String segment : apiCompanyName.split("[/|,&]")) {
-            if (containsIgnoreCase(shop, normalizeName(segment))) return true;
-        }
-        return false;
-    }
-
-    private static boolean containsIgnoreCase(String a, String b) {
-        if (b.isEmpty()) return false;
-        return a.equals(b) || a.contains(b) || b.contains(a);
-    }
-
-    private static String normalizeName(String name) {
-        return name.toLowerCase()
-                .replaceAll("\\b(private limited|pvt ltd|pvt\\. ltd\\.?|ltd\\.?|llp|inc\\.?|co\\.?|company|enterprise|enterprises|trading|traders)\\b", "")
-                .replaceAll("[^a-z0-9 ]", "")
-                .replaceAll("\\s+", " ")
-                .trim();
+        return BusinessNameMatcher.matches(shopName, apiCompanyName);
     }
 
     /**
