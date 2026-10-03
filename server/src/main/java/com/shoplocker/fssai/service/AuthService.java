@@ -9,6 +9,8 @@ import com.shoplocker.fssai.dto.GoogleRegisterRequest;
 import com.shoplocker.fssai.dto.LoginRequest;
 import com.shoplocker.fssai.dto.ManagerCodeLoginRequest;
 import com.shoplocker.fssai.dto.MessageResponse;
+import com.shoplocker.fssai.dto.MobileHintRequest;
+import com.shoplocker.fssai.dto.MobileHintResponse;
 import com.shoplocker.fssai.dto.MsmeAuthResponse;
 import com.shoplocker.fssai.dto.MsmeOtpRequest;
 import com.shoplocker.fssai.dto.MsmeOtpResponse;
@@ -103,6 +105,13 @@ public class AuthService {
      */
     private static final String PASSWORD_RESET_REQUEST_MESSAGE =
             "If this mobile number is registered to an owner account, an OTP has been sent to it.";
+
+    /**
+     * Masked-hint lookups a single client IP may make per window. The hint is a
+     * courtesy, not a gate: a real user asks once, and a scraper enumerating emails
+     * should run out long before it matters.
+     */
+    private static final int HINT_MAX_PER_IP = 30;
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -984,6 +993,47 @@ public class AuthService {
         createLoginNotifications(user);
         log.info("MSME login successful: userId={} udyam={}", user.getId(), udyamNumber);
         return AuthResponse.from(user, token);
+    }
+
+    /**
+     * Masked mobile hint for the forgot-password screen.
+     *
+     * <p>The reset screen asks for a registered mobile number, and an owner who has
+     * forgotten their password often cannot recall which number they signed up with.
+     * Given the email already typed on the sign-in form, this returns the last three
+     * digits of that account's mobile — enough to recognise the number, never enough
+     * to address an SMS to it.</p>
+     *
+     * <p>It returns the tail only for accounts that could actually complete a reset
+     * ({@link #canResetPassword}), so managers, MSME (Udyam) users, disabled accounts
+     * and unknown emails all get the same empty answer. Unlike the OTP endpoints this
+     * does deliberately distinguish "matched an eligible account" from "no match" —
+     * that distinction is the feature — so it is throttled per client IP and only ever
+     * exposes three digits.</p>
+     */
+    public MobileHintResponse mobileHint(MobileHintRequest request, String clientIp) {
+        String email = normalizeEmail(request.getEmailId());
+
+        String ipKey = "hint:ip:" + (clientIp == null || clientIp.isBlank() ? "unknown" : clientIp);
+        if (loginAttemptService.isOverLimit(ipKey, HINT_MAX_PER_IP)) {
+            log.info("Mobile hint suppressed: caller over the per-IP limit");
+            return new MobileHintResponse(null);
+        }
+        loginAttemptService.recordUse(ipKey);
+
+        if (email == null || !email.contains("@")) return new MobileHintResponse(null);
+
+        User user = userRepository.findByEmailId(email).orElse(null);
+        if (!canResetPassword(user)) {
+            log.info("Mobile hint: no eligible account for {}", maskEmail(email));
+            return new MobileHintResponse(null);
+        }
+
+        String mobile = user.getMobileNumber();
+        if (mobile == null || mobile.length() < 4) return new MobileHintResponse(null);
+
+        log.info("Mobile hint issued for userId={} {}", user.getId(), maskEmail(email));
+        return new MobileHintResponse(mobile.substring(mobile.length() - 3));
     }
 
     /**

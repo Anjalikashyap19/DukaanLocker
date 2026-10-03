@@ -1,5 +1,6 @@
 package com.shoplocker.fssai;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shoplocker.fssai.entity.Role;
 import com.shoplocker.fssai.entity.User;
@@ -10,6 +11,7 @@ import com.shoplocker.fssai.repository.NotificationRepository;
 import com.shoplocker.fssai.repository.OtpChallengeRepository;
 import com.shoplocker.fssai.repository.ShopRepository;
 import com.shoplocker.fssai.repository.UserRepository;
+import com.shoplocker.fssai.service.LoginAttemptService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -52,9 +54,13 @@ class ForgotPasswordIntegrationTest {
     @Autowired private DocumentRepository documentRepository;
     @Autowired private ShopRepository shopRepository;
     @Autowired private PasswordEncoder passwordEncoder;
+    @Autowired private LoginAttemptService loginAttemptService;
 
     private static final String GENERIC_MESSAGE =
             "If this mobile number is registered to an owner account, an OTP has been sent to it.";
+
+    /** MockMvc reports every caller as coming from this address. */
+    private static final String HINT_KEY = "hint:ip:127.0.0.1";
 
     /** Deletes in FK order — registration and login create notifications that
      *  reference the user. */
@@ -67,6 +73,9 @@ class ForgotPasswordIntegrationTest {
         shopRepository.deleteAll();
         userRepository.deleteAll();
         otpChallengeRepository.deleteAll();
+        // The hint throttle is per IP and MockMvc always looks like the same caller,
+        // so a test that exhausts the budget would starve the ones after it.
+        loginAttemptService.reset(HINT_KEY);
     }
 
     // ---------------------------------------------------------------- helpers
@@ -252,5 +261,77 @@ class ForgotPasswordIntegrationTest {
                         .content("{\"mobileNumber\": \"12345\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("validation_failed"));
+    }
+
+    // ------------------------------------------------------ masked mobile hint
+
+    /** @return the reported mobile ending, or {@code null} when the field is absent. */
+    private String hint(String email) throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/auth/mobile-hint")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"emailId\": \"%s\"}".formatted(email)))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
+        JsonNode ending = node.get("mobileEnding");
+        return (ending == null || ending.isNull()) ? null : ending.asText();
+    }
+
+    @Test
+    @DisplayName("the hint shows the tail of an owner's registered mobile")
+    void eligibleOwnerGetsMaskedHint() throws Exception {
+        String mobile = "9000000007";
+        registerOwner(mobile);
+
+        assertThat(hint("owner9000000007@example.com")).isEqualTo("007");
+        // Whatever the user typed on the sign-in form must not have to match the
+        // stored casing (clients trim before sending; @Email rejects stray spaces).
+        assertThat(hint("Owner9000000007@Example.COM")).isEqualTo("007");
+    }
+
+    @Test
+    @DisplayName("unknown emails and non-owner accounts get no hint")
+    void ineligibleAccountsGetNoHint() throws Exception {
+        assertThat(hint("nobody@example.com")).isNull();
+    }
+
+    @Test
+    @DisplayName("a registered manager gets no password-reset hint")
+    void managerGetsNoHint() throws Exception {
+        User manager = new User();
+        manager.setUserName("Ravi Manager");
+        manager.setMobileNumber("9000000008");
+        manager.setEmailId("ravi.hint@example.com");
+        manager.setPassword(passwordEncoder.encode("Strong@123"));
+        manager.setRole(Role.MANAGER);
+        manager.setEnabled(true);
+        userRepository.save(manager);
+
+        assertThat(hint("ravi.hint@example.com")).isNull();
+    }
+
+    @Test
+    @DisplayName("a malformed email is rejected by validation")
+    void malformedEmailIsRejected() throws Exception {
+        mockMvc.perform(post("/api/auth/mobile-hint")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"emailId\": \"not-an-email\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_failed"));
+    }
+
+    @Test
+    @DisplayName("hint lookups are throttled per client IP")
+    void hintIsThrottledPerIp() throws Exception {
+        String mobile = "9000000009";
+        registerOwner(mobile);
+
+        for (int i = 1; i <= 30; i++) {
+            assertThat(hint("owner9000000009@example.com"))
+                    .as("lookup %d", i)
+                    .isEqualTo("009");
+        }
+        // The 31st lookup inside the window is suppressed rather than answered.
+        assertThat(hint("owner9000000009@example.com")).isNull();
     }
 }

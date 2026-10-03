@@ -31,6 +31,7 @@ fun LoginScreen(
     onMsmeLoginVerify: (msmeNumber: String, otp: String, onResult: (success: Boolean, message: String?) -> Unit) -> Unit = { _, _, _ -> },
     onForgotPasswordRequest: (mobile: String, onResult: (success: Boolean, message: String?, limit: RateLimitInfo?) -> Unit) -> Unit = { _, _ -> },
     onForgotPasswordReset: (mobile: String, otp: String, password: String, onResult: (success: Boolean, message: String?) -> Unit) -> Unit = { _, _, _, _ -> },
+    onMobileHint: (email: String, onResult: (mobileEnding: String?) -> Unit) -> Unit = { _, onResult -> onResult(null) },
     onGoogleSignIn: () -> Unit = {},
     onBackToMain: () -> Unit,
     isDarkTheme: Boolean = true,
@@ -78,6 +79,11 @@ fun LoginScreen(
     var loginIsChecking by remember { mutableStateOf(false) }
     var loginEmailError by remember { mutableStateOf(false) }
     var loginPasswordError by remember { mutableStateOf(false) }
+
+    // Tail of the registered mobile, looked up from the email typed above so the
+    // reset screen can say which number it is asking for. Null until the server
+    // answers (or when there is no email to ask about).
+    var mobileEnding by remember { mutableStateOf<String?>(null) }
 
     var accessCode by remember { mutableStateOf("") }
     var codeError by remember { mutableStateOf(false) }
@@ -242,7 +248,16 @@ fun LoginScreen(
                     isChecking = loginIsChecking,
                     onBack = { selectedView = null; loginIsChecking = false },
                     onLogin = { validateAndLogin() },
-                    onForgotPassword = { selectedView = "forgot" },
+                    onForgotPassword = {
+                        selectedView = "forgot"
+                        mobileEnding = null
+                        // Ask in the background: the screen opens immediately and
+                        // picks up the tail as soon as the server answers.
+                        val typedEmail = loginEmail.trim()
+                        if (typedEmail.isNotEmpty()) {
+                            onMobileHint(typedEmail) { ending -> mobileEnding = ending }
+                        }
+                    },
                     onMsmeLoginRequest = onMsmeLoginRequest,
                     onMsmeLoginVerify = onMsmeLoginVerify
                 )
@@ -250,6 +265,7 @@ fun LoginScreen(
                 "forgot" -> ForgotPasswordScreen(
                     colors = colors,
                     lang = lang,
+                    mobileEnding = mobileEnding,
                     onRequest = onForgotPasswordRequest,
                     onReset = onForgotPasswordReset,
                     onBack = { selectedView = true },

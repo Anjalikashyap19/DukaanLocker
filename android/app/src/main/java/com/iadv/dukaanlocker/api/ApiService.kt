@@ -26,6 +26,9 @@ interface ApiService {
     @POST("api/auth/forgot-password")
     suspend fun forgotPassword(@Body request: ForgotPasswordRequest): Response<OtpSendResponse>
 
+    @POST("api/auth/mobile-hint")
+    suspend fun mobileHint(@Body request: MobileHintRequest): Response<MobileHintResponse>
+
     @POST("api/auth/reset-password")
     suspend fun resetPassword(@Body request: ResetPasswordRequest): Response<MessageResponse>
 

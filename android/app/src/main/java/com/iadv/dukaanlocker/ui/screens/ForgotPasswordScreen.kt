@@ -44,6 +44,7 @@ import kotlinx.coroutines.delay
 fun ForgotPasswordScreen(
     colors: AppColors,
     lang: String,
+    mobileEnding: String? = null,
     onRequest: (mobile: String, onResult: (Boolean, String?, RateLimitInfo?) -> Unit) -> Unit,
     onReset: (mobile: String, otp: String, password: String, onResult: (Boolean, String?) -> Unit) -> Unit,
     onBack: () -> Unit,
@@ -152,7 +153,17 @@ fun ForgotPasswordScreen(
                         AppStrings.get(
                             lang,
                             when (step) {
-                                "mobile" -> "Enter the mobile number registered to your account"
+                                "mobile" ->
+                                    // The tail comes from the email typed on the sign-in
+                                    // form; without it we can only describe the number.
+                                    if (mobileEnding != null) {
+                                        String.format(
+                                            AppStrings.get(lang, "Registered mobile number ending with %s"),
+                                            mobileEnding
+                                        )
+                                    } else {
+                                        AppStrings.get(lang, "Enter the mobile number registered to your account")
+                                    }
                                 "otp" -> "Enter the OTP sent to your mobile"
                                 else -> "Choose a new password"
                             }

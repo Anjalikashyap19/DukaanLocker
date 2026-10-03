@@ -7,6 +7,8 @@ import com.shoplocker.fssai.dto.GoogleRegisterRequest;
 import com.shoplocker.fssai.dto.LoginRequest;
 import com.shoplocker.fssai.dto.ManagerCodeLoginRequest;
 import com.shoplocker.fssai.dto.MessageResponse;
+import com.shoplocker.fssai.dto.MobileHintRequest;
+import com.shoplocker.fssai.dto.MobileHintResponse;
 import com.shoplocker.fssai.dto.MsmeAuthResponse;
 import com.shoplocker.fssai.dto.MsmeOtpRequest;
 import com.shoplocker.fssai.dto.MsmeOtpVerifyRequest;
@@ -172,6 +174,21 @@ public class AuthController {
     }
 
     @Operation(
+            summary = "Forgot password — masked mobile hint",
+            description = "Looks up the email typed on the sign-in form and returns the last three digits of the " +
+                          "registered mobile for an account that may reset its password, so the user can recognise " +
+                          "their own number when asked for it. Unknown emails, managers and MSME (Udyam) accounts " +
+                          "all get an empty hint. Throttled per client IP."
+    )
+    @SecurityRequirements
+    @PostMapping("/mobile-hint")
+    public ResponseEntity<MobileHintResponse> mobileHint(
+            @Valid @RequestBody MobileHintRequest request,
+            HttpServletRequest httpRequest) {
+        return ResponseEntity.ok(authService.mobileHint(request, clientIp(httpRequest)));
+    }
+
+    @Operation(
             summary = "Forgot password — request OTP",
             description = "Sends a one-time code to the registered mobile of an owner (ADMIN) account so its " +
                           "password can be reset. The response is identical whether or not the mobile is registered, " +
@@ -197,5 +214,18 @@ public class AuthController {
             @Valid @RequestBody ResetPasswordRequest request) {
         MessageResponse response = authService.resetPassword(request);
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Real client IP for throttling, as sent by the fronting nginx
+     * ({@code X-Real-IP}), falling back to the socket address.
+     *
+     * <p>Safe to trust: the app's port is bound to localhost so only the local proxy
+     * can reach it, and nginx overwrites the header from {@code $remote_addr} rather
+     * than passing a client-supplied value through.</p>
+     */
+    private static String clientIp(HttpServletRequest request) {
+        String realIp = request.getHeader("X-Real-IP");
+        return (realIp == null || realIp.isBlank()) ? request.getRemoteAddr() : realIp.trim();
     }
 }

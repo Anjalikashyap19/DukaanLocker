@@ -726,6 +726,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Last three digits of the mobile registered to [email], so the forgot-password
+     * screen can tell the user which number it is asking for. Null whenever the
+     * server declines to hint — unknown email, manager/MSME account, or throttled.
+     */
+    fun mobileHint(email: String, onResult: (String?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val response = api.mobileHint(MobileHintRequest(emailId = email.trim()))
+                onResult(if (response.isSuccessful) response.body()?.mobileEnding else null)
+            } catch (e: Exception) {
+                onResult(null)
+            }
+        }
+    }
+
+    /**
      * Requests a password-reset OTP for a registered owner mobile number.
      *
      * The server answers identically whether or not the number holds an eligible

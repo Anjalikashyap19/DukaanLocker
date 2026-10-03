@@ -344,6 +344,19 @@ data class ForgotPasswordRequest(
     @SerializedName("mobileNumber") val mobileNumber: String
 )
 
+/**
+ * Masked-tail lookup for the forgot-password screen, keyed by the email already
+ * typed on the sign-in form. The answer is only ever the last three digits, and
+ * only for accounts that can actually reset a password.
+ */
+data class MobileHintRequest(
+    @SerializedName("emailId") val emailId: String
+)
+
+data class MobileHintResponse(
+    @SerializedName("mobileEnding") val mobileEnding: String?
+)
+
 /** Step 2: verify the OTP and store the new password. */
 data class ResetPasswordRequest(
     @SerializedName("mobileNumber") val mobileNumber: String,
