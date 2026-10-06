@@ -117,8 +117,6 @@ public class FssaiHtmlGenerator {
                 "\n" +
                 "  /* ===== HEADER ===== */\n" +
                 "  .header { text-align:center; padding:8px 16px 6px; border-bottom:2px solid #1B3A5C; }\n" +
-                "  .header-ministry { font-size:7.5pt; letter-spacing:2px; text-transform:uppercase; color:#666; margin-bottom:1px; }\n" +
-                "  .header-govt { font-size:11.5pt; font-weight:bold; letter-spacing:1.5px; text-transform:uppercase; color:#1B3A5C; margin-bottom:2px; }\n" +
                 "  .header-dept { font-size:8.5pt; letter-spacing:1px; color:#444; margin-bottom:1px; }\n" +
                 "  .header-board { font-size:8pt; letter-spacing:0.8px; color:#666; }\n" +
                 "\n" +
@@ -166,7 +164,6 @@ public class FssaiHtmlGenerator {
                 "  .mb-0 { margin-bottom:0; }\n" +
                 "</style></head><body>\n" +
                 "<div class=\"header\">\n" +
-
                 "  <p class=\"header-dept\">Food Safety and Standards Authority of India</p>\n" +
                 "  <p class=\"header-board\">FSSAI</p>\n" +
                 "</div>\n" +
