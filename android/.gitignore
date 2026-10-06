@@ -15,3 +15,9 @@
 local.properties
 sample.txt
 DukaanLocker-debug.apk
+
+### Android release signing — NEVER commit ###
+keystore/
+keystore.properties
+*.jks
+*.keystore

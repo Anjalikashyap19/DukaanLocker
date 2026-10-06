@@ -53,17 +53,17 @@ fun DukaanLockerApp(
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        if (uri != null && state.pendingUploadDoc != null) {
-            vm.uploadDocument(state.pendingUploadDoc!!, uri)
-            vm.updateState { it.copy(pendingUploadDoc = null) }
+        if (uri != null && vm.pendingUploadDoc != null) {
+            vm.uploadDocument(vm.pendingUploadDoc!!, uri)
+            vm.setPendingUpload(null)
         } else {
-            vm.updateState { it.copy(pendingUploadDoc = null) }
+            vm.setPendingUpload(null)
         }
     }
 
     // Launch file picker when pendingUploadDoc is set
-    LaunchedEffect(state.pendingUploadDoc) {
-        state.pendingUploadDoc?.let {
+    LaunchedEffect(vm.pendingUploadDoc) {
+        vm.pendingUploadDoc?.let {
             filePickerLauncher.launch("application/pdf")
         }
     }
@@ -252,7 +252,7 @@ fun DukaanLockerApp(
                             DocsScreen(
                                 documents = filteredDocuments,
                                 onFetchDoc = { doc -> vm.showFetchDialog(doc) },
-                                onUploadDoc = { doc -> vm.updateState { s -> s.copy(pendingUploadDoc = doc) } },
+                                onUploadDoc = { doc -> vm.setPendingUpload(doc) },
                                 onViewDoc = { doc -> vm.openDocument(doc) },
                                 businesses = filteredBusinesses,
                                 isLoadingDocuments = state.isLoadingDocuments,
@@ -395,7 +395,7 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                         onEditBusiness = { biz -> vm.editBusiness(biz) },
                                         onManageManagers = { vm.setBottomTab(BottomTab.Team) },
                                         onFetchDoc = { doc -> vm.showFetchDialog(doc) },
-                                        onUploadDoc = { doc -> vm.updateState { s -> s.copy(pendingUploadDoc = doc) } },
+                                        onUploadDoc = { doc -> vm.setPendingUpload(doc) },
                                         onViewDoc = { doc -> vm.openDocument(doc) },
                                         onDeleteDoc = { doc -> vm.showToast("${doc.name} - delete via API", ToastType.INFO) },
                                         onLogout = { vm.logout() },
@@ -424,7 +424,7 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                         businesses = state.shops.map { vm.shopToBusiness(it) },
                                         documents = vm.toDocumentItems(state.shopDocuments),
                                         onFetchDoc = { doc -> vm.showFetchDialog(doc) },
-                                        onUploadDoc = { doc -> vm.updateState { s -> s.copy(pendingUploadDoc = doc) } },
+                                        onUploadDoc = { doc -> vm.setPendingUpload(doc) },
                                         onViewDoc = { doc -> vm.openDocument(doc) },
                                         onDeleteDoc = { },
                                         onLogout = { vm.logoutManager() },
@@ -639,8 +639,8 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                         }
 
                         // ── Fetch Document Dialog / Unsupported-type popup ──
-                        if (state.showFetchDialog && state.fetchTargetDoc != null) {
-                            val fetchDoc = state.fetchTargetDoc!!
+                        val fetchDoc = vm.fetchTargetDoc
+                        if (fetchDoc != null) {
                             val shop = state.shops.find { it.id.toString() == fetchDoc.businessId }
                             if (fetchDoc.type in SUPPORTED_FETCH_TYPES) {
                                 FetchDocumentDialog(
@@ -711,8 +711,8 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                         }
 
                         // ── Certificate Viewer Dialog ──
-                        if (state.docForView != null) {
-                            val viewDoc = state.docForView!!
+                        val viewDoc = vm.docForView
+                        if (viewDoc != null) {
                             CertificateViewerDialog(doc = viewDoc, business = vm.findBusinessFor(viewDoc) ?: BusinessProfile(name = state.currentUserName), onDismiss = { vm.dismissCertDialog() })
                         }
 
@@ -807,7 +807,7 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                     // While the fetch dialog (its own window) is open the toast is rendered
                     // inside that dialog instead, so suppress it here to avoid a dimmed duplicate.
                     ToastOverlay(
-                        toasts = if (state.showFetchDialog) emptyList() else state.toastQueue,
+                        toasts = if (vm.fetchTargetDoc != null) emptyList() else state.toastQueue,
                         onDismiss = { vm.dismissToast(it) }
                     )
 

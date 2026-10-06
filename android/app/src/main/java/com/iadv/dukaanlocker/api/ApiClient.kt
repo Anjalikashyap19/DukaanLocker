@@ -35,6 +35,13 @@ object ApiClient {
     private const val LOCAL_DOWN_BACKOFF_MS = 60_000L
     /** Faster connect timeout when failover is on so a dead local host fails fast. */
     private const val FAILOVER_CONNECT_TIMEOUT_SEC = 5L
+    /**
+     * Read timeout for the shared API client. Government-portal proxied endpoints
+     * (/api/udyam/init, document fetches) routinely take 25-60s because the backend
+     * makes two sequential calls to udyamregistration.gov.in. Anything below
+     * [FETCH_TIMEOUT_MS] cuts those calls off before the UI budget expires.
+     */
+    private const val READ_TIMEOUT_SEC = 90L
 
     private const val PREFS_NAME = "dukaan_api_prefs"
     private const val SECURE_PREFS_NAME = "dukaan_secure_prefs"
@@ -336,10 +343,15 @@ object ApiClient {
         }
 
         // Order: auth → failover (rewrite URL) → logging (sees final URL) → network.
+        // readTimeout must stay above FETCH_TIMEOUT_MS (60s): the Udyam init and the
+        // document fetches make two slow calls to government portals, which routinely
+        // take 25-60s end to end. A 30s read timeout aborted them before the
+        // coroutine budget could elapse, so /api/udyam/init returned
+        // "Network error loading captcha".
         val builder = OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(READ_TIMEOUT_SEC, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
 
         failoverInterceptor()?.let { builder.addInterceptor(it) }

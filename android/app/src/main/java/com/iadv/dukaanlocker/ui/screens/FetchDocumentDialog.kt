@@ -121,10 +121,14 @@ fun FetchDocumentDialog(
         if (isMsme && onInitMsmeCaptcha != null && !captchaLoaded && !isLoadingCaptcha) {
             isLoadingCaptcha = true
             onInitMsmeCaptcha { sessionId, captchaBase64 ->
-                msmeSessionId = sessionId
-                msmeCaptchaImage = captchaBase64
+                // Only mark as loaded when a real image came back — otherwise the
+                // empty-string failure path would render "Failed to load captcha"
+                // with no way to retry.
+                val loaded = captchaBase64.isNotBlank()
+                msmeSessionId = if (loaded) sessionId else ""
+                msmeCaptchaImage = if (loaded) captchaBase64 else null
                 isLoadingCaptcha = false
-                captchaLoaded = true
+                captchaLoaded = loaded
             }
         }
     }
@@ -456,13 +460,34 @@ fun FetchDocumentDialog(
                                 isLoadingCaptcha = true
                                 captchaInput = ""
                                 onInitMsmeCaptcha?.invoke { sessionId, captchaBase64 ->
-                                    msmeSessionId = sessionId
-                                    msmeCaptchaImage = captchaBase64
+                                    val loaded = captchaBase64.isNotBlank()
+                                    msmeSessionId = if (loaded) sessionId else ""
+                                    msmeCaptchaImage = if (loaded) captchaBase64 else null
                                     isLoadingCaptcha = false
-                                    captchaLoaded = true
+                                    captchaLoaded = loaded
                                 }
                             }) {
                                 Text("Refresh Captcha", fontSize = 11.sp, color = colors.primary)
+                            }
+                        } else {
+                            // Init failed — offer a retry instead of silently leaving
+                            // the section blank with no way forward.
+                            Text(
+                                "Couldn't load the CAPTCHA from the Udyam portal.",
+                                fontSize = 11.sp,
+                                color = colors.error
+                            )
+                            TextButton(onClick = {
+                                isLoadingCaptcha = true
+                                onInitMsmeCaptcha?.invoke { sessionId, captchaBase64 ->
+                                    val loaded = captchaBase64.isNotBlank()
+                                    msmeSessionId = if (loaded) sessionId else ""
+                                    msmeCaptchaImage = if (loaded) captchaBase64 else null
+                                    isLoadingCaptcha = false
+                                    captchaLoaded = loaded
+                                }
+                            }) {
+                                Text("Retry CAPTCHA", fontSize = 11.sp, color = colors.primary)
                             }
                         }
                     }

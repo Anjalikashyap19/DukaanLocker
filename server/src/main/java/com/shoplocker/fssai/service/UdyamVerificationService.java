@@ -14,8 +14,13 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -49,6 +54,7 @@ import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.Header;
+import org.apache.hc.core5.http.HttpRequest;
 import org.apache.hc.core5.http.NameValuePair;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.message.BasicNameValuePair;
@@ -83,6 +89,17 @@ public class UdyamVerificationService {
     private static final String PRINT_PAGE = BASE_URL + "/Udyam_User/Udyam_PrintApplication.aspx";
     private static final long SESSION_TTL_MS = 5 * 60 * 1000; // 5 minutes
     private static final int MAX_SESSIONS = 1000; // prevent memory exhaustion
+
+    /** Attempts per portal leg (page / captcha) before giving up. */
+    private static final int FETCH_ATTEMPTS = 3;
+    /** Backoff before attempt N+1, so 500ms then 1000ms. */
+    private static final long RETRY_BACKOFF_MS = 500;
+    /**
+     * Wall-clock cap across all retry attempts. Keeps the worst case under the
+     * Android client's 90s read timeout so the phone still renders an error
+     * state rather than hanging on the spinner.
+     */
+    private static final long RETRY_DEADLINE_MS = 45_000;
 
     private static final String USER_AGENT =
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
@@ -137,20 +154,51 @@ public class UdyamVerificationService {
                 .setDefaultRequestConfig(config)
                 .build()) {
 
-            // ── STEP 1: Load verify page to get VIEWSTATE etc. ──
-            HttpGet pageRequest = new HttpGet(VERIFY_PAGE);
-            addBrowserHeaders(pageRequest);
+            // ── STEP 1 + 2 (concurrent): the CAPTCHA URL is derived from the
+            // clock alone and the portal serves it without the page's session
+            // cookie, so the two requests overlap instead of running back to back.
+            // Each call costs 7-12s against the portal, so serialising them pushed
+            // total init latency past the client's read timeout.
+            //
+            // Locale.US: without it a JVM whose default locale renders the "a"
+            // (AM/PM) pattern in the local script — hi-IN, mr-IN, ar-SA — builds a
+            // malformed ?id= and the portal answers 503/HTML instead of a PNG.
+            SimpleDateFormat sdf = new SimpleDateFormat("M/d/yyyy h:mm:ss a", Locale.US);
+            String timestamp = URLEncoder.encode(sdf.format(new Date()), StandardCharsets.UTF_8);
+            String captchaUrl = CAPTCHA_URL_PREFIX + timestamp;
 
             log.info("Udyam init — fetching verify page: {}", VERIFY_PAGE);
-            String html = client.execute(pageRequest, response -> {
-                int status = response.getCode();
-                log.info("Udyam verify page HTTP status: {}", status);
-                if (status != 200) {
-                    throw new IOException("Failed to fetch Udyam verify page, HTTP " + status);
-                }
-                byte[] bytes = EntityUtils.toByteArray(response.getEntity());
-                return new String(bytes, StandardCharsets.UTF_8);
+            log.info("Udyam init — downloading captcha: {}", captchaUrl);
+
+            String html;
+            byte[] captchaBytes;
+            ExecutorService pool = Executors.newFixedThreadPool(2, runnable -> {
+                Thread t = new Thread(runnable, "udyam-init");
+                t.setDaemon(true);
+                return t;
             });
+            try {
+                // The portal answers 503 intermittently (observed on ~2 of 5 CAPTCHA
+                // calls while the page fetch succeeded), so each leg gets a bounded
+                // retry — capped by a wall-clock deadline so the total stays inside
+                // the client's 90s read timeout. HttpGet instances are single-use,
+                // so each attempt builds a fresh request.
+                long deadline = System.currentTimeMillis() + RETRY_DEADLINE_MS;
+                Future<String> pageFuture = pool.submit(() ->
+                        withTransientRetry("verify page", deadline, () -> {
+                            HttpGet pageRequest = new HttpGet(VERIFY_PAGE);
+                            addBrowserHeaders(pageRequest);
+                            return readVerifyPage(client, pageRequest);
+                        }));
+                Future<byte[]> captchaFuture = pool.submit(() ->
+                        withTransientRetry("captcha", deadline,
+                                () -> readCaptcha(client, buildCaptchaRequest(captchaUrl))));
+
+                html = joinFuture(pageFuture, "Udyam verify page");
+                captchaBytes = joinFuture(captchaFuture, "CAPTCHA image");
+            } finally {
+                pool.shutdownNow();
+            }
 
             String viewState = extractHiddenValue(html, "__VIEWSTATE");
             String viewStateGenerator = extractHiddenValue(html, "__VIEWSTATEGENERATOR");
@@ -161,48 +209,6 @@ public class UdyamVerificationService {
             }
             log.info("Udyam init — VIEWSTATE length={}, EVENTVALIDATION length={}",
                     viewState.length(), eventValidation.length());
-
-            // ── STEP 2: Download CAPTCHA image ──
-            SimpleDateFormat sdf = new SimpleDateFormat("M/d/yyyy h:mm:ss a");
-            String timestamp = URLEncoder.encode(sdf.format(new Date()), StandardCharsets.UTF_8);
-            String captchaUrl = CAPTCHA_URL_PREFIX + timestamp;
-            log.info("Udyam init — downloading captcha: {}", captchaUrl);
-
-            HttpGet captchaRequest = new HttpGet(captchaUrl);
-            addBrowserHeaders(captchaRequest);
-            captchaRequest.setHeader("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
-            captchaRequest.setHeader("Sec-Fetch-Dest", "image");
-            captchaRequest.setHeader("Sec-Fetch-Mode", "no-cors");
-            captchaRequest.setHeader("Sec-Fetch-Site", "same-origin");
-
-            byte[] captchaBytes = client.execute(captchaRequest, response -> {
-                int status = response.getCode();
-                log.info("Udyam captcha HTTP status: {}", status);
-                if (status != 200) {
-                    throw new IOException("Failed to download captcha, HTTP " + status);
-                }
-                // Validate that the response is actually an image
-                Header contentTypeHeader = response.getFirstHeader("Content-Type");
-                String contentType = contentTypeHeader != null ? contentTypeHeader.getValue() : "unknown";
-                log.info("Udyam captcha Content-Type: {}", contentType);
-                if (!contentType.toLowerCase().contains("image/")) {
-                    // The portal may have returned an HTML error/challenge page
-                    log.error("Udyam captcha returned non-image content (Content-Type: {})."
-                                    + " The portal may be temporarily blocking automated requests.",
-                            contentType);
-                    throw new IOException(
-                            "Government portal returned non-image content (Content-Type: " + contentType
-                                    + "). The portal may be temporarily blocking automated requests."
-                                    + " Try again in a few minutes.");
-                }
-                byte[] bytes = EntityUtils.toByteArray(response.getEntity());
-                log.info("Udyam captcha downloaded: {} bytes", bytes.length);
-                if (bytes.length < 100) {
-                    log.error("Udyam captcha suspiciously small ({} bytes) — likely not a real captcha image.", bytes.length);
-                    throw new IOException("Government portal returned an invalid captcha image.");
-                }
-                return bytes;
-            });
 
             String captchaBase64 = "data:image/png;base64," + Base64.getEncoder().encodeToString(captchaBytes);
             log.info("Udyam init — captcha prepared (base64 length={})", captchaBase64.length());
@@ -910,6 +916,126 @@ public class UdyamVerificationService {
 
     // ─── HELPERS ───────────────────────────────────────────────────────────
 
+    /** GETs the verify page and returns its HTML body. */
+    private String readVerifyPage(CloseableHttpClient client, HttpGet request) throws IOException {
+        return client.execute(request, response -> {
+            int status = response.getCode();
+            log.info("Udyam verify page HTTP status: {}", status);
+            if (status != 200) {
+                throw new IOException("Failed to fetch Udyam verify page, HTTP " + status);
+            }
+            byte[] bytes = EntityUtils.toByteArray(response.getEntity());
+            return new String(bytes, StandardCharsets.UTF_8);
+        });
+    }
+
+    /** Builds a fresh CAPTCHA request — {@link HttpGet} instances are single-use. */
+    private HttpGet buildCaptchaRequest(String captchaUrl) {
+        HttpGet captchaRequest = new HttpGet(captchaUrl);
+        addBrowserHeaders(captchaRequest);
+        captchaRequest.setHeader("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
+        captchaRequest.setHeader("Sec-Fetch-Dest", "image");
+        captchaRequest.setHeader("Sec-Fetch-Mode", "no-cors");
+        captchaRequest.setHeader("Sec-Fetch-Site", "same-origin");
+        return captchaRequest;
+    }
+
+    /** GETs the CAPTCHA and validates the response really is an image. */
+    private byte[] readCaptcha(CloseableHttpClient client, HttpGet request) throws IOException {
+        return client.execute(request, response -> {
+            int status = response.getCode();
+            log.info("Udyam captcha HTTP status: {}", status);
+            if (status != 200) {
+                throw new IOException("Failed to download captcha, HTTP " + status);
+            }
+            Header contentTypeHeader = response.getFirstHeader("Content-Type");
+            String contentType = contentTypeHeader != null ? contentTypeHeader.getValue() : "unknown";
+            log.info("Udyam captcha Content-Type: {}", contentType);
+            if (!contentType.toLowerCase(Locale.ROOT).contains("image/")) {
+                // The portal may have returned an HTML error/challenge page
+                log.error("Udyam captcha returned non-image content (Content-Type: {})."
+                                + " The portal may be temporarily blocking automated requests.",
+                        contentType);
+                throw new IOException(
+                        "Government portal returned non-image content (Content-Type: " + contentType
+                                + "). The portal may be temporarily blocking automated requests."
+                                + " Try again in a few minutes.");
+            }
+            byte[] bytes = EntityUtils.toByteArray(response.getEntity());
+            log.info("Udyam captcha downloaded: {} bytes", bytes.length);
+            if (bytes.length < 100) {
+                log.error("Udyam captcha suspiciously small ({} bytes) — likely not a real captcha image.", bytes.length);
+                throw new IOException("Government portal returned an invalid captcha image.");
+            }
+            return bytes;
+        });
+    }
+
+    /**
+     * Unwraps a worker-thread result, rethrowing the original {@link IOException}
+     * so callers see the portal's real error rather than an ExecutionException.
+     */
+    private <T> T joinFuture(Future<T> future, String what) throws IOException {
+        try {
+            return future.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while fetching " + what, e);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            if (cause instanceof IOException io) {
+                throw io;
+            }
+            if (cause instanceof RuntimeException re) {
+                throw re;
+            }
+            throw new IOException("Failed to fetch " + what + ": " + cause.getMessage(), cause);
+        }
+    }
+
+    /**
+     * Runs a portal leg, retrying transient {@link IOException}s with backoff.
+     *
+     * <p>The Udyam portal answers HTTP 503 intermittently under load, and a single
+     * failure used to abort the whole init. Retries stop once {@code deadlineMs}
+     * elapses so the caller can never exceed the Android client's read timeout.
+     *
+     * @param what         label used in log/warning messages
+     * @param deadlineMs   wall-clock ({@link System#currentTimeMillis()}) cutoff
+     * @param call         the portal request to run
+     */
+    private <T> T withTransientRetry(String what, long deadlineMs, PortalCall<T> call) throws IOException {
+        IOException last = null;
+        for (int attempt = 1; attempt <= FETCH_ATTEMPTS; attempt++) {
+            try {
+                return call.get();
+            } catch (IOException e) {
+                last = e;
+                boolean outOfAttempts = attempt >= FETCH_ATTEMPTS;
+                boolean outOfTime = System.currentTimeMillis() + RETRY_BACKOFF_MS * attempt >= deadlineMs;
+                if (outOfAttempts || outOfTime) {
+                    break;
+                }
+                long backoff = RETRY_BACKOFF_MS * attempt;
+                log.warn("Udyam {} attempt {}/{} failed ({}); retrying in {}ms",
+                        what, attempt, FETCH_ATTEMPTS, e.getMessage(), backoff);
+                try {
+                    Thread.sleep(backoff);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+        throw last;
+    }
+
+    /** A portal request that may throw an {@link IOException}. */
+    @FunctionalInterface
+    private interface PortalCall<T> {
+        T get() throws IOException;
+    }
+
     private static void addBrowserHeaders(HttpGet request) {
         request.setHeader("Accept",
                 "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8");
@@ -920,6 +1046,7 @@ public class UdyamVerificationService {
         request.setHeader("Sec-Fetch-Dest", "document");
         request.setHeader("Sec-Fetch-Mode", "navigate");
         request.setHeader("Sec-Fetch-Site", "same-origin");
+        addClientHintHeaders(request);
     }
 
     private static void addBrowserHeaders(HttpPost request) {
@@ -930,6 +1057,19 @@ public class UdyamVerificationService {
         request.setHeader("Origin", BASE_URL);
         request.setHeader("Referer", BASE_URL + "/");
         request.setHeader("User-Agent", USER_AGENT);
+        addClientHintHeaders(request);
+    }
+
+    /**
+     * Client-Hint headers must be consistent with {@link #USER_AGENT}. A Chrome
+     * User-Agent with no {@code sec-ch-ua} at all is an automation fingerprint the
+     * portal's WAF flags, which shows up as HTTP 503 on the CAPTCHA endpoint.
+     */
+    private static void addClientHintHeaders(HttpRequest request) {
+        request.setHeader("sec-ch-ua",
+                "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\"");
+        request.setHeader("sec-ch-ua-mobile", "?0");
+        request.setHeader("sec-ch-ua-platform", "\"macOS\"");
     }
 
     /**

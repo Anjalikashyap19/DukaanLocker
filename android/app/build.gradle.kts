@@ -17,16 +17,28 @@ val localBaseUrl = "http://10.176.2.52:8081/"
 val prodBaseUrl = "https://api.dukaanlocker.iadv.cloud/"
 // Retrofit primary base: local when LOCAL_BACKEND=true, otherwise production.
 // LOCAL_FAILOVER_ENABLED lets the app retry against production when local is down.
+// NOTE: only DEBUG builds honor local.properties. RELEASE always uses production.
 val baseUrl = if (localBackend) localBaseUrl else prodBaseUrl
+
+// Release signing credentials — local keystore.properties (NEVER committed to git).
+val keystoreProps = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+val releaseStoreFile = keystoreProps.getProperty("storeFile")
+val hasReleaseSigning = releaseStoreFile != null
+if (!hasReleaseSigning) {
+    logger.warn("WARNING: keystore.properties/storeFile not found — release build will be UNSIGNED.")
+}
 
 android {
     namespace = "com.iadv.dukaanlocker"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.iadv.dukaanlocker"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
@@ -43,6 +55,17 @@ android {
         buildConfig = true
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(releaseStoreFile)
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
@@ -53,10 +76,11 @@ android {
             isMinifyEnabled = false
         }
         release {
-            buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
+            // RELEASE IS ALWAYS PRODUCTION: never reads LOCAL_BACKEND from local.properties.
+            buildConfigField("String", "BASE_URL", "\"$prodBaseUrl\"")
             buildConfigField("String", "LOCAL_BASE_URL", "\"$localBaseUrl\"")
             buildConfigField("String", "PROD_BASE_URL", "\"$prodBaseUrl\"")
-            buildConfigField("boolean", "LOCAL_FAILOVER_ENABLED", localBackend.toString())
+            buildConfigField("boolean", "LOCAL_FAILOVER_ENABLED", "false")
             buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"733563364874-v71tsg3phavb9b12oiu7vjhjnjtv8qg1.apps.googleusercontent.com\"")
             isMinifyEnabled = true
             isShrinkResources = true
@@ -64,6 +88,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

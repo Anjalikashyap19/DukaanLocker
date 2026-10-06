@@ -53,3 +53,8 @@ secrets/
 ### Production artefacts (never commit: contains user documents and DB dumps) ###
 Documents/
 backups/
+
+### Android release signing (never commit) ###
+*.jks
+*.keystore
+keystore.properties

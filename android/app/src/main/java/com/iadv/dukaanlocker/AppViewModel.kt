@@ -2,6 +2,9 @@ package com.iadv.dukaanlocker
 
 import android.app.Application
 import android.net.Uri
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.iadv.dukaanlocker.api.*
@@ -22,6 +25,14 @@ import okhttp3.RequestBody.Companion.toRequestBody
 
 /** Client-side budget for a single document auto-fetch call (UI shows a 60s countdown). */
 const val FETCH_TIMEOUT_MS = 60_000L
+
+/**
+ * Budget for fetching the government CAPTCHA. The backend makes two calls to
+ * udyamregistration.gov.in which routinely take 25-60s end to end, so this sits
+ * above both [FETCH_TIMEOUT_MS] and the OkHttp read timeout (90s) and acts as a
+ * backstop for hangs that happen before the response starts arriving.
+ */
+const val CAPTCHA_INIT_TIMEOUT_MS = 100_000L
 
 data class AppUiState(
     val isLoggedIn: Boolean = false,
@@ -51,10 +62,6 @@ data class AppUiState(
     val isBiometricLoginEnabled: Boolean = false,
     val viewDocumentId: Long? = null,
     val viewDocumentName: String = "",
-    val pendingUploadDoc: DocumentItem? = null,
-    val showFetchDialog: Boolean = false,
-    val fetchTargetDoc: DocumentItem? = null,
-    val docForView: DocumentItem? = null,
     val showAppUnlockFailedDialog: Boolean = false,
     val showBiometricLoginFailedDialog: Boolean = false,
     val showBiometricLoginPrompt: Boolean = false,
@@ -79,6 +86,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(AppUiState())
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
+
+    // Transient dialog/picker targets kept outside AppUiState so they are never
+    // inferred as permanently-null by release-build optimisations.
+    var pendingUploadDoc by mutableStateOf<DocumentItem?>(null)
+        private set
+    var fetchTargetDoc by mutableStateOf<DocumentItem?>(null)
+        private set
+    var docForView by mutableStateOf<DocumentItem?>(null)
+        private set
 
     init {
         val isLoggedIn = ApiClient.isLoggedIn(application)
@@ -249,6 +265,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun navigateToHome() {
         val role = _uiState.value.currentUserRole
+        clearTransientDocumentTargets()
         updateState {
             it.copy(
                 currentScreen = if (role == "MANAGER") Screen.ManagerHome else Screen.OwnerHome,
@@ -261,12 +278,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 managerShopAssignments = emptyMap(),
                 selectedShop = null,
                 editShopTarget = null,
-                pendingUploadDoc = null,
                 viewDocumentId = null,
-                viewDocumentName = "",
-                docForView = null,
-                fetchTargetDoc = null,
-                showFetchDialog = false
+                viewDocumentName = ""
             )
         }
         loadShops()
@@ -289,6 +302,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val jwtSnapshot = ApiClient.getToken(context)
         viewModelScope.launch { ApiClient.unregisterDeviceToken(context, jwtSnapshot) }
         ApiClient.clearAuth(context)
+        clearTransientDocumentTargets()
         updateState {
             it.copy(
                 isLoggedIn = false,
@@ -304,12 +318,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 managerShopAssignments = emptyMap(),
                 selectedShop = null,
                 editShopTarget = null,
-                pendingUploadDoc = null,
                 viewDocumentId = null,
                 viewDocumentName = "",
-                docForView = null,
-                fetchTargetDoc = null,
-                showFetchDialog = false,
                 currentScreen = Screen.Login,
                 navigationHistory = emptyList(),
                 bottomTabHistory = emptyList(),
@@ -324,6 +334,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val jwtSnapshot = ApiClient.getToken(context)
         viewModelScope.launch { ApiClient.unregisterDeviceToken(context, jwtSnapshot) }
         ApiClient.clearAuth(context)
+        clearTransientDocumentTargets()
         updateState {
             it.copy(
                 isLoggedIn = false,
@@ -339,12 +350,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 managerShopAssignments = emptyMap(),
                 selectedShop = null,
                 editShopTarget = null,
-                pendingUploadDoc = null,
                 viewDocumentId = null,
                 viewDocumentName = "",
-                docForView = null,
-                fetchTargetDoc = null,
-                showFetchDialog = false,
                 currentScreen = Screen.Login,
                 navigationHistory = emptyList(),
                 bottomTabHistory = emptyList(),
@@ -415,7 +422,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (docId != null) {
             updateState { it.copy(viewDocumentId = docId, viewDocumentName = doc.name) }
         } else {
-            updateState { it.copy(docForView = doc) }
+            docForView = doc
         }
     }
 
@@ -424,15 +431,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun showFetchDialog(doc: DocumentItem) {
-        updateState { it.copy(showFetchDialog = true, fetchTargetDoc = doc) }
+        fetchTargetDoc = doc
     }
 
     fun dismissFetchDialog() {
-        updateState { it.copy(showFetchDialog = false, fetchTargetDoc = null) }
+        fetchTargetDoc = null
     }
 
     fun dismissCertDialog() {
-        updateState { it.copy(docForView = null) }
+        docForView = null
+    }
+
+    fun setPendingUpload(doc: DocumentItem?) {
+        pendingUploadDoc = doc
+    }
+
+    private fun clearTransientDocumentTargets() {
+        pendingUploadDoc = null
+        fetchTargetDoc = null
+        docForView = null
     }
 
     fun findBusinessFor(doc: DocumentItem): BusinessProfile? {
@@ -1221,22 +1238,39 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Loads the government CAPTCHA for MSME registration.
+     *
+     * The backend makes two slow calls to udyamregistration.gov.in, so this is
+     * budgeted at [CAPTCHA_INIT_TIMEOUT_MS] rather than the shorter document-fetch
+     * budget. [onResult] is always invoked — with empty strings on failure — so the
+     * caller can never be left waiting on a spinner forever.
+     */
     fun initUdyamCaptcha(onResult: (String, String) -> Unit) {
         viewModelScope.launch {
             try {
-                val response = api.initUdyamSession()
+                val response = withTimeoutOrNull(CAPTCHA_INIT_TIMEOUT_MS) {
+                    api.initUdyamSession()
+                }
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    if (response.isSuccessful) {
-                        val body = response.body() ?: run {
+                    if (response == null) {
+                        showToast("Captcha request timed out. Tap refresh to try again.", ToastType.ERROR)
+                        onResult("", "")
+                    } else if (response.isSuccessful) {
+                        val body = response.body()
+                        if (body == null || body.captchaBase64.isBlank()) {
+                            showToast("Captcha response was empty. Tap refresh to retry.", ToastType.ERROR)
                             onResult("", "")
-                            return@withContext
+                        } else {
+                            onResult(body.sessionId, body.captchaBase64)
                         }
-                        onResult(body.sessionId, body.captchaBase64)
                     } else {
                         showToast("Failed to load captcha: ${response.parseErrorMessage()}", ToastType.ERROR)
                         onResult("", "")
                     }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     showToast("Network error loading captcha: ${e.message}", ToastType.ERROR)
@@ -1262,7 +1296,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 android.util.Log.d("GST_FETCH", "<<< RESPONSE CODE: ${response.code()}")
                 android.util.Log.d("GST_FETCH", "<<< RESPONSE BODY: ${response.body()}")
-                if (!response.isSuccessful) {
+                if (BuildConfig.DEBUG && !response.isSuccessful) {
                     android.util.Log.e("GST_FETCH", "<<< ERROR BODY: ${response.errorBody()?.string()}")
                 }
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {

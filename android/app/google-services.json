@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "733563364874-aljsgv21d1t0f3191iveq8chf5l4r00m.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.iadv.dukaanlocker",
+            "certificate_hash": "26ae98340a38ec67dbcb48bad8a3023a738f77f2"
+          }
+        },
+        {
           "client_id": "733563364874-jnlhrci2ct91st2qp0mo2frprh2v0jhh.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
@@ -45,3 +53,7 @@
   ],
   "configuration_version": "1"
 }
+
+
+
+

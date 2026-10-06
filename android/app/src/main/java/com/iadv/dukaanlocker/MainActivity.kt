@@ -19,7 +19,6 @@ import com.iadv.dukaanlocker.api.BiometricCredentialManager
 import com.iadv.dukaanlocker.api.GoogleSignInHelper
 import com.iadv.dukaanlocker.api.ApiClient
 import com.iadv.dukaanlocker.api.GoogleRegisterRequest
-import com.iadv.dukaanlocker.api.parseErrorMessage
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -130,7 +129,17 @@ class MainActivity : FragmentActivity() {
                         auth.role
                     )
                 } else {
-                    val errorMsg = response.parseErrorMessage()
+                    // Read the error body exactly once: errorBody()?.string() drains the
+                    // stream, so parse it here rather than calling parseErrorMessage() after.
+                    val rawBody = try { response.errorBody()?.string() } catch (e: Exception) { null }
+                    val parsedMsg = rawBody?.takeIf { it.isNotBlank() }?.let {
+                        try {
+                            com.google.gson.Gson()
+                                .fromJson(it, com.iadv.dukaanlocker.api.ErrorResponse::class.java)
+                                ?.message
+                        } catch (_: Exception) { null }
+                    }
+                    val errorMsg = parsedMsg?.takeIf { s -> s.isNotBlank() } ?: response.message()
                     onGoogleSignUpError?.invoke(Exception(errorMsg))
                 }
             } catch (e: Exception) {

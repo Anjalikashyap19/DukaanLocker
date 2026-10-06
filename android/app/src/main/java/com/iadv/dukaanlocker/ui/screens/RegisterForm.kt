@@ -255,15 +255,18 @@ fun RegisterForm(
                                 Text("Loading government captcha...", fontSize = 12.sp, color = colors.textSecondary)
                             }
                         }
-                    } else if (isGovCaptcha && (captchaCode.contains("data:image") || captchaCode.startsWith("http"))) {
+                    } else {
+                        // MSME mode always needs the government CAPTCHA. Falling back
+                        // to a locally generated code here would render an image the
+                        // Udyam portal can never match (and the sessionId would be
+                        // empty), so surface the failure with a refresh affordance
+                        // instead. An empty base64 renders the retry prompt.
                         GovCaptchaBox(
-                            captchaBase64 = captchaCode,
+                            captchaBase64 = if (isGovCaptcha) captchaCode else "",
                             colors = colors,
                             lang = lang,
                             onRefresh = onRefreshCaptcha
                         )
-                    } else {
-                        CaptchaBox(code = captchaCode, colors = colors, lang = lang, onRefresh = onRefreshCaptcha)
                     }
                 }
             } else {
@@ -372,8 +375,10 @@ fun RegisterForm(
             Button(
                 onClick = onRegister,
                 enabled = if (registerWithMsme) {
+                    // isGovCaptcha guards against submitting before the government
+                    // CAPTCHA has actually arrived — without it the session is empty.
                     msmeNumber.isNotBlank() && mobile.length == 10 &&
-                        captchaInput.isNotBlank() && !isChecking
+                        captchaInput.isNotBlank() && isGovCaptcha && !isChecking
                 } else {
                     name.isNotBlank() && email.isNotBlank() && password.length >= 8 && mobile.length == 10 && !isChecking
                 },
