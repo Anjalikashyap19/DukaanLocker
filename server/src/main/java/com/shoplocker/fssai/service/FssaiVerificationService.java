@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.Optional;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -365,6 +366,10 @@ public class FssaiVerificationService {
             if (isBlank(pincode)) pincode = text(detailsExtras, "pincodePremises");
 
             String licenseCategory = text(record, "licensecategoryname");
+            // Map "Registration" category to "Basic License" as requested
+            if (licenseCategory != null && licenseCategory.toLowerCase(Locale.ROOT).contains("registration")) {
+                licenseCategory = "Basic License";
+            }
             String status = text(record, "statusdesc");
             String taluk = text(record, "talukname");
             String village = text(record, "villagename");

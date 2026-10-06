@@ -91,7 +91,7 @@ public class FssaiVerificationServiceTest {
         assertEquals("SHYAM SUNDAR / CANARA JUICE JUNCTION", response.getCompanyName());
         assertEquals("SHYAM SUNDAR", response.getContactPerson());
         assertEquals("Trade/Retail - Retailer", response.getKindOfBusiness());
-        assertEquals("Registration", response.getLicenseCategory());
+        assertEquals("Basic License", response.getLicenseCategory());
         assertEquals("Registration Certificate issued", response.getStatus());
         assertEquals(Boolean.TRUE, response.getLicenseActive());
         assertEquals("Karnataka", response.getState());
