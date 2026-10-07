@@ -252,7 +252,7 @@ fun RegisterForm(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 CircularProgressIndicator(modifier = Modifier.size(18.dp), color = colors.primary, strokeWidth = 2.dp)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Loading government captcha...", fontSize = 12.sp, color = colors.textSecondary)
+                                Text("Loading captcha...", fontSize = 12.sp, color = colors.textSecondary)
                             }
                         }
                     } else {
