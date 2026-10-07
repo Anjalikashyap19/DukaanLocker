@@ -365,6 +365,12 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                 } else if (state.selectedBottomTab == BottomTab.Team) {
                                     manageManagersContent()
                                 } else {
+                                    val allBusinesses = state.shops.map { vm.shopToBusiness(it) }
+                                    // New profiles flag their first shop as primary and Home shows only
+                                    // that one; legacy accounts have no flag → every shop, as before.
+                                    val homeBusinesses =
+                                        if (state.shops.any { it.isPrimary }) allBusinesses.filter { it.isPrimary }
+                                        else allBusinesses
                                     OwnerHomeScreen(
                                         isDarkTheme = state.isDarkTheme,
                                         onToggleTheme = onToggleTheme,
@@ -387,7 +393,8 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                         showAddBusiness = state.currentUserRole == "ADMIN",
                                         showManageManagers = state.currentUserRole == "ADMIN",
                                 user = UserAccount(mobile = ApiClient.getUserMobile(context), name = state.currentUserName, email = state.currentUserEmail, role = state.currentUserRole, dlId = state.currentDlId),
-                                        businesses = state.shops.map { vm.shopToBusiness(it) },
+                                        businesses = if (state.selectedBottomTab == BottomTab.Business) allBusinesses else homeBusinesses,
+                                        businessCount = state.shops.size,
                                         onBusinessSelected = { bizId -> vm.loadDocuments(bizId.toLongOrNull() ?: return@OwnerHomeScreen) },
                                         documents = vm.toDocumentItems(state.shopDocuments),
                                         managers = state.managers.map { mgr -> ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(), managerName = mgr.userName, assignedBusinessIds = state.managerShopAssignments[mgr.id] ?: emptyList()) },

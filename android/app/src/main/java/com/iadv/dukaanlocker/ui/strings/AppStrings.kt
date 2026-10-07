@@ -175,6 +175,7 @@ object AppStrings {
             "Both Physical & Digital" to "भौतिक और डिजिटल दोनों",
             "Business Category" to "व्यवसाय श्रेणी",
             "Business / Shop Name" to "व्यवसाय / दुकान का नाम",
+            "Business name can't be changed" to "व्यवसाय का नाम नहीं बदला जा सकता",
             "Business presence" to "व्यवसाय उपस्थिति",
             "Business Scale" to "व्यवसाय का पैमाना",
             "Businesses" to "व्यवसाय",

@@ -22,6 +22,7 @@ public class ShopResponse {
     private String pincode;
     private Long ownerUserId;
     private String ownerEmail;
+    private Boolean primary;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -89,6 +90,9 @@ public class ShopResponse {
 
     public String getOwnerEmail() { return ownerEmail; }
     public void setOwnerEmail(String ownerEmail) { this.ownerEmail = ownerEmail; }
+
+    public Boolean getPrimary() { return primary; }
+    public void setPrimary(Boolean primary) { this.primary = primary; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

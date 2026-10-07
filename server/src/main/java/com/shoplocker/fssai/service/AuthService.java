@@ -811,6 +811,11 @@ public class AuthService {
         // registers via Udyam and then tries to add the same business again.
         shopService.assertNoDuplicateShop(user.getId(), shop.getShopName(), shop.getBranchName(), null);
 
+        // First shop for this brand-new profile → primary shop (Home shows only it).
+        if (shopRepository.findByOwnerId(user.getId()).isEmpty()) {
+            shop.setPrimary(true);
+        }
+
         return shopRepository.save(shop);
     }
 

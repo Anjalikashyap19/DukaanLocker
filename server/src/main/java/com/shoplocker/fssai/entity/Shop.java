@@ -59,6 +59,11 @@ public class Shop {
     @Pattern(regexp = "^[0-9]{6}$", message = "Pincode must be exactly 6 digits")
     private String pincode;
 
+    // Primary shop: true only for the first shop created for an owner who had
+    // none yet (new profiles). Never backfilled for pre-existing accounts.
+    @Column(name = "is_primary", nullable = false)
+    private Boolean primary = false;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JsonBackReference
     @JoinColumn(name = "user_id", nullable = false)
@@ -115,6 +120,9 @@ public class Shop {
 
     public String getPincode() { return pincode; }
     public void setPincode(String pincode) { this.pincode = pincode; }
+
+    public Boolean getPrimary() { return primary; }
+    public void setPrimary(Boolean primary) { this.primary = primary; }
 
     public User getOwner() { return owner; }
     public void setOwner(User owner) { this.owner = owner; }

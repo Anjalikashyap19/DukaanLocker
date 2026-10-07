@@ -53,7 +53,8 @@ data class BusinessProfile(
     val scale: String = "Micro",
     val state: String = "Maharashtra",
     val city: String = "",
-    val branchName: String = ""
+    val branchName: String = "",
+    val isPrimary: Boolean = false
 )
 
 data class ManagerAccess(

@@ -469,7 +469,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         scale = shop.scale,
         state = shop.state,
         city = shop.city,
-        branchName = shop.branchName ?: ""
+        branchName = shop.branchName ?: "",
+        isPrimary = shop.isPrimary
     )
 
     fun toDocumentItems(docs: List<DocumentResponse>): List<DocumentItem> = docs.map { doc ->
@@ -1069,7 +1070,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             try {
                 val response = api.updateShop(shopId, UpdateShopRequest(
-                    shopName = biz.name, ownerName = biz.ownerName, category = biz.category,
+                    // shopName intentionally omitted: the business name is immutable
+                    // after creation (the edit form keeps it disabled).
+                    ownerName = biz.ownerName, category = biz.category,
                     scale = biz.scale, state = biz.state, city = biz.city,
                     branchName = biz.branchName.ifBlank { null }
                 ))

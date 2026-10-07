@@ -1,6 +1,7 @@
 package com.shoplocker.fssai.service;
 
 import java.text.Normalizer;
+import java.util.Comparator;
 import java.util.List;
 
 import com.shoplocker.fssai.dto.CreateShopRequest;
@@ -234,6 +235,12 @@ public class ShopService {
         shop.setPincode(request.getPincode());
         shop.setOwner(owner);
 
+        // Primary shop = the very first shop of an owner who had none.
+        // Pre-existing accounts already have shops, so they never gain one.
+        if (shopRepository.findByOwnerId(owner.getId()).isEmpty()) {
+            shop.setPrimary(true);
+        }
+
         Shop saved = shopRepository.save(shop);
 
         return toShopResponse(saved);
@@ -251,7 +258,12 @@ public class ShopService {
                 .orElseThrow(() -> new FssaiException("User not found", FailureCode.USER_NOT_FOUND));
 
         List<Shop> shops = shopRepository.findByOwnerId(owner.getId());
-        return shops.stream().map(this::toShopResponse).toList();
+        // Primary first, then stable insertion order (id).
+        return shops.stream()
+                .sorted(Comparator.comparing((Shop s) -> !Boolean.TRUE.equals(s.getPrimary()))
+                        .thenComparing(Shop::getId))
+                .map(this::toShopResponse)
+                .toList();
     }
 
     public ShopResponse getShopResponseById(Long id) {
@@ -400,7 +412,7 @@ public class ShopService {
     }
 
     public ShopResponse toShopResponse(Shop shop) {
-        return new ShopResponse(
+        return withPrimary(shop, new ShopResponse(
                 shop.getId(),
                 shop.getShopName(),
                 shop.getOwnerName(),
@@ -416,7 +428,12 @@ public class ShopService {
                 shop.getOwner() != null ? shop.getOwner().getEmailId() : null,
                 shop.getCreatedAt(),
                 shop.getUpdatedAt()
-        );
+        ));
+    }
+
+    private ShopResponse withPrimary(Shop shop, ShopResponse response) {
+        response.setPrimary(shop.getPrimary() != null && shop.getPrimary());
+        return response;
     }
 
     public DocumentResponse toDocumentResponse(Document doc) {

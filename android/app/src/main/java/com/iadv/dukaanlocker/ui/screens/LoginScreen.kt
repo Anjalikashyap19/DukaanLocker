@@ -1,7 +1,10 @@
 package com.iadv.dukaanlocker.ui.screens
 
+import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.DarkMode
@@ -10,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -167,239 +171,339 @@ fun LoginScreen(
         }
     }
 
-    Column(
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    Row(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.background)
             .imePadding()
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(horizontal = if (isLandscape) 0.dp else 24.dp),
+        verticalAlignment = Alignment.Top
     ) {
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(
-                onClick = onBackToMain,
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+        if (isLandscape) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .navigationBarsPadding()
+                    .padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 12.dp)
             ) {
-                Icon(
-                    Icons.Default.ArrowBack,
-                    contentDescription = AppStrings.get(lang, "Home"),
-                    modifier = Modifier.size(20.dp),
-                    tint = colors.textSecondary
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    AppStrings.get(lang, "Home"),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = colors.textSecondary
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        LauncherLogo(modifier = Modifier.size(104.dp))
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Text(
-            text = "DUKAAN LOCKER",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = colors.primary,
-            letterSpacing = 3.sp
-        )
-
-        Text(
-            text = AppStrings.get(lang, "Secure Business Document Vault"),
-            fontSize = 12.sp,
-            color = colors.textSecondary,
-            modifier = Modifier.padding(top = 2.dp)
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(onClick = onToggleTheme, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
-                Icon(
-                    if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
-                    contentDescription = AppStrings.get(lang, "Toggle theme"),
-                    modifier = Modifier.size(14.dp),
-                    tint = colors.textSecondary
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    AppStrings.get(lang, if (isDarkTheme) "Light" else "Dark"),
-                    fontSize = 11.sp,
-                    color = colors.textSecondary
-                )
-            }
-        }
-
-        val contentAlign = if (selectedView == null || selectedView == "register" || selectedView == "forgot") Alignment.TopCenter else Alignment.Center
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            contentAlignment = contentAlign
-        ) {
-            when (selectedView) {
-                null -> RoleSelectionContent(
-                    colors = colors,
-                    lang = lang,
-                    isBiometricLoginEnabled = isBiometricLoginEnabled,
-                    onSelectRegister = { selectedView = "register" },
-                    onSelectOwnerLogin = { selectedView = true },
-                    onSelectManagerLogin = { selectedView = false },
-                    onGoogleSignIn = onGoogleSignIn,
-                    onBiometricLogin = onBiometricLogin
-                )
-
-                true -> OwnerLoginForm(
-                    colors = colors,
-                    lang = lang,
-                    email = loginEmail,
-                    onEmailChange = { loginEmail = it; loginEmailError = false },
-                    emailError = loginEmailError,
-                    password = loginPassword,
-                    onPasswordChange = { loginPassword = it; loginPasswordError = false },
-                    passwordVisible = loginPasswordVisible,
-                    onTogglePasswordVisible = { loginPasswordVisible = !loginPasswordVisible },
-                    passwordError = loginPasswordError,
-                    isChecking = loginIsChecking,
-                    lockoutRemainingMs = ownerLockoutMs,
-                    onBack = { selectedView = null; loginIsChecking = false },
-                    onLogin = { validateAndLogin() },
-                    onForgotPassword = {
-                        selectedView = "forgot"
-                        mobileEnding = null
-                        // Ask in the background: the screen opens immediately and
-                        // picks up the tail as soon as the server answers.
-                        val typedEmail = loginEmail.trim()
-                        if (typedEmail.isNotEmpty()) {
-                            onMobileHint(typedEmail) { ending -> mobileEnding = ending }
-                        }
-                    },
-                    onMsmeLoginRequest = onMsmeLoginRequest,
-                    onMsmeLoginVerify = onMsmeLoginVerify
-                )
-
-                "forgot" -> ForgotPasswordScreen(
-                    colors = colors,
-                    lang = lang,
-                    mobileEnding = mobileEnding,
-                    onRequest = onForgotPasswordRequest,
-                    onReset = onForgotPasswordReset,
-                    onBack = { selectedView = true },
-                    onDone = {
-                        // The reset succeeded: land on the sign-in form with the stale
-                        // password cleared so the new one can be typed straight in.
-                        selectedView = true
-                        loginPassword = ""
-                        loginPasswordError = false
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = onBackToMain,
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.ArrowBack,
+                            contentDescription = AppStrings.get(lang, "Home"),
+                            modifier = Modifier.size(20.dp),
+                            tint = colors.textSecondary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            AppStrings.get(lang, "Home"),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = colors.textSecondary
+                        )
                     }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        LauncherLogo(modifier = Modifier.size(56.dp))
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "DUKAAN LOCKER",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.primary,
+                            letterSpacing = 2.sp
+                        )
+
+                        Text(
+                            text = AppStrings.get(lang, "Secure Business Document Vault"),
+                            fontSize = 11.sp,
+                            color = colors.textSecondary,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        TextButton(onClick = onToggleTheme, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                            Icon(
+                                if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                contentDescription = AppStrings.get(lang, "Toggle theme"),
+                                modifier = Modifier.size(14.dp),
+                                tint = colors.textSecondary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                AppStrings.get(lang, if (isDarkTheme) "Light" else "Dark"),
+                                fontSize = 11.sp,
+                                color = colors.textSecondary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(if (isLandscape) 1.4f else 1f)
+                .fillMaxHeight()
+                .padding(horizontal = if (isLandscape) 16.dp else 0.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            if (!isLandscape) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = onBackToMain,
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.ArrowBack,
+                            contentDescription = AppStrings.get(lang, "Home"),
+                            modifier = Modifier.size(20.dp),
+                            tint = colors.textSecondary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            AppStrings.get(lang, "Home"),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = colors.textSecondary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                LauncherLogo(modifier = Modifier.size(104.dp))
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "DUKAAN LOCKER",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.primary,
+                    letterSpacing = 3.sp
                 )
 
-                "register" -> RegisterForm(
-                    colors = colors,
-                    lang = lang,
-                    name = regName, onNameChange = { regName = it; regNameError = false },
-                    nameError = regNameError,
-                    email = regEmail, onEmailChange = { regEmail = it; regEmailError = false },
-                    emailError = regEmailError,
-                    password = regPassword, onPasswordChange = { regPassword = it; regPasswordError = false },
-                    passwordVisible = regPasswordVisible, onTogglePasswordVisible = { regPasswordVisible = !regPasswordVisible },
-                    passwordError = regPasswordError,
-                    passwordStrength = regStrength,
-                    mobile = regMobile, onMobileChange = { regMobile = it.filter { c -> c.isDigit() }.take(10); regMobileError = false },
-                    mobileError = regMobileError,
-                    registerWithMsme = registerWithMsme,
-                    onToggleRegisterWithMsme = {
-                        registerWithMsme = !registerWithMsme
-                        if (registerWithMsme && msmeSessionId.isBlank()) {
-                            msmeCaptchaLoading = true
-                            onInitMsmeCaptcha { sessionId, captchaImage ->
-                                msmeSessionId = sessionId
-                                msmeCaptchaImage = captchaImage
-                                msmeCaptchaLoading = false
-                            }
-                        }
-                    },
-                    msmeNumber = regMsmeNumber,
-                    onMsmeNumberChange = { regMsmeNumber = it.filter { ch -> ch.isLetterOrDigit() || ch == '-' }.uppercase(); regMsmeError = false },
-                    msmeNumberError = regMsmeError,
-                    captchaCode = if (msmeCaptchaImage.isNotBlank()) msmeCaptchaImage else regCaptcha,
-                    isGovCaptcha = msmeCaptchaImage.isNotBlank(),
-                    onRefreshCaptcha = {
-                        if (registerWithMsme) {
-                            msmeCaptchaLoading = true
-                            onInitMsmeCaptcha { sessionId, captchaImage ->
-                                msmeSessionId = sessionId
-                                msmeCaptchaImage = captchaImage
-                                regCaptchaInput = ""
-                                regCaptchaError = false
-                                msmeCaptchaLoading = false
-                            }
-                        } else {
-                            regCaptcha = generateCaptcha()
-                            regCaptchaInput = ""
-                            regCaptchaError = false
-                        }
-                    },
-                    captchaInput = regCaptchaInput,
-                    msmeCaptchaLoading = msmeCaptchaLoading,
-                    onCaptchaInputChange = { regCaptchaInput = it; regCaptchaError = false },
-                    captchaError = regCaptchaError,
-                    isChecking = regIsChecking,
-                    onBack = { selectedView = null; regIsChecking = false },
-                    onRegister = { if (registerWithMsme) validateAndRegisterWithMsme() else validateAndRegister() },
-                    onGoogleSignIn = onGoogleSignIn
+                Text(
+                    text = AppStrings.get(lang, "Secure Business Document Vault"),
+                    fontSize = 12.sp,
+                    color = colors.textSecondary,
+                    modifier = Modifier.padding(top = 2.dp)
                 )
 
-                false -> ManagerLoginForm(
-                    colors = colors,
-                    lang = lang,
-                    accessCode = accessCode,
-                    onAccessCodeChange = { accessCode = it.uppercase().take(6); codeError = false },
-                    codeError = codeError,
-                    lockoutRemainingMs = managerLockoutMs,
-                    onBack = { selectedView = null; codeError = false },
-                    onLogin = {
-                        when {
-                            managerLockoutMs > 0L -> Unit
-                            accessCode.length == 6 -> {
-                                loginIsChecking = true
-                                onManagerLogin(accessCode) { success ->
-                                    loginIsChecking = false
-                                    if (success) {
-                                        LoginRateLimiter.recordSuccess(context, LoginRateLimiter.MANAGER)
-                                    } else {
-                                        managerLockoutMs = LoginRateLimiter.recordFailure(context, LoginRateLimiter.MANAGER)
-                                    }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onToggleTheme, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                        Icon(
+                            if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
+                            contentDescription = AppStrings.get(lang, "Toggle theme"),
+                            modifier = Modifier.size(14.dp),
+                            tint = colors.textSecondary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            AppStrings.get(lang, if (isDarkTheme) "Light" else "Dark"),
+                            fontSize = 11.sp,
+                            color = colors.textSecondary
+                        )
+                    }
+                }
+            }
+
+            val contentAlign = when {
+                selectedView == true || selectedView == false -> Alignment.Center
+                isLandscape || selectedView == null || selectedView == "register" || selectedView == "forgot" -> Alignment.TopCenter
+                else -> Alignment.Center
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .then(if (isLandscape) Modifier.widthIn(max = 520.dp) else Modifier)
+                    .fillMaxWidth(),
+                contentAlignment = contentAlign
+            ) {
+                when (selectedView) {
+                    null -> RoleSelectionContent(
+                        colors = colors,
+                        lang = lang,
+                        isBiometricLoginEnabled = isBiometricLoginEnabled,
+                        onSelectRegister = { selectedView = "register" },
+                        onSelectOwnerLogin = { selectedView = true },
+                        onSelectManagerLogin = { selectedView = false },
+                        onGoogleSignIn = onGoogleSignIn,
+                        onBiometricLogin = onBiometricLogin
+                    )
+
+                    true -> OwnerLoginForm(
+                        colors = colors,
+                        lang = lang,
+                        email = loginEmail,
+                        onEmailChange = { loginEmail = it; loginEmailError = false },
+                        emailError = loginEmailError,
+                        password = loginPassword,
+                        onPasswordChange = { loginPassword = it; loginPasswordError = false },
+                        passwordVisible = loginPasswordVisible,
+                        onTogglePasswordVisible = { loginPasswordVisible = !loginPasswordVisible },
+                        passwordError = loginPasswordError,
+                        isChecking = loginIsChecking,
+                        lockoutRemainingMs = ownerLockoutMs,
+                        onBack = { selectedView = null; loginIsChecking = false },
+                        onLogin = { validateAndLogin() },
+                        onForgotPassword = {
+                            selectedView = "forgot"
+                            mobileEnding = null
+                            // Ask in the background: the screen opens immediately and
+                            // picks up the tail as soon as the server answers.
+                            val typedEmail = loginEmail.trim()
+                            if (typedEmail.isNotEmpty()) {
+                                onMobileHint(typedEmail) { ending -> mobileEnding = ending }
+                            }
+                        },
+                        onMsmeLoginRequest = onMsmeLoginRequest,
+                        onMsmeLoginVerify = onMsmeLoginVerify
+                    )
+
+                    "forgot" -> ForgotPasswordScreen(
+                        colors = colors,
+                        lang = lang,
+                        mobileEnding = mobileEnding,
+                        onRequest = onForgotPasswordRequest,
+                        onReset = onForgotPasswordReset,
+                        onBack = { selectedView = true },
+                        onDone = {
+                            // The reset succeeded: land on the sign-in form with the stale
+                            // password cleared so the new one can be typed straight in.
+                            selectedView = true
+                            loginPassword = ""
+                            loginPasswordError = false
+                        }
+                    )
+
+                    "register" -> RegisterForm(
+                        colors = colors,
+                        lang = lang,
+                        name = regName, onNameChange = { regName = it; regNameError = false },
+                        nameError = regNameError,
+                        email = regEmail, onEmailChange = { regEmail = it; regEmailError = false },
+                        emailError = regEmailError,
+                        password = regPassword, onPasswordChange = { regPassword = it; regPasswordError = false },
+                        passwordVisible = regPasswordVisible, onTogglePasswordVisible = { regPasswordVisible = !regPasswordVisible },
+                        passwordError = regPasswordError,
+                        passwordStrength = regStrength,
+                        mobile = regMobile, onMobileChange = { regMobile = it.filter { c -> c.isDigit() }.take(10); regMobileError = false },
+                        mobileError = regMobileError,
+                        registerWithMsme = registerWithMsme,
+                        onToggleRegisterWithMsme = {
+                            registerWithMsme = !registerWithMsme
+                            if (registerWithMsme && msmeSessionId.isBlank()) {
+                                msmeCaptchaLoading = true
+                                onInitMsmeCaptcha { sessionId, captchaImage ->
+                                    msmeSessionId = sessionId
+                                    msmeCaptchaImage = captchaImage
+                                    msmeCaptchaLoading = false
                                 }
                             }
-                            else -> codeError = true
-                        }
-                    }
-                )
-            }
-        }
+                        },
+                        msmeNumber = regMsmeNumber,
+                        onMsmeNumberChange = { regMsmeNumber = it.filter { ch -> ch.isLetterOrDigit() || ch == '-' }.uppercase(); regMsmeError = false },
+                        msmeNumberError = regMsmeError,
+                        captchaCode = if (msmeCaptchaImage.isNotBlank()) msmeCaptchaImage else regCaptcha,
+                        isGovCaptcha = msmeCaptchaImage.isNotBlank(),
+                        onRefreshCaptcha = {
+                            if (registerWithMsme) {
+                                msmeCaptchaLoading = true
+                                onInitMsmeCaptcha { sessionId, captchaImage ->
+                                    msmeSessionId = sessionId
+                                    msmeCaptchaImage = captchaImage
+                                    regCaptchaInput = ""
+                                    regCaptchaError = false
+                                    msmeCaptchaLoading = false
+                                }
+                            } else {
+                                regCaptcha = generateCaptcha()
+                                regCaptchaInput = ""
+                                regCaptchaError = false
+                            }
+                        },
+                        captchaInput = regCaptchaInput,
+                        msmeCaptchaLoading = msmeCaptchaLoading,
+                        onCaptchaInputChange = { regCaptchaInput = it; regCaptchaError = false },
+                        captchaError = regCaptchaError,
+                        isChecking = regIsChecking,
+                        onBack = { selectedView = null; regIsChecking = false },
+                        onRegister = { if (registerWithMsme) validateAndRegisterWithMsme() else validateAndRegister() },
+                        onGoogleSignIn = onGoogleSignIn
+                    )
 
-        Text(
-            text = AppStrings.get(lang, "Secure Business Locker for Your Business"),
-            fontSize = 10.sp,
-            color = colors.textSecondary.copy(alpha = 0.5f),
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(bottom = 8.dp)
-        )
+                    false -> ManagerLoginForm(
+                        colors = colors,
+                        lang = lang,
+                        accessCode = accessCode,
+                        onAccessCodeChange = { accessCode = it.uppercase().take(6); codeError = false },
+                        codeError = codeError,
+                        lockoutRemainingMs = managerLockoutMs,
+                        onBack = { selectedView = null; codeError = false },
+                        onLogin = {
+                            when {
+                                managerLockoutMs > 0L -> Unit
+                                accessCode.length == 6 -> {
+                                    loginIsChecking = true
+                                    onManagerLogin(accessCode) { success ->
+                                        loginIsChecking = false
+                                        if (success) {
+                                            LoginRateLimiter.recordSuccess(context, LoginRateLimiter.MANAGER)
+                                        } else {
+                                            managerLockoutMs = LoginRateLimiter.recordFailure(context, LoginRateLimiter.MANAGER)
+                                        }
+                                    }
+                                }
+                                else -> codeError = true
+                            }
+                        }
+                    )
+                }
+            }
+
+            Text(
+                text = AppStrings.get(lang, "Secure Business Locker for Your Business"),
+                fontSize = 10.sp,
+                color = colors.textSecondary.copy(alpha = 0.5f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(bottom = 8.dp)
+            )
+        }
     }
 }

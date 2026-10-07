@@ -73,6 +73,7 @@ data class ShopResponse(
     @SerializedName("pincode") val pincode: String?,
     @SerializedName("ownerUserId") val ownerUserId: Long,
     @SerializedName("ownerEmail") val ownerEmail: String?,
+    @SerializedName("primary") val isPrimary: Boolean = false,
     @SerializedName("createdAt") val createdAt: String?,
     @SerializedName("updatedAt") val updatedAt: String?
 )

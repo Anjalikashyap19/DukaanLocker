@@ -1,5 +1,6 @@
 package com.iadv.dukaanlocker.ui.screens
 
+import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -22,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -129,6 +131,9 @@ fun MainScreen(
     }
 
     val navColor = colors.primary
+
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val categoryChunk = if (isLandscape) 3 else 2
 
     Column(
         modifier = Modifier
@@ -280,7 +285,7 @@ fun MainScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                categories.chunked(2).forEach { row ->
+                categories.chunked(categoryChunk).forEach { row ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -295,7 +300,7 @@ fun MainScreen(
                                 modifier = Modifier.weight(1f)
                             )
                         }
-                        if (row.size == 1) {
+                        if (row.size < categoryChunk) {
                             Spacer(modifier = Modifier.weight(1f))
                         }
                     }
@@ -314,7 +319,7 @@ fun MainScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp)
+                    .padding(horizontal = 20.dp, vertical = if (isLandscape) 8.dp else 16.dp)
                     .navigationBarsPadding(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -322,7 +327,7 @@ fun MainScreen(
                     onClick = onGetStarted,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(54.dp),
+                        .height(if (isLandscape) 46.dp else 54.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = colors.primary,
@@ -341,7 +346,7 @@ fun MainScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 10.dp))
 
                 TextButton(onClick = onGetStarted) {
                     Text(

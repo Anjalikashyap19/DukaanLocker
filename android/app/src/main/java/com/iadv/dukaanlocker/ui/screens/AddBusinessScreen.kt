@@ -264,10 +264,12 @@ fun AddBusinessScreen(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Business Name
+            // Business Name — editable only while creating. Once the shop exists
+            // the name is locked: everything else on the form stays editable.
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
+                enabled = initial == null,
                 label = { Text(AppStrings.get(lang, "Business / Shop Name"), color = colors.textSecondary) },
                 leadingIcon = { Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary) },
                 singleLine = true,
@@ -275,10 +277,22 @@ fun AddBusinessScreen(
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
-                    focusedLabelColor = colors.primary, cursorColor = colors.primary
+                    focusedLabelColor = colors.primary, cursorColor = colors.primary,
+                    disabledBorderColor = colors.border,
+                    disabledLabelColor = colors.textSecondary,
+                    disabledTextColor = colors.textPrimary,
+                    disabledLeadingIconColor = colors.primary
                 ),
                 shape = RoundedCornerShape(12.dp)
             )
+            if (initial != null) {
+                Text(
+                    text = AppStrings.get(lang, "Business name can't be changed"),
+                    fontSize = 11.sp,
+                    color = colors.textSecondary.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(start = 4.dp)
+                )
+            }
 
             // Owner Name
             OutlinedTextField(

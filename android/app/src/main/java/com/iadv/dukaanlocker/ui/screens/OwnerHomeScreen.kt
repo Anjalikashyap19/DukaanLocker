@@ -69,6 +69,7 @@ fun OwnerHomeScreen(
     isLoadingShops: Boolean = false,
     isLoadingDocuments: Boolean = false,
     unreadNotificationCount: Long = 0,
+    businessCount: Int = businesses.size,
     onNotifications: () -> Unit = {}
 ) {
     val colors = LocalAppColors.current
@@ -121,8 +122,8 @@ fun OwnerHomeScreen(
                             Column {
                                  Text("${AppStrings.get(lang, "Welcome,")} ${user.name.take(7)}${if (user.name.length > 7) "..." else ""}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                  Text(
-                                     if (businesses.size == 1) "1 ${AppStrings.get(lang, "Business")} • ${AppStrings.get(lang, "Owner")}"
-                                     else "${businesses.size} ${AppStrings.get(lang, "Businesses")} • ${AppStrings.get(lang, "Owner")}",
+                                     if (businessCount == 1) "1 ${AppStrings.get(lang, "Business")} • ${AppStrings.get(lang, "Owner")}"
+                                     else "$businessCount ${AppStrings.get(lang, "Businesses")} • ${AppStrings.get(lang, "Owner")}",
                                      fontSize = 12.sp, color = colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis
                                  )
                              }
@@ -412,6 +413,28 @@ fun OwnerHomeScreen(
     }
 }
 
+// ── Primary badge ────────────────────────────────────────────────────────────
+@Composable
+private fun PrimaryBadge() {
+    val colors = LocalAppColors.current
+    val lang = LocalAppLanguage.current
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(colors.primary.copy(alpha = 0.15f))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(
+            AppStrings.get(lang, "PRIMARY"),
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            color = colors.primary,
+            letterSpacing = 0.5.sp,
+            maxLines = 1
+        )
+    }
+}
+
 // ── Business Card ────────────────────────────────────────────────────────────
 @Composable
 private fun BusinessCard(
@@ -453,7 +476,13 @@ private fun BusinessCard(
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(business.name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, maxLines = 1)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(business.name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        if (business.isPrimary) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            PrimaryBadge()
+                        }
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             business.category, fontSize = 11.sp, color = colors.textSecondary,
