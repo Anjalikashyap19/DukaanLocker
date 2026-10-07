@@ -52,6 +52,7 @@ object ApiClient {
     private const val KEY_MOBILE = "user_mobile"
     private const val KEY_ROLE = "user_role"
     private const val KEY_MANAGER_CODE = "manager_code"
+    private const val KEY_DL_ID = "user_dl_id"
 
     @Volatile private var apiService: ApiService? = null
     @Volatile private var retrofit: Retrofit? = null
@@ -122,6 +123,7 @@ object ApiClient {
             putString(KEY_EMAIL, response.emailId)
             putString(KEY_MOBILE, response.mobileNumber)
             putString(KEY_ROLE, response.role)
+            putString(KEY_DL_ID, response.dlId ?: "")
             apply()
         }
         // Migration: clear any legacy plaintext token left by older builds.
@@ -146,6 +148,9 @@ object ApiClient {
     fun getUserMobile(context: Context): String = prefs(context).getString(KEY_MOBILE, "") ?: ""
 
     fun getUserRole(context: Context): String = prefs(context).getString(KEY_ROLE, "") ?: ""
+
+    /** Dukaan Locker ID (DL ID) of the signed-in account, "" when not signed in. */
+    fun getDlId(context: Context): String = prefs(context).getString(KEY_DL_ID, "") ?: ""
 
     fun getManagerCode(context: Context): String {
         val secureCode = try {

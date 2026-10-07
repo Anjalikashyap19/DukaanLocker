@@ -44,6 +44,7 @@ fun OwnerLoginForm(
     passwordVisible: Boolean, onTogglePasswordVisible: () -> Unit,
     passwordError: Boolean,
     isChecking: Boolean,
+    lockoutRemainingMs: Long = 0L,
     onBack: () -> Unit,
     onLogin: () -> Unit,
     onForgotPassword: () -> Unit = {},
@@ -207,9 +208,11 @@ fun OwnerLoginForm(
                 }
             }
 
+            LoginLockoutBanner(colors = colors, remainingMs = lockoutRemainingMs)
+
             Button(
                 onClick = onLogin,
-                enabled = email.isNotBlank() && password.isNotBlank() && !isChecking,
+                enabled = email.isNotBlank() && password.isNotBlank() && !isChecking && lockoutRemainingMs <= 0L,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),

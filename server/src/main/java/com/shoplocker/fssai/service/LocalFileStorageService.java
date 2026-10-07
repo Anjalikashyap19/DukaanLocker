@@ -3,6 +3,8 @@ package com.shoplocker.fssai.service;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import com.shoplocker.fssai.util.DlIds;
+
 import java.io.*;
 import java.nio.file.*;
 import java.util.UUID;
@@ -89,9 +91,9 @@ public class LocalFileStorageService {
 
          // Build folder path: dl-id_shop-id
         // DL IDs start from 1111 to avoid collision with the reserved 0001-1110 range.
-        // The userId passed here is the User's database ID, offset by +1110 to produce
-        // the DL ID (e.g., user id 1 -> dl-id 1111, user id 2 -> 1112, etc.)
-        String dlId = String.format("%04d", userId + 1110);
+        // DlIds.forUser is the single source of truth for userId + 1110, so folder
+        // paths always agree with the users.dl_id column (e.g. user id 1 -> 1111).
+        String dlId = DlIds.forUser(userId);
         String folderName = dlId + "_" + shopId;
 
         // Determine the relative path within the shop folder

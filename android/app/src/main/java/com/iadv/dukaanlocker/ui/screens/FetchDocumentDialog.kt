@@ -7,6 +7,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -29,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.iadv.dukaanlocker.*
 import com.iadv.dukaanlocker.api.FssaiVerificationResponse
 import com.iadv.dukaanlocker.api.GstVerificationResponse
@@ -310,16 +313,23 @@ fun FetchDocumentDialog(
         }
     }
 
-    Dialog(onDismissRequest = { if (!isFetching) onDismiss() }) {
+    Dialog(
+        onDismissRequest = { if (!isFetching) onDismiss() },
+        // Let the dialog window take IME insets so imePadding() lifts the
+        // Confirm/Cancel buttons above the keyboard.
+        properties = DialogProperties(decorFitsSystemWindows = false)
+    ) {
         Card(
-            modifier = Modifier.widthIn(max = 400.dp).fillMaxWidth().padding(16.dp),
+            modifier = Modifier.imePadding().widthIn(max = 400.dp).fillMaxWidth().padding(16.dp),
             colors = CardDefaults.cardColors(containerColor = colors.cardBg),
             border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.35f)),
             shape = RoundedCornerShape(20.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -338,13 +348,6 @@ fun FetchDocumentDialog(
                         Icon(Icons.Default.CloudDownload, contentDescription = null, tint = colors.primary, modifier = Modifier.size(30.dp))
                     }
                     Text(AppStrings.get(lang, "Auto-Fetch Official Doc"), fontSize = 19.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                    Text(
-                        "${AppStrings.get(lang, "Securely fetch your")} ${doc.name} ${AppStrings.get(lang, "from government databases.")}",
-                        fontSize = 12.5.sp,
-                        color = colors.textSecondary,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 18.sp
-                    )
 
                     // ── Business this document will be locked to ──
                     if (shopName.isNotBlank()) {

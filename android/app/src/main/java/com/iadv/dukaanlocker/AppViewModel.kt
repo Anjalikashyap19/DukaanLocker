@@ -42,6 +42,7 @@ data class AppUiState(
     val currentUserEmail: String = "",
     val currentUserRole: String = "",
     val currentUserManagerCode: String = "",
+    val currentDlId: String = "",
     val shops: List<ShopResponse> = emptyList(),
     val selectedShop: ShopResponse? = null,
     val shopDocuments: List<DocumentResponse> = emptyList(),
@@ -123,6 +124,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             currentUserEmail = ApiClient.getUserEmail(application),
             currentUserRole = role,
             currentUserManagerCode = ApiClient.getManagerCode(application),
+            currentDlId = ApiClient.getDlId(application),
             isDarkTheme = LockerStorage.getTheme(application),
             language = LockerStorage.getLanguage(application),
             isBiometricLoginEnabled = biometricLoginEnabled
@@ -312,6 +314,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 currentUserEmail = "",
                 currentUserRole = "",
                 currentUserManagerCode = "",
+                currentDlId = "",
                 shops = emptyList(),
                 shopDocuments = emptyList(),
                 managers = emptyList(),
@@ -344,6 +347,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 currentUserEmail = "",
                 currentUserRole = "",
                 currentUserManagerCode = "",
+                currentDlId = "",
                 shops = emptyList(),
                 shopDocuments = emptyList(),
                 managers = emptyList(),
@@ -370,6 +374,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 currentUserEmail = auth.emailId,
                 currentUserRole = auth.role,
                 currentUserManagerCode = auth.managerCode ?: it.currentUserManagerCode,
+                currentDlId = auth.dlId ?: it.currentDlId,
                 isLoggedIn = true
             )
         }
@@ -584,13 +589,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun login(email: String, password: String, onDone: () -> Unit) {
+    fun login(email: String, password: String, onDone: (success: Boolean) -> Unit) {
         viewModelScope.launch {
             updateState { it.copy(isLoading = true) }
+            var success = false
             try {
                 val response = api.login(LoginRequest(emailId = email, password = password))
-                if (response.isSuccessful) {
-                    val auth = response.body() ?: return@launch
+                val auth = response.body()
+                if (response.isSuccessful && auth != null) {
+                    success = true
                     saveAuth(auth, sendWelcomePush = true)
                     navigateToHome()
                     showToast("Welcome, ${_uiState.value.currentUserName}!", ToastType.SUCCESS)
@@ -601,7 +608,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 showToast("Network error: ${e.message}", ToastType.ERROR)
             }
             updateState { it.copy(isLoading = false) }
-            onDone()
+            onDone(success)
         }
     }
 
@@ -636,7 +643,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val authResponse = AuthResponse(
                         token = auth.token, tokenType = auth.tokenType, userId = auth.userId,
                         userName = auth.userName, mobileNumber = auth.mobileNumber, emailId = auth.emailId,
-                        role = auth.role, certificatePdfUrl = auth.certificatePdfUrl,
+                        role = auth.role, dlId = auth.dlId, certificatePdfUrl = auth.certificatePdfUrl,
                         shopId = auth.shopId, shopName = auth.shopName
                     )
                     saveAuth(authResponse, sendWelcomePush = false)
@@ -656,13 +663,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun loginByCode(code: String) {
+    fun loginByCode(code: String, onDone: (success: Boolean) -> Unit) {
         viewModelScope.launch {
             updateState { it.copy(isLoading = true) }
+            var success = false
             try {
                 val response = api.loginByCode(ManagerCodeLoginRequest(managerCode = code))
-                if (response.isSuccessful) {
-                    val auth = response.body() ?: return@launch
+                val auth = response.body()
+                if (response.isSuccessful && auth != null) {
+                    success = true
                     saveAuth(auth, sendWelcomePush = true)
                     updateState { it.copy(currentScreen = Screen.ManagerHome) }
                     loadShops()
@@ -675,6 +684,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 showToast("Network error: ${e.message}", ToastType.ERROR)
             }
             updateState { it.copy(isLoading = false) }
+            onDone(success)
         }
     }
 
@@ -722,7 +732,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val authResponse = AuthResponse(
                         token = auth.token, tokenType = auth.tokenType, userId = auth.userId,
                         userName = auth.userName, mobileNumber = auth.mobileNumber, emailId = auth.emailId,
-                        role = auth.role, certificatePdfUrl = auth.certificatePdfUrl,
+                        role = auth.role, dlId = auth.dlId, certificatePdfUrl = auth.certificatePdfUrl,
                         shopId = auth.shopId, shopName = auth.shopName
                     )
                     saveAuth(authResponse, sendWelcomePush = true)

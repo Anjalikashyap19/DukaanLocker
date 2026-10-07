@@ -30,6 +30,7 @@ import com.shoplocker.fssai.exception.FssaiException;
 import com.shoplocker.fssai.repository.*;
 import com.shoplocker.fssai.security.JwtService;
 import com.shoplocker.fssai.scheduler.DocumentMissingScheduler;
+import com.shoplocker.fssai.util.DlIds;
 import com.shoplocker.fssai.util.MsmeDataParser;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -166,6 +167,21 @@ public class AuthService {
         this.shopService = shopService;
     }
 
+    /**
+     * Builds the auth payload and guarantees the account carries a DL ID first.
+     * Accounts created before the DL ID column existed (or any row where it is
+     * still NULL) are backfilled and persisted here, so every token the app
+     * receives comes with the folder id that storage paths are built from.
+     */
+    private AuthResponse authResponse(User user, String token) {
+        if (DlIds.isMissing(user.getDlId())) {
+            user.setDlId(DlIds.forUser(user.getId()));
+            userRepository.save(user);
+            log.debug("Assigned DL ID {} to user {}", user.getDlId(), user.getId());
+        }
+        return AuthResponse.from(user, token);
+    }
+
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         String email = normalizeEmail(request.getEmailId());
@@ -212,7 +228,7 @@ public class AuthService {
         String token = jwtService.generateToken(saved);
 
         log.info("User registered: id={} email={} role={}", saved.getId(), maskEmail(saved.getEmailId()), saved.getRole());
-        return AuthResponse.from(saved, token);
+        return authResponse(saved, token);
     }
 
     public AuthResponse login(LoginRequest request) {
@@ -260,7 +276,7 @@ public class AuthService {
 
         String token = jwtService.generateToken(user);
         createLoginNotifications(user);
-        return AuthResponse.from(user, token);
+        return authResponse(user, token);
     }
 
     /**
@@ -325,7 +341,7 @@ public class AuthService {
             String token = jwtService.generateToken(user);
             createLoginNotifications(user);
             log.info("Google login: existing user email={}", maskEmail(email));
-            return AuthResponse.from(user, token);
+            return authResponse(user, token);
         }
 
         // Create new user from Google account
@@ -342,7 +358,7 @@ public class AuthService {
         String token = jwtService.generateToken(saved);
 
         log.info("Google registration: userId={} email={}", saved.getId(), maskEmail(email));
-        return AuthResponse.from(saved, token);
+        return authResponse(saved, token);
     }
 
     /**
@@ -366,7 +382,7 @@ public class AuthService {
         String token = jwtService.generateToken(user);
         createLoginNotifications(user);
         log.info("Google login: existing user email={}", maskEmail(email));
-        return AuthResponse.from(user, token);
+        return authResponse(user, token);
     }
 
     /**
@@ -451,7 +467,7 @@ public class AuthService {
         String token = jwtService.generateToken(user);
         createLoginNotifications(user);
         log.info("Manager logged in via code: userId={}", user.getId());
-        return AuthResponse.from(user, token);
+        return authResponse(user, token);
     }
 
     /**
@@ -585,7 +601,7 @@ public class AuthService {
                 savedUser.getId(), savedShop.getId(), udyamNumber);
 
         // ── Step 7: Build response with all details ──
-        AuthResponse auth = AuthResponse.from(savedUser, token);
+        AuthResponse auth = authResponse(savedUser, token);
         MsmeAuthResponse msmeAuth = new MsmeAuthResponse(
                 auth, finalPdfUrl, udyamNumber);
 
@@ -910,7 +926,7 @@ public class AuthService {
         String token = jwtService.generateToken(user);
         createLoginNotifications(user);
         log.info("Biometric login successful: userId={} email={}", userId, maskEmail(email));
-        return AuthResponse.from(user, token);
+        return authResponse(user, token);
     }
 
     /**
@@ -992,7 +1008,7 @@ public class AuthService {
         String token = jwtService.generateToken(user);
         createLoginNotifications(user);
         log.info("MSME login successful: userId={} udyam={}", user.getId(), udyamNumber);
-        return AuthResponse.from(user, token);
+        return authResponse(user, token);
     }
 
     /**

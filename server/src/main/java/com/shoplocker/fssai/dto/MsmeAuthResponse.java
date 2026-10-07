@@ -26,6 +26,8 @@ public class MsmeAuthResponse extends AuthResponse {
     public MsmeAuthResponse(AuthResponse base, String certificatePdfUrl, String udyamNumber) {
         super(base.getToken(), base.getUserId(), base.getUserName(),
               base.getMobileNumber(), base.getEmailId(), base.getRole());
+        this.setManagerCode(base.getManagerCode());
+        this.setDlId(base.getDlId());
         this.certificatePdfUrl = certificatePdfUrl;
         this.udyamNumber = udyamNumber;
     }

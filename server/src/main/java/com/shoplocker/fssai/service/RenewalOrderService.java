@@ -12,6 +12,7 @@ import com.shoplocker.fssai.repository.DocumentRepository;
 import com.shoplocker.fssai.repository.RenewalOrderRepository;
 import com.shoplocker.fssai.repository.ShopRepository;
 import com.shoplocker.fssai.repository.UserRepository;
+import com.shoplocker.fssai.util.DlIds;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -155,10 +156,10 @@ public class RenewalOrderService {
         return toResponse(order);
     }
 
-    /** DL ID = userId + 1110, zero-padded to 4 digits (matches LocalFileStorageService). */
+    /** Returns the user's DL ID, assigning and persisting it on first use. */
     private String ensureDlId(User user) {
-        if (user.getDlId() == null || user.getDlId().isBlank()) {
-            String dlId = String.format("%04d", user.getId() + 1110);
+        if (DlIds.isMissing(user.getDlId())) {
+            String dlId = DlIds.forUser(user.getId());
             user.setDlId(dlId);
             userRepository.save(user);
             return dlId;

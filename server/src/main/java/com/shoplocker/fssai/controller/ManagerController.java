@@ -11,6 +11,7 @@ import com.shoplocker.fssai.repository.UserRepository;
 import com.shoplocker.fssai.security.JwtService;
 import com.shoplocker.fssai.service.ShopAccessService;
 import com.shoplocker.fssai.service.ShopService;
+import com.shoplocker.fssai.util.DlIds;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -93,6 +94,9 @@ public class ManagerController {
         manager.setManagerCode(generateUniqueManagerCode());
 
         User saved = userRepository.save(manager);
+        // Every account owns a DL ID folder from the moment it exists.
+        saved.setDlId(DlIds.forUser(saved.getId()));
+        saved = userRepository.save(saved);
 
         ManagerResponse response = new ManagerResponse(
                 saved.getId(),

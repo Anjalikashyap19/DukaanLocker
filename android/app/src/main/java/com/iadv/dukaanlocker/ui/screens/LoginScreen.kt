@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -22,8 +23,8 @@ import com.iadv.dukaanlocker.ui.theme.LocalAppColors
 
 @Composable
 fun LoginScreen(
-    onOwnerLogin: (email: String, password: String, onDone: () -> Unit) -> Unit,
-    onManagerLogin: (code: String) -> Unit,
+    onOwnerLogin: (email: String, password: String, onDone: (success: Boolean) -> Unit) -> Unit,
+    onManagerLogin: (code: String, onDone: (success: Boolean) -> Unit) -> Unit,
     onRegister: (name: String, email: String, password: String, mobile: String, onDone: () -> Unit) -> Unit,
     onRegisterWithMsme: (msmeNumber: String, mobile: String, sessionId: String, captchaText: String, onDone: () -> Unit) -> Unit = { _, _, _, _, onDone -> onDone() },
     onInitMsmeCaptcha: (onResult: (sessionId: String, captchaImage: String) -> Unit) -> Unit = { onResult -> onResult("", "") },
@@ -88,6 +89,27 @@ fun LoginScreen(
     var accessCode by remember { mutableStateOf("") }
     var codeError by remember { mutableStateOf(false) }
 
+    // ── Sign-in rate limit: 5 failed attempts start a 2-minute lockout ──
+    val context = LocalContext.current
+    var ownerLockoutMs by remember { mutableStateOf(LoginRateLimiter.lockoutRemainingMs(context, LoginRateLimiter.OWNER)) }
+    var managerLockoutMs by remember { mutableStateOf(LoginRateLimiter.lockoutRemainingMs(context, LoginRateLimiter.MANAGER)) }
+
+    // Ticks each lockout once a second until it expires.
+    LaunchedEffect(ownerLockoutMs > 0L) {
+        if (ownerLockoutMs <= 0L) return@LaunchedEffect
+        while (ownerLockoutMs > 0L) {
+            kotlinx.coroutines.delay(1000)
+            ownerLockoutMs = LoginRateLimiter.lockoutRemainingMs(context, LoginRateLimiter.OWNER)
+        }
+    }
+    LaunchedEffect(managerLockoutMs > 0L) {
+        if (managerLockoutMs <= 0L) return@LaunchedEffect
+        while (managerLockoutMs > 0L) {
+            kotlinx.coroutines.delay(1000)
+            managerLockoutMs = LoginRateLimiter.lockoutRemainingMs(context, LoginRateLimiter.MANAGER)
+        }
+    }
+
     val regStrength = remember(regPassword) { evaluatePasswordStrength(regPassword) }
 
     fun isStrongPassword(pw: String): Boolean {
@@ -132,10 +154,15 @@ fun LoginScreen(
     fun validateAndLogin() {
         loginEmailError = !isValidEmail(loginEmail)
         loginPasswordError = loginPassword.isBlank()
-        if (!loginEmailError && !loginPasswordError) {
+        if (!loginEmailError && !loginPasswordError && ownerLockoutMs <= 0L) {
             loginIsChecking = true
-            onOwnerLogin(loginEmail.trim(), loginPassword) {
+            onOwnerLogin(loginEmail.trim(), loginPassword) { success ->
                 loginIsChecking = false
+                if (success) {
+                    LoginRateLimiter.recordSuccess(context, LoginRateLimiter.OWNER)
+                } else {
+                    ownerLockoutMs = LoginRateLimiter.recordFailure(context, LoginRateLimiter.OWNER)
+                }
             }
         }
     }
@@ -246,6 +273,7 @@ fun LoginScreen(
                     onTogglePasswordVisible = { loginPasswordVisible = !loginPasswordVisible },
                     passwordError = loginPasswordError,
                     isChecking = loginIsChecking,
+                    lockoutRemainingMs = ownerLockoutMs,
                     onBack = { selectedView = null; loginIsChecking = false },
                     onLogin = { validateAndLogin() },
                     onForgotPassword = {
@@ -340,13 +368,23 @@ fun LoginScreen(
                     accessCode = accessCode,
                     onAccessCodeChange = { accessCode = it.uppercase().take(6); codeError = false },
                     codeError = codeError,
+                    lockoutRemainingMs = managerLockoutMs,
                     onBack = { selectedView = null; codeError = false },
                     onLogin = {
-                        if (accessCode.length == 6) {
-                            loginIsChecking = true
-                            onManagerLogin(accessCode)
-                        } else {
-                            codeError = true
+                        when {
+                            managerLockoutMs > 0L -> Unit
+                            accessCode.length == 6 -> {
+                                loginIsChecking = true
+                                onManagerLogin(accessCode) { success ->
+                                    loginIsChecking = false
+                                    if (success) {
+                                        LoginRateLimiter.recordSuccess(context, LoginRateLimiter.MANAGER)
+                                    } else {
+                                        managerLockoutMs = LoginRateLimiter.recordFailure(context, LoginRateLimiter.MANAGER)
+                                    }
+                                }
+                            }
+                            else -> codeError = true
                         }
                     }
                 )

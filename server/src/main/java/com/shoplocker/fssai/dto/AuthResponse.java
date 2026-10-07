@@ -19,6 +19,7 @@ public class AuthResponse {
     private String emailId;
     private Role role;
     private String managerCode;
+    private String dlId;
 
     public AuthResponse() {}
 
@@ -46,7 +47,7 @@ public class AuthResponse {
     }
 
     public static AuthResponse from(User user, String token) {
-        return new AuthResponse(
+        AuthResponse response = new AuthResponse(
                 token,
                 user.getId(),
                 user.getUserName(),
@@ -54,6 +55,8 @@ public class AuthResponse {
                 user.getEmailId(),
                 user.getRole(),
                 user.getManagerCode());
+        response.setDlId(user.getDlId());
+        return response;
     }
 
     public String getToken() { return token; }
@@ -79,4 +82,8 @@ public class AuthResponse {
 
     public String getManagerCode() { return managerCode; }
     public void setManagerCode(String managerCode) { this.managerCode = managerCode; }
+
+    /** Dukaan Locker ID (DL ID): the 4-digit folder identifier for this account. */
+    public String getDlId() { return dlId; }
+    public void setDlId(String dlId) { this.dlId = dlId; }
 }

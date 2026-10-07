@@ -15,6 +15,7 @@ public class UserResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<ShopResponse> shops;
+    private String dlId;
     public UserResponse() {
     }
 
@@ -27,7 +28,8 @@ public class UserResponse {
             boolean enabled,
             LocalDateTime createdAt,
             LocalDateTime updatedAt,
-            List<ShopResponse> shops
+            List<ShopResponse> shops,
+            String dlId
     )
     {
         this.id = id;
@@ -39,6 +41,15 @@ public class UserResponse {
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
         this.shops = shops;
+        this.dlId = dlId;
+    }
+
+    public String getDlId() {
+        return dlId;
+    }
+
+    public void setDlId(String dlId) {
+        this.dlId = dlId;
     }
 
     public List<ShopResponse> getShops() {

@@ -39,7 +39,7 @@ fun DukaanLockerApp(
     onThemeChange: (Boolean) -> Unit = {},
     onLanguageChanged: (String) -> Unit = {},
     onGoogleSignIn: () -> Unit = {},
-    registerGoogleAuthHandlers: ((onSuccess: (token: String, userId: Long, userName: String, email: String, mobileNumber: String, role: String) -> Unit, onError: (Exception) -> Unit) -> Unit)? = null,
+    registerGoogleAuthHandlers: ((onSuccess: (token: String, userId: Long, userName: String, email: String, mobileNumber: String, role: String, dlId: String?) -> Unit, onError: (Exception) -> Unit) -> Unit)? = null,
     onAppUnlock: ((onSuccess: () -> Unit, onError: (String) -> Unit) -> Unit)? = null,
     onBiometricLogin: ((onSuccess: (androidx.biometric.BiometricPrompt.CryptoObject) -> Unit, onError: (String) -> Unit) -> Unit)? = null,
     onEnableBiometricLogin: ((cipher: javax.crypto.Cipher, token: String, userId: Long, userName: String, email: String, role: String) -> Boolean)? = null,
@@ -112,8 +112,8 @@ fun DukaanLockerApp(
     // ── GOOGLE SIGN-IN ──
     LaunchedEffect(Unit) {
         registerGoogleAuthHandlers?.invoke(
-            { token, userId, userName, email, mobileNumber, role ->
-                val auth = AuthResponse(token = token, tokenType = "Bearer", userId = userId, userName = userName, mobileNumber = mobileNumber, emailId = email, role = role)
+            { token, userId, userName, email, mobileNumber, role, dlId ->
+                val auth = AuthResponse(token = token, tokenType = "Bearer", userId = userId, userName = userName, mobileNumber = mobileNumber, emailId = email, role = role, dlId = dlId)
                 vm.saveAuth(auth, sendWelcomePush = true)
                 vm.navigateToHome()
                 vm.showToast("Welcome, $userName!", ToastType.SUCCESS)
@@ -266,7 +266,7 @@ fun DukaanLockerApp(
                             SettingsScreen(
                                 isDarkTheme = state.isDarkTheme,
                                 onToggleTheme = onToggleTheme,
-                                user = UserAccount(mobile = ApiClient.getUserMobile(context), name = state.currentUserName, email = state.currentUserEmail, role = state.currentUserRole),
+                                        user = UserAccount(mobile = ApiClient.getUserMobile(context), name = state.currentUserName, email = state.currentUserEmail, role = state.currentUserRole, dlId = state.currentDlId),
                                 onLogout = handleLogout,
                                 businesses = if (state.currentUserRole == "MANAGER") state.shops else emptyList(),
                                 isLoadingShops = state.isLoadingShops,
@@ -318,7 +318,7 @@ fun DukaanLockerApp(
                                     onForgotPasswordRequest = { mobile, onResult -> vm.forgotPasswordRequest(mobile, onResult) },
                                     onForgotPasswordReset = { mobile, otp, password, onResult -> vm.resetPassword(mobile, otp, password, onResult) },
                                     onMobileHint = { email, onResult -> vm.mobileHint(email, onResult) },
-                                    onManagerLogin = { code -> vm.loginByCode(code) }
+                                    onManagerLogin = { code, onDone -> vm.loginByCode(code, onDone) }
                                 )
                             }
 
@@ -386,7 +386,7 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                         onBiometricLoginToggle = { enabled -> if (!enabled) vm.disableBiometricLogin() },
                                         showAddBusiness = state.currentUserRole == "ADMIN",
                                         showManageManagers = state.currentUserRole == "ADMIN",
-                                        user = UserAccount(mobile = ApiClient.getUserMobile(context), name = state.currentUserName, email = state.currentUserEmail, role = state.currentUserRole),
+                                user = UserAccount(mobile = ApiClient.getUserMobile(context), name = state.currentUserName, email = state.currentUserEmail, role = state.currentUserRole, dlId = state.currentDlId),
                                         businesses = state.shops.map { vm.shopToBusiness(it) },
                                         onBusinessSelected = { bizId -> vm.loadDocuments(bizId.toLongOrNull() ?: return@OwnerHomeScreen) },
                                         documents = vm.toDocumentItems(state.shopDocuments),
@@ -419,7 +419,7 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                     ManagerHomeScreen(
                                         isDarkTheme = state.isDarkTheme,
                                         onToggleTheme = onToggleTheme,
-                                        user = UserAccount(mobile = ApiClient.getUserMobile(context), name = state.currentUserName, email = state.currentUserEmail, role = state.currentUserRole, managerCode = state.currentUserManagerCode),
+                                        user = UserAccount(mobile = ApiClient.getUserMobile(context), name = state.currentUserName, email = state.currentUserEmail, role = state.currentUserRole, managerCode = state.currentUserManagerCode, dlId = state.currentDlId),
                                         managerAccess = ManagerAccess(id = state.currentUserId.toString(), code = state.currentUserManagerCode, managerName = state.currentUserName, assignedBusinessIds = state.shops.map { it.id.toString() }),
                                         businesses = state.shops.map { vm.shopToBusiness(it) },
                                         documents = vm.toDocumentItems(state.shopDocuments),

@@ -15,14 +15,15 @@ data class UserAccount(
     val email: String = "",
     val password: String = "",
     val role: String,           // "OWNER" or "MANAGER"
-    val managerCode: String = ""
+    val managerCode: String = "",
+    val dlId: String = ""       // Dukaan Locker ID (4-digit folder id)
 ) {
-    override fun toString(): String = "UserAccount(mobile=$mobile, name=$name, email=$email, role=$role, managerCode=$managerCode)"
+    override fun toString(): String = "UserAccount(mobile=$mobile, name=$name, email=$email, role=$role, managerCode=$managerCode, dlId=$dlId)"
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is UserAccount) return false
         return mobile == other.mobile && name == other.name && email == other.email &&
-                role == other.role && managerCode == other.managerCode
+                role == other.role && managerCode == other.managerCode && dlId == other.dlId
     }
     override fun hashCode(): Int {
         var result = mobile.hashCode()
@@ -30,6 +31,7 @@ data class UserAccount(
         result = 31 * result + email.hashCode()
         result = 31 * result + role.hashCode()
         result = 31 * result + managerCode.hashCode()
+        result = 31 * result + dlId.hashCode()
         return result
     }
 }

@@ -65,7 +65,8 @@ public class UserService {
                 user.isEnabled(),
                 user.getCreatedAt(),
                 user.getUpdatedAt(),
-                null
+                null,
+                user.getDlId()
         );
     }
 
@@ -86,7 +87,8 @@ public class UserService {
                 user.isEnabled(),
                 user.getCreatedAt(),
                 user.getUpdatedAt(),
-                shops
+                shops,
+                user.getDlId()
         );
     }
 }

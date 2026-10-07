@@ -25,6 +25,7 @@ data class AuthResponse(
     @SerializedName("emailId") val emailId: String,
     @SerializedName("role") val role: String,
     @SerializedName("managerCode") val managerCode: String? = null,
+    @SerializedName("dlId") val dlId: String? = null,
     @SerializedName("certificatePdfUrl") val certificatePdfUrl: String? = null,
     @SerializedName("shopId") val shopId: Long? = null,
     @SerializedName("shopName") val shopName: String? = null
@@ -234,7 +235,8 @@ data class MsmeAuthResponse(
     @SerializedName("shopCategory") val shopCategory: String?,
     @SerializedName("shopState") val shopState: String?,
     @SerializedName("shopCity") val shopCity: String?,
-    @SerializedName("shopAddress") val shopAddress: String?
+    @SerializedName("shopAddress") val shopAddress: String?,
+    @SerializedName("dlId") val dlId: String? = null
 )
 
 private val sharedGson = com.google.gson.Gson()

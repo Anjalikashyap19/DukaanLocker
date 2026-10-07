@@ -36,6 +36,7 @@ fun ManagerLoginForm(
     accessCode: String,
     onAccessCodeChange: (String) -> Unit,
     codeError: Boolean,
+    lockoutRemainingMs: Long = 0L,
     onBack: () -> Unit,
     onLogin: () -> Unit
 ) {
@@ -133,9 +134,11 @@ fun ManagerLoginForm(
 
             Spacer(modifier = Modifier.height(4.dp))
 
+            LoginLockoutBanner(colors = colors, remainingMs = lockoutRemainingMs)
+
             Button(
                 onClick = onLogin,
-                enabled = accessCode.length == 6,
+                enabled = accessCode.length == 6 && lockoutRemainingMs <= 0L,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),

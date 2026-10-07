@@ -66,7 +66,7 @@ class MainActivity : FragmentActivity() {
         private set
 
     // Callbacks for Google Sign-Up result
-    private var onGoogleSignUpSuccess: ((token: String, userId: Long, userName: String, email: String, mobileNumber: String, role: String) -> Unit)? = null
+    private var onGoogleSignUpSuccess: ((token: String, userId: Long, userName: String, email: String, mobileNumber: String, role: String, dlId: String?) -> Unit)? = null
     private var onGoogleSignUpError: ((Exception) -> Unit)? = null
 
     private val notificationPermissionLauncher = registerForActivityResult(
@@ -126,7 +126,8 @@ class MainActivity : FragmentActivity() {
                         auth.userName,
                         auth.emailId,
                         auth.mobileNumber,
-                        auth.role
+                        auth.role,
+                        auth.dlId
                     )
                 } else {
                     // Read the error body exactly once: errorBody()?.string() drains the

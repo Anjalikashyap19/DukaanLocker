@@ -79,6 +79,49 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
+                // ── Signed-in account: identity + DL ID (Dukaan Locker ID) ──
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBg),
+                    border = BorderStroke(1.dp, colors.border),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(colors.primary.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary, modifier = Modifier.size(24.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(user.name.ifBlank { AppStrings.get(lang, "User") }, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                                Text(user.role, fontSize = 12.sp, color = colors.primary, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider(color = colors.border)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("${AppStrings.get(lang, "Mobile:")} +91 ${user.mobile}", fontSize = 14.sp, color = colors.textSecondary)
+                        if (user.email.isNotBlank()) {
+                            Text("${AppStrings.get(lang, "Email:")} ${user.email}", fontSize = 14.sp, color = colors.textSecondary)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "${AppStrings.get(lang, "DL Id")} : ${user.dlId.ifBlank { "--" }}",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.primary
+                        )
+                    }
+                }
+            }
+
+            item {
                 if (isLoadingShops) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         SkeletonText(width = 0.5f, height = 12)
@@ -135,39 +178,6 @@ fun SettingsScreen(
                             }
                         }
                     }
-                } else {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-                    border = BorderStroke(1.dp, colors.border),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(colors.primary.copy(alpha = 0.2f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary, modifier = Modifier.size(24.dp))
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                 Text(user.name.ifBlank { AppStrings.get(lang, "User") }, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                                Text(user.role, fontSize = 12.sp, color = colors.primary, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        HorizontalDivider(color = colors.border)
-                        Spacer(modifier = Modifier.height(8.dp))
-                         Text("${AppStrings.get(lang, "Mobile:")} +91 ${user.mobile}", fontSize = 14.sp, color = colors.textSecondary)
-                        if (user.email.isNotBlank()) {
-                            Text("${AppStrings.get(lang, "Email:")} ${user.email}", fontSize = 14.sp, color = colors.textSecondary)
-                        }
-                    }
-                }
                 }
             }
 
