@@ -1041,9 +1041,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             showToast("Shop created but manager assignment failed: ${e.message}", ToastType.WARNING)
                         }
                     }
-                    showToast("${biz.name} created!", ToastType.SUCCESS)
+                    // Home only lists the primary (first) shop, so from the 2nd
+                    // shop onwards bouncing back to Home makes the new business
+                    // look like it vanished. Land on the Business tab instead,
+                    // where every shop is listed, and say so in the toast.
+                    val isFirstShop = _uiState.value.shops.isEmpty()
+                    showToast(
+                        if (isFirstShop) "${biz.name} created!"
+                        else "${biz.name} created! Find it in the Business tab",
+                        ToastType.SUCCESS
+                    )
                     loadShops()
-                    updateState { it.copy(currentScreen = Screen.OwnerHome) }
+                    updateState {
+                        if (isFirstShop) {
+                            it.copy(currentScreen = Screen.OwnerHome, navigationHistory = emptyList())
+                        } else {
+                            it.copy(
+                                currentScreen = Screen.OwnerHome,
+                                selectedBottomTab = BottomTab.Business,
+                                navigationHistory = emptyList()
+                            )
+                        }
+                    }
                 } else {
                     // Surface the server error (e.g. "Invalid scale") instead of
                     // bouncing back to Home as if the save had succeeded.
