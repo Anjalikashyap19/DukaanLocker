@@ -8,10 +8,10 @@ import java.util.Locale;
  * Generates professional XHTML templates for FSSAI Food License / Certificate of
  * Registration PDFs, styled consistently with {@link GstHtmlGenerator}.
  *
- * <p>The layout mirrors the reference certificate: a rounded page frame, a navy
- * department header, a serif licence-number block, three navy section bars, the
- * certification box, and a footer carrying the QR code (left) and the
- * DukaanLocker signature block (right).</p>
+ * <p>The layout mirrors the reference certificate: a navy department header, a
+ * serif licence-number block, three navy section bars, the certification box,
+ * and a footer carrying the QR code (left) and the DukaanLocker signature
+ * block (right) separated by a short vertical rule.</p>
  */
 public class FssaiHtmlGenerator {
 
@@ -131,15 +131,15 @@ public class FssaiHtmlGenerator {
                 "  * { box-sizing: border-box; margin:0; padding:0; }\n" +
                 "  body { font-family: 'Times New Roman', 'Liberation Serif', Times, Georgia, serif; font-size:9pt; color:#1a1a1a; line-height:1.3; background:#fff; }\n" +
                 "\n" +
-                "  /* ===== PAGE FRAME ===== */\n" +
+                "  /* ===== CONTENT WRAPPER (no border - the page itself is the frame) ===== */\n" +
                 "  /* The 30mm top pad is deliberate: the reference certificate opens with a\n" +
                 "     wide ceremonial gap before the department name. */\n" +
-                "  .frame { border:1.5px solid #9FB3C8; border-radius:10px; padding:30mm 5mm 6mm; }\n" +
+                "  .frame { padding:30mm 5mm 6mm; }\n" +
                 "\n" +
                 "  /* ===== HEADER ===== */\n" +
                 "  .header { text-align:center; padding:11px 8px 7px; border-bottom:1.5px solid #1F4E79; }\n" +
-                "  .header-dept { font-size:12pt; font-weight:bold; color:#1F4E79; letter-spacing:1.4px; }\n" +
-                "  .header-board { font-size:9.5pt; color:#1F4E79; letter-spacing:3.5px; margin-top:2px; }\n" +
+                "  .header-dept { font-size:15pt; font-weight:bold; color:#1F4E79; letter-spacing:1.4px; }\n" +
+                "  .header-board { font-size:11pt; color:#1F4E79; letter-spacing:4.5px; margin-top:3px; }\n" +
                 "\n" +
                 "  /* ===== TITLE ===== */\n" +
                 "  .title { text-align:center; font-size:15pt; font-weight:bold; color:#1F4E79; text-transform:uppercase; letter-spacing:2.5px; padding:9px 0 8px; border-bottom:1px solid #B9C6D4; }\n" +
@@ -173,19 +173,21 @@ public class FssaiHtmlGenerator {
                 "  .cert-box { background:#F5F7FA; border:1px solid #DDE5ED; margin-top:8px; padding:7px 10px; font-size:8pt; color:#41546A; line-height:1.35; }\n" +
                 "  .cert-box .heading { font-size:8.5pt; font-weight:bold; color:#1F4E79; margin-bottom:3px; text-transform:uppercase; letter-spacing:1px; }\n" +
                 "\n" +
-                "  /* ===== FOOTER: QR | spacer | logo | signature | tick ===== */\n" +
+                "  /* ===== FOOTER: QR | spacer | logo | rule | signature | tick ===== */\n" +
                 "  .footer { margin-top:9px; }\n" +
-                "  .footer td { border-bottom:none; padding:0; vertical-align:top; }\n" +
-                "  .f-qr { width:16%; text-align:left; }\n" +
-                "  .f-qr .qr { width:27mm; height:27mm; display:block; }\n" +
-                "  .f-gap { width:38%; }\n" +
-                "  .f-logo { width:9%; text-align:right; padding-right:7px; }\n" +
-                "  .f-logo .logo { width:14mm; height:14mm; display:block; }\n" +
-                "  .f-text { width:29%; border-left:1px solid #C4CFDA; padding:1px 0 0 9px; }\n" +
+                "  .footer td { border-bottom:none; padding:0; vertical-align:middle; }\n" +
+                "  .f-qr { width:20%; text-align:left; }\n" +
+                "  .f-qr .qr { width:32mm; height:32mm; display:block; }\n" +
+                "  .f-gap { width:32%; }\n" +
+                "  .f-logo { width:11%; text-align:right; padding-right:7px; }\n" +
+                "  .f-logo .logo { width:18mm; height:18mm; display:block; }\n" +
+                "  .f-div { width:4%; text-align:center; }\n" +
+                "  .f-div .divider { width:2px; height:14mm; background:#7C8FA6; margin:0 auto; }\n" +
+                "  .f-text { width:26%; padding:1px 0 0 16px; }\n" +
                 "  .sign-1 { font-size:8pt; color:#1F4E79; }\n" +
                 "  .sign-2 { font-size:10pt; font-weight:bold; color:#1F4E79; margin-top:1px; }\n" +
                 "  .sign-date { font-size:8pt; color:#5A6B7D; margin-top:4px; }\n" +
-                "  .f-check { width:8%; text-align:right; padding-left:6px; }\n" +
+                "  .f-check { width:7%; text-align:right; padding-left:6px; }\n" +
                 "  .f-check .check { width:11mm; height:11mm; display:block; }\n" +
                 "\n" +
                 "  .mb-0 { margin-bottom:0; }\n" +
@@ -225,6 +227,7 @@ public class FssaiHtmlGenerator {
                 "    <td class=\"f-qr\">" + qrImage(licenseNumber) + "</td>\n" +
                 "    <td class=\"f-gap\"></td>\n" +
                 "    <td class=\"f-logo\"><img class=\"logo\" src=\"" + LOGO_PNG_B64 + "\" alt=\"DukaanLocker\" /></td>\n" +
+                "    <td class=\"f-div\"><div class=\"divider\"></div></td>\n" +
                 "    <td class=\"f-text\">\n" +
                 "      <div class=\"sign-1\">Digitally signed and verified by</div>\n" +
                 "      <div class=\"sign-2\">DukaanLocker</div>\n" +

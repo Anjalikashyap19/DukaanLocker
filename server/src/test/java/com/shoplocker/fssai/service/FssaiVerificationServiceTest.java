@@ -150,6 +150,58 @@ public class FssaiVerificationServiceTest {
         assertNull(service.parseExpiryDate("not-a-date"));
     }
 
+    // ---- expiry robustness: several shapes have been seen to arrive from upstream ----
+
+    @Test
+    void expiryAcceptsEveryDateShapeSeenUpstream() {
+        FssaiVerificationService service = new FssaiVerificationService(null);
+        String iso     = "{\"license\":{\"expiryDate\":\"2028-09-10\"}}";
+        String slash   = "{\"license\":{\"expiryDate\":\"10/09/2028\"}}";
+        String oneBased = "{\"license\":{\"expiryDate\":\"7/10/2026\"}}";
+        String timed   = "{\"license\":{\"expiryDate\":\"10-09-2028 00:00:00\"}}";
+
+        assertEquals(LocalDateTime.of(2028, 9, 10, 0, 0), service.extractExpiryDate(iso));
+        assertEquals(LocalDateTime.of(2028, 9, 10, 0, 0), service.extractExpiryDate(slash));
+        assertEquals(LocalDateTime.of(2026, 10, 7, 0, 0), service.extractExpiryDate(oneBased));
+        assertEquals(LocalDateTime.of(2028, 9, 10, 0, 0), service.extractExpiryDate(timed));
+    }
+
+    @Test
+    void expiryReadFromRenamedKeys() {
+        FssaiVerificationService service = new FssaiVerificationService(null);
+
+        assertEquals(LocalDateTime.of(2028, 9, 10, 0, 0),
+                service.extractExpiryDate("{\"license\":{\"validUpto\":\"10-09-2028\"}}"));
+        assertEquals(LocalDateTime.of(2028, 9, 10, 0, 0),
+                service.extractExpiryDate("{\"license\":{\"validityTill\":\"10-09-2028\"}}"));
+        // a non-date value under a validity-ish key must be ignored, not printed
+        assertNull(service.extractExpiryDate("{\"license\":{\"validityTill\":\"5 Years\"}}"));
+    }
+
+    @Test
+    void expirySurvivesALicenseNodeWithoutLicenseNo() throws Exception {
+        // upstream used to be able to omit LicenseNo; the whole node - and with it the
+        // expiry - was dropped, producing a certificate with no validity date
+        FssaiVerificationResponse response = merge(DETAILS_JSON,
+                "{\"license\":{\"expiryDate\":\"10-09-2028\",\"fboId\":\"72892287\"}}");
+
+        assertTrue(response.isSuccess());
+        assertEquals("10-09-2028", response.getExpiryDate());
+        assertEquals("72892287", response.getFboId());
+        assertEquals("21221160000115", response.getLicenseNumber()); // falls back to details API
+        assertTrue(buildHtml(response).contains("10-09-2028"), "certificate prints the expiry");
+    }
+
+    @Test
+    void expiryIsPrintedOnTheCertificate() throws Exception {
+        FssaiVerificationResponse response = merge(DETAILS_JSON, LICENSE_JSON);
+        String html = buildHtml(response);
+
+        assertTrue(html.contains("Validity / Expiry Date"), "expiry row");
+        assertTrue(html.contains("10-09-2028"), "expiry value");
+        assertFalse(html.contains("Not Available"), "expiry must be present when upstream supplies it");
+    }
+
     private String buildHtml(FssaiVerificationResponse response) {
         return FssaiHtmlGenerator.generateCertificateHtml(
                 response.getLicenseNumber(), response.getCompanyName(), response.getContactPerson(),
@@ -179,16 +231,27 @@ public class FssaiVerificationServiceTest {
         FssaiVerificationResponse response = merge(DETAILS_JSON, LICENSE_JSON);
         String html = buildHtml(response);
 
-        // rounded page frame + serif licence block styled after the reference doc
-        assertTrue(html.contains("class=\"frame\""), "page frame");
+        // plain content wrapper: no square / rounded border around the page
+        assertFalse(html.contains("border-radius:10px"), "old rounded frame border is gone");
+        assertFalse(html.contains(".frame { border"), "no frame border at all");
+        assertTrue(html.contains("class=\"frame\""), "content wrapper");
         assertTrue(html.contains("FSSAI License / Registration Number"), "licence block");
         assertTrue(html.contains("Times New Roman"), "serif face");
+
+        // header set bigger and the QR enlarged after the visual review
+        assertTrue(html.contains(".header-dept { font-size:15pt"), "header font size");
+        assertTrue(html.contains(".f-qr .qr { width:32mm"), "QR size");
 
         // footer carries exactly three images: QR, DukaanLocker logo, verified tick
         assertEquals(3, occurrences(html, "data:image/png;base64,"), "QR + logo + tick");
         assertTrue(html.contains(QrCodePng.pngDataUri("FSSAI:21221160000115")),
                 "QR must encode this licence number");
         assertTrue(html.contains("Digitally signed and verified by"), "signature line");
+
+        // short vertical rule between the logo and the signature block, cells centred
+        assertTrue(html.contains("class=\"divider\""), "footer rule");
+        assertTrue(html.contains(".f-div .divider { width:2px; height:14mm"), "rule weight + height");
+        assertTrue(html.contains("vertical-align:middle"), "footer alignment");
 
         // "FRO ID" on the sample was a typo — the label stays FBO ID
         assertTrue(html.contains("FBO ID"), "FBO ID label");

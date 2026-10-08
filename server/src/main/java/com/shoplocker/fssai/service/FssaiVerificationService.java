@@ -76,6 +76,25 @@ public class FssaiVerificationService {
 
     private static final DateTimeFormatter EXPIRY_FORMATTER = DateTimeFormatter.ofPattern("dd-MM-yyyy");
 
+    /**
+     * Formats the upstream expiry date may arrive in. The supplementary API is
+     * documented as {@code dd-MM-yyyy} but real traffic has been seen carrying
+     * slash separators, single-digit day/month and ISO {@code yyyy-MM-dd}.
+     */
+    private static final DateTimeFormatter[] EXPIRY_FORMATTERS = {
+            DateTimeFormatter.ofPattern("dd-MM-yyyy"),
+            DateTimeFormatter.ofPattern("d-M-yyyy"),
+            DateTimeFormatter.ofPattern("dd/MM/yyyy"),
+            DateTimeFormatter.ofPattern("d/M/yyyy"),
+            DateTimeFormatter.ISO_LOCAL_DATE
+    };
+
+    /** Keys the supplementary API has been seen to use for the validity date. */
+    private static final String[] EXPIRY_KEYS = {
+            "expiryDate", "expirydate", "expiry_date", "expDate",
+            "validUpto", "validupto", "validityTill", "validTill", "validityDate"
+    };
+
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final LocalFileStorageService localFileStorageService;
 
@@ -234,11 +253,48 @@ public class FssaiVerificationService {
             if (lic.isMissingNode() || lic.isNull()) {
                 return null;
             }
-            return parseExpiryDate(text(lic, "expiryDate"));
+            return parseExpiryDate(expiryValue(lic));
         } catch (Exception e) {
             log.warn("Could not read expiry date from FSSAI license payload: {}", e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Reads the validity/expiry date out of a {@code license} node under any of the
+     * key names seen in production traffic, falling back to a name scan for any field
+     * mentioning expiry / validity. Returns {@code null} when the value is absent or
+     * not a parseable date, so a non-date string can never reach the certificate.
+     */
+    private String expiryValue(JsonNode licenseNode) {
+        if (licenseNode == null || licenseNode.isNull() || licenseNode.isMissingNode()) {
+            return null;
+        }
+        for (String key : EXPIRY_KEYS) {
+            String value = normalizedExpiry(text(licenseNode, key));
+            if (value != null) return value;
+        }
+        java.util.Iterator<String> names = licenseNode.fieldNames();
+        while (names.hasNext()) {
+            String name = names.next();
+            String lower = name.toLowerCase(Locale.ROOT);
+            if (lower.contains("expir") || lower.contains("valid")) {
+                String value = normalizedExpiry(text(licenseNode, name));
+                if (value != null) return value;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns the canonical {@code dd-MM-yyyy} rendering of a raw upstream date, or
+     * {@code null} when the value is blank or not a parseable date (e.g. a
+     * "5 Years" validity string), so only real dates reach the certificate.
+     */
+    private String normalizedExpiry(String raw) {
+        if (raw == null) return null;
+        LocalDateTime parsed = parseExpiryDate(raw);
+        return parsed == null ? null : EXPIRY_FORMATTER.format(parsed.toLocalDate());
     }
 
     /**
@@ -255,16 +311,54 @@ public class FssaiVerificationService {
      * Calls the supplementary license API ({@code check-details.php}) and returns the raw response body,
      * or {@code null} when the call fails. This API only supplies the expiry date and a few extras,
      * so a failure degrades gracefully instead of failing the whole verification.
+     *
+     * <p>This endpoint is the <b>only</b> source of the expiry date, and upstream is flaky:
+     * timeouts, non-200s and HTTP-200 error payloads all used to silently produce a
+     * certificate with no validity date. A transient failure is retried once before giving up.</p>
      */
     private String callLicenseApi(String licenseNumber) {
         String url = licenseApiUrl + licenseNumber;
         log.info("FSSAI license/expiry request for license: {}, URL: {}", licenseNumber, url);
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            String body = null;
+            try {
+                body = executeGet(url, licenseNumber, false);
+            } catch (FssaiException e) {
+                log.warn("Supplementary FSSAI expiry API failed for {} (attempt {}/2). Cause: {}",
+                        licenseNumber, attempt, e.getMessage());
+            }
+            if (hasLicenseData(body)) {
+                return body;
+            }
+            log.warn("Supplementary FSSAI expiry API returned no usable license data for {} (attempt {}/2)",
+                    licenseNumber, attempt);
+            if (attempt < 2) {
+                try {
+                    Thread.sleep(750);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+        log.warn("Supplementary FSSAI expiry API exhausted for {}; continuing without expiry date.",
+                licenseNumber);
+        return null;
+    }
+
+    /**
+     * Whether the supplementary payload actually carries a {@code license} record -
+     * HTTP 200 with an error body still counts as "no data" so the caller can retry.
+     */
+    private boolean hasLicenseData(String body) {
+        if (body == null || body.isBlank()) {
+            return false;
+        }
         try {
-            return executeGet(url, licenseNumber, false);
-        } catch (FssaiException e) {
-            log.warn("Supplementary FSSAI expiry API failed for {}; continuing without expiry date. Cause: {}",
-                    licenseNumber, e.getMessage());
-            return null;
+            JsonNode lic = objectMapper.readTree(body).path("license");
+            return !lic.isMissingNode() && !lic.isNull() && lic.size() > 0;
+        } catch (Exception e) {
+            return false;
         }
     }
 
@@ -339,7 +433,11 @@ public class FssaiVerificationService {
             if (licenseBody != null && !licenseBody.isBlank()) {
                 JsonNode licenseRoot = objectMapper.readTree(licenseBody);
                 JsonNode lic = licenseRoot.path("license");
-                if (!lic.isMissingNode() && !lic.isNull() && lic.has("LicenseNo")) {
+                // Accept the node whenever it carries data - it used to be gated on
+                // "LicenseNo", which dropped the expiry date (lives only here) whenever
+                // upstream omitted or renamed that one field. The licence number itself
+                // still falls back to the primary payload further down.
+                if (!lic.isMissingNode() && !lic.isNull() && lic.size() > 0) {
                     licenseNode = lic;
                     detailsExtras = licenseRoot.path("details");
                 }
@@ -385,7 +483,7 @@ public class FssaiVerificationService {
                     ? String.valueOf(licenseNode.get("refId").asLong()) : null;
 
             // ---- Supplementary details (API 1) — expiry date lives only here ----
-            String expiryDate = licenseNode != null ? text(licenseNode, "expiryDate") : null;
+            String expiryDate = expiryValue(licenseNode);
             String fboId = licenseNode != null ? text(licenseNode, "fboId") : null;
             String contactPerson = text(detailsExtras, "contactPerson");
             String contactEmail = text(detailsExtras, "contactEmail");
@@ -393,6 +491,7 @@ public class FssaiVerificationService {
             String kindOfBusiness = text(detailsExtras, "kobname");
 
             String finalLicenseNumber = text(licenseNode, "LicenseNo");
+            if (isBlank(finalLicenseNumber)) finalLicenseNumber = text(licenseNode, "licenseno");
             if (isBlank(finalLicenseNumber)) finalLicenseNumber = text(record, "licenseno");
             if (isBlank(finalLicenseNumber)) finalLicenseNumber = licenseNumber;
 
@@ -440,18 +539,30 @@ public class FssaiVerificationService {
     }
 
     /**
-     * Parses the upstream {@code dd-MM-yyyy} expiry date into a {@link LocalDateTime}
-     * suitable for the {@code documents.expiry_date} column. Returns {@code null} when
-     * absent or unparseable.
+     * Parses the upstream expiry date into a {@link LocalDateTime} suitable for the
+     * {@code documents.expiry_date} column. Several date shapes have been observed
+     * in production ({@code dd-MM-yyyy}, {@code dd/MM/yyyy}, single-digit day/month,
+     * ISO {@code yyyy-MM-dd}); all are accepted, as is a value with a trailing time
+     * part. Returns {@code null} when absent or unparseable.
      */
     public LocalDateTime parseExpiryDate(String expiryDate) {
         if (isBlank(expiryDate)) return null;
-        try {
-            return LocalDate.parse(expiryDate.trim(), EXPIRY_FORMATTER).atStartOfDay();
-        } catch (DateTimeParseException e) {
-            log.warn("Could not parse FSSAI expiry date: {}", expiryDate);
-            return null;
+        String candidate = expiryDate.trim();
+        for (int pass = 0; pass < 2; pass++) {
+            for (DateTimeFormatter formatter : EXPIRY_FORMATTERS) {
+                try {
+                    return LocalDate.parse(candidate, formatter).atStartOfDay();
+                } catch (DateTimeParseException ignored) {
+                    // try the next shape
+                }
+            }
+            // upstream occasionally appends time / zone noise - retry on the date token
+            String dateToken = candidate.split("[T ]")[0];
+            if (dateToken.equals(candidate)) break;
+            candidate = dateToken;
         }
+        log.warn("Could not parse FSSAI expiry date: {}", expiryDate);
+        return null;
     }
 
     /**
