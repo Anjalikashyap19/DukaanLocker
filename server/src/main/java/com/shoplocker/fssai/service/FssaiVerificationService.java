@@ -29,6 +29,7 @@ import org.apache.hc.core5.util.Timeout;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.openhtmltopdf.outputdevice.helper.BaseRendererBuilder;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 
 /**
@@ -463,23 +464,34 @@ public class FssaiVerificationService {
             builder.withHtmlContent(xhtml, pdfBaseUri);
             builder.toStream(baos);
 
-            // Try system fonts, fall back gracefully if not found
+            // The certificate is set in a serif face ("Times New Roman" in the CSS).
+            // Register whatever serif/sans file this host actually has — Windows boxes
+            // have Times New Roman, the Docker runtime gets Liberation Serif (metric
+            // compatible, fonts-liberation in the Dockerfile) — all under the same
+            // family name so the CSS resolves identically everywhere. Regular and bold
+            // are registered separately so headings and values keep their weight.
             try {
-                String[] fontPaths = {
+                registerFont(builder, "Times New Roman", 400,
+                        "C:/Windows/Fonts/times.ttf",
+                        "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+                        "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+                        "/Library/Fonts/Times New Roman.ttf");
+                registerFont(builder, "Times New Roman", 700,
+                        "C:/Windows/Fonts/timesbd.ttf",
+                        "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
+                        "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf");
+                registerFont(builder, "Arial", 400,
                         "C:/Windows/Fonts/arial.ttf",
                         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
                         "/usr/share/fonts/TTF/DejaVuSans.ttf",
-                        "/System/Library/Fonts/Helvetica.ttc"
-                };
-                for (String fontPath : fontPaths) {
-                    File fontFile = new File(fontPath);
-                    if (fontFile.exists()) {
-                        builder.useFont(fontFile, "Arial");
-                        break;
-                    }
-                }
+                        "/System/Library/Fonts/Helvetica.ttc");
+                registerFont(builder, "Arial", 700,
+                        "C:/Windows/Fonts/arialbd.ttf",
+                        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf");
             } catch (Exception e) {
-                log.warn("Could not load system font for FSSAI PDF, may use default font", e);
+                log.warn("Could not load system fonts for FSSAI PDF, may use default font", e);
             }
             builder.run();
 
@@ -493,5 +505,25 @@ public class FssaiVerificationService {
                     "The license was verified but we couldn't generate the PDF. Please try again.",
                     FailureCode.PDF_PROCESSING_ERROR, e);
         }
+    }
+
+    /**
+     * Registers the first font file that exists on this host under
+     * {@code family} at {@code weight}. Candidates are listed per platform
+     * (Windows dev box first, then the Debian/Ubuntu runtime image) so the same
+     * CSS produces the same face everywhere. A miss is not an error — the
+     * renderer falls back to whatever else is registered.
+     */
+    private void registerFont(PdfRendererBuilder builder, String family, int weight, String... candidates) {
+        for (String path : candidates) {
+            File fontFile = new File(path);
+            if (fontFile.exists()) {
+                builder.useFont(fontFile, family, weight,
+                        BaseRendererBuilder.FontStyle.NORMAL, true);
+                log.debug("Registered font {} weight {} from {}", family, weight, path);
+                return;
+            }
+        }
+        log.debug("No font file found for family '{}' weight {}", family, weight);
     }
 }

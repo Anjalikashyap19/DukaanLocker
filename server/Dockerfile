@@ -12,11 +12,16 @@ FROM eclipse-temurin:21-jre-noble
 #   /usr/share/tesseract-ocr/5/tessdata, so no TESSDATA_PATH is needed.
 # tzdata: the notification schedulers and their crons are written for IST, so the
 #   container needs a real zone database rather than defaulting to UTC.
+# fonts-liberation(+fontconfig): the generated certificates (FSSAI/GST/MSME) are set
+#   in a serif face registered as "Times New Roman"; Liberation Serif is the
+#   metric-compatible stand-in so production PDFs match what dev boxes render.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         tesseract-ocr \
         tesseract-ocr-eng \
         tzdata \
+        fonts-liberation \
+        fontconfig \
     && rm -rf /var/lib/apt/lists/*
 RUN useradd -m -u 1001 appuser
 WORKDIR /app

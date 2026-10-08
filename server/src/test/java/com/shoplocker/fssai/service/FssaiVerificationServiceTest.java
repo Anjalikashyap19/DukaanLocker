@@ -2,6 +2,7 @@ package com.shoplocker.fssai.service;
 
 import com.shoplocker.fssai.dto.FssaiVerificationResponse;
 import com.shoplocker.fssai.util.FssaiHtmlGenerator;
+import com.shoplocker.fssai.util.QrCodePng;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.junit.jupiter.api.Test;
 
@@ -171,6 +172,34 @@ public class FssaiVerificationServiceTest {
         assertTrue(html.contains("Food Safety and Standards Authority of India"));
         assertTrue(html.contains("FSSAI"));
         assertFalse(html.contains("null"));
+    }
+
+    @Test
+    void certificateHtmlMatchesTheReferenceLayout() throws Exception {
+        FssaiVerificationResponse response = merge(DETAILS_JSON, LICENSE_JSON);
+        String html = buildHtml(response);
+
+        // rounded page frame + serif licence block styled after the reference doc
+        assertTrue(html.contains("class=\"frame\""), "page frame");
+        assertTrue(html.contains("FSSAI License / Registration Number"), "licence block");
+        assertTrue(html.contains("Times New Roman"), "serif face");
+
+        // footer carries exactly three images: QR, DukaanLocker logo, verified tick
+        assertEquals(3, occurrences(html, "data:image/png;base64,"), "QR + logo + tick");
+        assertTrue(html.contains(QrCodePng.pngDataUri("FSSAI:21221160000115")),
+                "QR must encode this licence number");
+        assertTrue(html.contains("Digitally signed and verified by"), "signature line");
+
+        // "FRO ID" on the sample was a typo — the label stays FBO ID
+        assertTrue(html.contains("FBO ID"), "FBO ID label");
+    }
+
+    private static int occurrences(String haystack, String needle) {
+        int count = 0;
+        for (int from = haystack.indexOf(needle); from >= 0; from = haystack.indexOf(needle, from + needle.length())) {
+            count++;
+        }
+        return count;
     }
 
     @Test

@@ -138,6 +138,15 @@
             <version>1.0.10</version>
         </dependency>
 
+        <!-- ZXing core — QR code encoding for the FSSAI certificate footer. core only:
+             the BitMatrix is rasterised into a PNG with ImageIO, so the javase module
+             (MatrixToImageWriter / BufferedImageLuminanceSource) is not needed. -->
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>core</artifactId>
+            <version>3.5.2</version>
+        </dependency>
+
         <!-- jsoup — HTML cleanup & XHTML conversion for government portal responses -->
         <dependency>
             <groupId>org.jsoup</groupId>
