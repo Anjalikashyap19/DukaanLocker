@@ -1,7 +1,6 @@
 package com.shoplocker.fssai.service;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.util.Arrays;
 
 import org.slf4j.Logger;
@@ -13,6 +12,7 @@ import com.shoplocker.fssai.dto.GstVerificationResponse;
 import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
 import com.shoplocker.fssai.util.BusinessNameMatcher;
+import com.shoplocker.fssai.util.CertificateTemplate;
 import com.shoplocker.fssai.util.GstHtmlGenerator;
 
 import org.apache.hc.client5.http.classic.methods.HttpGet;
@@ -26,6 +26,8 @@ import org.apache.hc.core5.util.Timeout;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
+
+import org.apache.pdfbox.pdmodel.PDDocument;
 
 /**
  * Integrates with the API Setu "GSTN Taxpayers Verification API" to verify
@@ -110,24 +112,7 @@ public class GstVerificationService {
         // Step 4: If verification succeeded, generate PDF and upload to S3
         if (parsed.isSuccess()) {
             try {
-                String certificateHtml = GstHtmlGenerator.generateCertificateHtml(
-                        parsed.getGstin(),
-                        parsed.getLegalName(),
-                        parsed.getTradeName(),
-                        parsed.getRegistrationDate(),
-                        parsed.getStatus(),
-                        parsed.getState(),
-                        parsed.getStateJurisdictionCode(),
-                        parsed.getConstitutionOfBusiness(),
-                        parsed.getPrincipalPlaceAddress(),
-                        parsed.getCentralJurisdiction(),
-                        parsed.getCentralJurisdictionCode(),
-                        parsed.getDateOfIssue(),
-                        parsed.getPeriodOfValidity(),
-                        parsed.getTypeOfRegistration()
-                );
-
-                byte[] pdfBytes = convertHtmlToPdf(certificateHtml, normalizedGst);
+                byte[] pdfBytes = renderCertificate(parsed, normalizedGst);
 
                 String fileKey = "gst/verify/" + normalizedGst.toLowerCase() + "/gst_certificate.pdf";
                 String pdfUrl;
@@ -137,7 +122,6 @@ public class GstVerificationService {
                         effectiveUserId, effectiveShopId, fileKey);
 
                 parsed.setPdfUrl(pdfUrl);
-                parsed.setCertificateHtml(certificateHtml);
 
                 log.info("GST certificate PDF generated and uploaded for GSTIN: {}, size: {} bytes", normalizedGst, pdfBytes.length);
 
@@ -149,6 +133,64 @@ public class GstVerificationService {
         }
 
         return parsed;
+    }
+
+    /**
+     * Renders the GST certificate as a <b>single page</b>. The full-size layout is
+     * tried first; if long taxpayer data (a verbose principal-place address, every
+     * optional row) spills onto a second page, the document is re-rendered with the
+     * compact layout and the HTML stored on the response is the one that actually
+     * produced the PDF. Mirrors the FSSAI renderer's page guard.
+     */
+    byte[] renderCertificate(GstVerificationResponse data, String gstin) {
+        String html = certificateHtml(data, false);
+        byte[] pdf = convertHtmlToPdf(html, gstin);
+        int pages = pageCount(pdf);
+        if (pages <= 1) {
+            data.setCertificateHtml(html);
+            return pdf;
+        }
+
+        log.info("GST certificate for {} spans {} pages at full size; re-rendering with the compact layout",
+                gstin, pages);
+        html = certificateHtml(data, true);
+        pdf = convertHtmlToPdf(html, gstin);
+        data.setCertificateHtml(html);
+
+        pages = pageCount(pdf);
+        if (pages > 1) {
+            log.warn("GST certificate for {} still spans {} pages after the compact layout", gstin, pages);
+        }
+        return pdf;
+    }
+
+    private String certificateHtml(GstVerificationResponse data, boolean compact) {
+        return GstHtmlGenerator.generateCertificateHtml(
+                data.getGstin(),
+                data.getLegalName(),
+                data.getTradeName(),
+                data.getRegistrationDate(),
+                data.getStatus(),
+                data.getState(),
+                data.getStateJurisdictionCode(),
+                data.getConstitutionOfBusiness(),
+                data.getPrincipalPlaceAddress(),
+                data.getCentralJurisdiction(),
+                data.getCentralJurisdictionCode(),
+                data.getDateOfIssue(),
+                data.getPeriodOfValidity(),
+                data.getTypeOfRegistration(),
+                compact);
+    }
+
+    /** Pages in the rendered PDF; {@code 1} when it cannot be read (never forces a re-render). */
+    int pageCount(byte[] pdf) {
+        try (PDDocument document = PDDocument.load(pdf)) {
+            return document.getNumberOfPages();
+        } catch (Exception e) {
+            log.warn("Could not count the certificate's page count: {}", e.getMessage());
+            return 1;
+        }
     }
 
     /**
@@ -400,24 +442,9 @@ public class GstVerificationService {
             builder.withHtmlContent(xhtml, "https://apisetu.gov.in/");
             builder.toStream(baos);
 
-            // Try system fonts, fall back gracefully if not found
-            try {
-                String[] fontPaths = {
-                        "C:/Windows/Fonts/arial.ttf",
-                        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-                        "/usr/share/fonts/TTF/DejaVuSans.ttf",
-                        "/System/Library/Fonts/Helvetica.ttc"
-                };
-                for (String fontPath : fontPaths) {
-                    File fontFile = new File(fontPath);
-                    if (fontFile.exists()) {
-                        builder.useFont(fontFile, "Arial");
-                        break;
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Could not load system font for GST PDF, may use default font", e);
-            }
+            // Serif/sans faces the shared certificate CSS asks for - same registration
+            // the FSSAI and MSME renderers use, so all three certificates match.
+            CertificateTemplate.registerFonts(builder);
             builder.run();
 
             byte[] pdfBytes = baos.toByteArray();

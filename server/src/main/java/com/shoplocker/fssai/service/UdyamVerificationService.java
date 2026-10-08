@@ -34,6 +34,7 @@ import com.shoplocker.fssai.dto.UdyamInitResponse;
 import com.shoplocker.fssai.dto.UdyamVerifyRequest;
 import com.shoplocker.fssai.dto.UdyamVerifyResponse;
 import com.shoplocker.fssai.dto.MsmeParsedData;
+import com.shoplocker.fssai.util.CertificateTemplate;
 import com.shoplocker.fssai.util.MsmeHtmlGenerator;
 import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
@@ -43,6 +44,8 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
+
+import org.apache.pdfbox.pdmodel.PDDocument;
 
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
@@ -1123,33 +1126,8 @@ public class UdyamVerificationService {
      */
     public String generatePdfFromParsedData(MsmeParsedData data, String udyamNumber, Long userId, Long shopId) {
         try {
-            String certificateHtml = MsmeHtmlGenerator.generateCertificateHtml(data);
+            byte[] pdfBytes = renderCertificate(data, udyamNumber);
 
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            PdfRendererBuilder builder = new PdfRendererBuilder();
-            builder.withHtmlContent(certificateHtml, "https://udyam.register.gov.in/");
-            builder.toStream(baos);
-
-            try {
-                String[] fontPaths = {
-                        "C:/Windows/Fonts/arial.ttf",
-                        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-                        "/usr/share/fonts/TTF/DejaVuSans.ttf",
-                        "/System/Library/Fonts/Helvetica.ttc"
-                };
-                for (String fontPath : fontPaths) {
-                    java.io.File fontFile = new java.io.File(fontPath);
-                    if (fontFile.exists()) {
-                        builder.useFont(fontFile, "Arial");
-                        break;
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Could not load system font for MSME PDF, may use default font", e);
-            }
-            builder.run();
-
-            byte[] pdfBytes = baos.toByteArray();
             String fileKey = "msme/verify/" + udyamNumber.toLowerCase()
                     .replace(" ", "_") + "/udyam_certificate.pdf";
             Long effectiveUserId = userId != null ? userId : 0L;
@@ -1164,6 +1142,56 @@ public class UdyamVerificationService {
         } catch (Exception e) {
             log.error("Failed to generate MSME PDF from parsed data for {}", udyamNumber, e);
             return null;
+        }
+    }
+
+    /**
+     * Renders the MSME certificate as a <b>single page</b>. The full-size layout is
+     * tried first; if long enterprise data spills onto a second page, the document is
+     * re-rendered with the compact layout. Mirrors the FSSAI and GST page guards.
+     */
+    private byte[] renderCertificate(MsmeParsedData data, String udyamNumber) throws IOException {
+        String html = MsmeHtmlGenerator.generateCertificateHtml(data);
+        byte[] pdf = renderMsmePdf(html, udyamNumber);
+        int pages = pageCount(pdf);
+        if (pages <= 1) {
+            return pdf;
+        }
+
+        log.info("MSME certificate for {} spans {} pages at full size; re-rendering with the compact layout",
+                udyamNumber, pages);
+        html = MsmeHtmlGenerator.generateCertificateHtml(data, true);
+        pdf = renderMsmePdf(html, udyamNumber);
+
+        pages = pageCount(pdf);
+        if (pages > 1) {
+            log.warn("MSME certificate for {} still spans {} pages after the compact layout", udyamNumber, pages);
+        }
+        return pdf;
+    }
+
+    private byte[] renderMsmePdf(String html, String udyamNumber) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        PdfRendererBuilder builder = new PdfRendererBuilder();
+        builder.withHtmlContent(html, "https://udyam.register.gov.in/");
+        builder.toStream(baos);
+        // Serif/sans faces the shared certificate CSS asks for - same registration
+        // the FSSAI and GST renderers use, so all three certificates match.
+        CertificateTemplate.registerFonts(builder);
+        builder.run();
+
+        byte[] pdfBytes = baos.toByteArray();
+        log.info("Generated MSME PDF: {} bytes for Udyam {}", pdfBytes.length, udyamNumber);
+        return pdfBytes;
+    }
+
+    /** Pages in the rendered PDF; {@code 1} when it cannot be read (never forces a re-render). */
+    private int pageCount(byte[] pdf) {
+        try (PDDocument document = PDDocument.load(pdf)) {
+            return document.getNumberOfPages();
+        } catch (Exception e) {
+            log.warn("Could not count the certificate's page count: {}", e.getMessage());
+            return 1;
         }
     }
 

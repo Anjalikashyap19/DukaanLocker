@@ -1,7 +1,6 @@
 package com.shoplocker.fssai.service;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Locale;
@@ -17,8 +16,10 @@ import com.shoplocker.fssai.dto.FssaiVerificationResponse;
 import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
 import com.shoplocker.fssai.util.BusinessNameMatcher;
+import com.shoplocker.fssai.util.CertificateTemplate;
 import com.shoplocker.fssai.util.FssaiHtmlGenerator;
 
+import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
@@ -29,7 +30,6 @@ import org.apache.hc.core5.util.Timeout;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.openhtmltopdf.outputdevice.helper.BaseRendererBuilder;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 
 /**
@@ -153,28 +153,7 @@ public class FssaiVerificationService {
         // Step 5: generate PDF and upload to the VPS document path
         if (parsed.isSuccess()) {
             try {
-                String certificateHtml = FssaiHtmlGenerator.generateCertificateHtml(
-                        parsed.getLicenseNumber(),
-                        parsed.getCompanyName(),
-                        parsed.getContactPerson(),
-                        parsed.getKindOfBusiness(),
-                        parsed.getLicenseCategory(),
-                        parsed.getStatus(),
-                        parsed.getLicenseActive(),
-                        parsed.getState(),
-                        parsed.getDistrict(),
-                        parsed.getTaluk(),
-                        parsed.getVillage(),
-                        parsed.getAddress(),
-                        parsed.getPincode(),
-                        parsed.getContactEmail(),
-                        parsed.getPanNo(),
-                        parsed.getExpiryDate(),
-                        parsed.getFboId(),
-                        parsed.getRefId()
-                );
-
-                byte[] pdfBytes = convertHtmlToPdf(certificateHtml, normalized);
+                byte[] pdfBytes = renderCertificate(parsed, normalized);
 
                 String fileKey = "fssai/verify/" + normalized.toLowerCase() + "/fssai_food_license.pdf";
                 Long effectiveUserId = userId != null ? userId : 0L;
@@ -184,7 +163,6 @@ public class FssaiVerificationService {
                         effectiveUserId, effectiveShopId, fileKey);
 
                 parsed.setPdfUrl(pdfUrl);
-                parsed.setCertificateHtml(certificateHtml);
 
                 log.info("FSSAI certificate PDF generated and uploaded for license: {}, size: {} bytes",
                         normalized, pdfBytes.length);
@@ -197,6 +175,68 @@ public class FssaiVerificationService {
         }
 
         return parsed;
+    }
+
+    /**
+     * Renders the certificate as a <b>single page</b>. The full-size layout is tried
+     * first; if long FBO data (a verbose premises address, every optional row) spills
+     * onto a second page, the document is re-rendered with the compact layout and the
+     * HTML stored on the response is the one that actually produced the PDF.
+     */
+    byte[] renderCertificate(FssaiVerificationResponse data, String licenseNumber) {
+        String html = certificateHtml(data, false);
+        byte[] pdf = convertHtmlToPdf(html, licenseNumber);
+        int pages = pageCount(pdf);
+        if (pages <= 1) {
+            data.setCertificateHtml(html);
+            return pdf;
+        }
+
+        log.info("FSSAI certificate for {} spans {} pages at full size; re-rendering with the compact layout",
+                licenseNumber, pages);
+        html = certificateHtml(data, true);
+        pdf = convertHtmlToPdf(html, licenseNumber);
+        data.setCertificateHtml(html);
+
+        pages = pageCount(pdf);
+        if (pages > 1) {
+            log.warn("FSSAI certificate for {} still spans {} pages after the compact layout",
+                    licenseNumber, pages);
+        }
+        return pdf;
+    }
+
+    private String certificateHtml(FssaiVerificationResponse data, boolean compact) {
+        return FssaiHtmlGenerator.generateCertificateHtml(
+                data.getLicenseNumber(),
+                data.getCompanyName(),
+                data.getContactPerson(),
+                data.getKindOfBusiness(),
+                data.getLicenseCategory(),
+                data.getStatus(),
+                data.getLicenseActive(),
+                data.getState(),
+                data.getDistrict(),
+                data.getTaluk(),
+                data.getVillage(),
+                data.getAddress(),
+                data.getPincode(),
+                data.getContactEmail(),
+                data.getPanNo(),
+                data.getExpiryDate(),
+                data.getFboId(),
+                data.getRefId(),
+                compact);
+    }
+
+    /** Pages in the rendered PDF; {@code 1} when it cannot be read (never forces a re-render). */
+    int pageCount(byte[] pdf) {
+        try (PDDocument document = PDDocument.load(pdf)) {
+            return document.getNumberOfPages();
+        } catch (Exception e) {
+            log.warn("Could not count the certificate's page count: {}", e.getMessage());
+            return 1;
+        }
     }
 
     /**
@@ -575,35 +615,9 @@ public class FssaiVerificationService {
             builder.withHtmlContent(xhtml, pdfBaseUri);
             builder.toStream(baos);
 
-            // The certificate is set in a serif face ("Times New Roman" in the CSS).
-            // Register whatever serif/sans file this host actually has — Windows boxes
-            // have Times New Roman, the Docker runtime gets Liberation Serif (metric
-            // compatible, fonts-liberation in the Dockerfile) — all under the same
-            // family name so the CSS resolves identically everywhere. Regular and bold
-            // are registered separately so headings and values keep their weight.
-            try {
-                registerFont(builder, "Times New Roman", 400,
-                        "C:/Windows/Fonts/times.ttf",
-                        "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
-                        "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
-                        "/Library/Fonts/Times New Roman.ttf");
-                registerFont(builder, "Times New Roman", 700,
-                        "C:/Windows/Fonts/timesbd.ttf",
-                        "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
-                        "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf");
-                registerFont(builder, "Arial", 400,
-                        "C:/Windows/Fonts/arial.ttf",
-                        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-                        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                        "/usr/share/fonts/TTF/DejaVuSans.ttf",
-                        "/System/Library/Fonts/Helvetica.ttc");
-                registerFont(builder, "Arial", 700,
-                        "C:/Windows/Fonts/arialbd.ttf",
-                        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-                        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf");
-            } catch (Exception e) {
-                log.warn("Could not load system fonts for FSSAI PDF, may use default font", e);
-            }
+            // Serif/sans faces the certificate CSS asks for - shared with the GST and
+            // MSME renderers so every certificate resolves the same typeface everywhere.
+            CertificateTemplate.registerFonts(builder);
             builder.run();
 
             byte[] pdfBytes = baos.toByteArray();
@@ -616,25 +630,5 @@ public class FssaiVerificationService {
                     "The license was verified but we couldn't generate the PDF. Please try again.",
                     FailureCode.PDF_PROCESSING_ERROR, e);
         }
-    }
-
-    /**
-     * Registers the first font file that exists on this host under
-     * {@code family} at {@code weight}. Candidates are listed per platform
-     * (Windows dev box first, then the Debian/Ubuntu runtime image) so the same
-     * CSS produces the same face everywhere. A miss is not an error — the
-     * renderer falls back to whatever else is registered.
-     */
-    private void registerFont(PdfRendererBuilder builder, String family, int weight, String... candidates) {
-        for (String path : candidates) {
-            File fontFile = new File(path);
-            if (fontFile.exists()) {
-                builder.useFont(fontFile, family, weight,
-                        BaseRendererBuilder.FontStyle.NORMAL, true);
-                log.debug("Registered font {} weight {} from {}", family, weight, path);
-                return;
-            }
-        }
-        log.debug("No font file found for family '{}' weight {}", family, weight);
     }
 }

@@ -298,6 +298,41 @@ public class FssaiVerificationServiceTest {
         }
     }
 
+    /**
+     * A verbose premises address used to push real certificates onto a second page.
+     * {@code renderCertificate} detects the spill, re-renders with the compact layout
+     * and stores the HTML that actually produced the PDF.
+     */
+    @Test
+    void longFboDataStillLandsOnOnePage() throws Exception {
+        String longAddress = ("SHOP NO. 12, GROUND FLOOR, SHREE LAXMI COMMERCIAL COMPLEX, NEAR OLD BUS STAND ROAD, "
+                + "OPPOSITE MUNICIPAL MARKET, MAIN MARKET YARD, ").repeat(3) + "UDUPI, KARNATAKA - 576101";
+        FssaiVerificationResponse response = merge(DETAILS_JSON.replace(
+                "D.NO.2-3-27 I, SRI NARAYANAGURU KALYANA MANTAP BUILDING, BANNANJE, UDUPI",
+                longAddress), LICENSE_JSON);
+
+        FssaiVerificationService service = new FssaiVerificationService(null);
+
+        // fixture sanity: this data really does overflow the full-size layout,
+        // otherwise the compact fallback is not being exercised at all
+        assertEquals(2, service.pageCount(renderForTest(buildHtml(response))),
+                "fixture must overflow at full size - extend the address if the base layout shrinks");
+
+        byte[] pdf = service.renderCertificate(response, "21221160000115");
+
+        assertEquals(1, service.pageCount(pdf), "certificate must land on a single page");
+        assertTrue(response.getCertificateHtml().contains("compact overrides"),
+                "stored HTML must be the compact layout that produced the PDF");
+        assertTrue(response.getCertificateHtml().contains(longAddress), "no data is dropped");
+    }
+
+    private byte[] renderForTest(String html) throws Exception {
+        Method render = FssaiVerificationService.class
+                .getDeclaredMethod("convertHtmlToPdf", String.class, String.class);
+        render.setAccessible(true);
+        return (byte[]) render.invoke(new FssaiVerificationService(null), html, "21221160000115");
+    }
+
     @Test
     void shopNameMatchesApiFboNameVariants() {
         // "OWNER / BUSINESS NAME" style FBO names match the business part
