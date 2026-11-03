@@ -22,6 +22,7 @@ dependencyResolutionManagement {
     }
 }
 
+
 rootProject.name = "DukaanLocker"
 include(":app")
  

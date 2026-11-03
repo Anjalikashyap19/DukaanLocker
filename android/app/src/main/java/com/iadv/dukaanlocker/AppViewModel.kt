@@ -60,6 +60,7 @@ data class AppUiState(
     val isLoadingManagers: Boolean = false,
     val isLoadingDocuments: Boolean = false,
     val isAppUnlocked: Boolean = false,
+    val appLockEnabled: Boolean = true,
     val isBiometricLoginEnabled: Boolean = false,
     val viewDocumentId: Long? = null,
     val viewDocumentName: String = "",
@@ -115,6 +116,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (biometricPrefEnabled && !biometricLoginEnabled) {
             LockerStorage.clearBiometricLoginPreference(application)
         }
+        val appLockEnabled = LockerStorage.isAppLockEnabled(application)
         _uiState.value = AppUiState(
             isLoggedIn = isLoggedIn,
             currentScreen = homeScreen,
@@ -127,7 +129,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             currentDlId = ApiClient.getDlId(application),
             isDarkTheme = LockerStorage.getTheme(application),
             language = LockerStorage.getLanguage(application),
-            isBiometricLoginEnabled = biometricLoginEnabled
+            isBiometricLoginEnabled = biometricLoginEnabled,
+            appLockEnabled = appLockEnabled
         )
         if (isLoggedIn) {
             loadShops()
@@ -263,6 +266,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun setLanguage(code: String) {
         LockerStorage.saveLanguage(context, code)
         updateState { it.copy(language = code) }
+    }
+
+    fun setAppLock(enabled: Boolean) {
+        LockerStorage.saveAppLockEnabled(context, enabled)
+        updateState { it.copy(appLockEnabled = enabled) }
     }
 
     fun navigateToHome() {

@@ -34,6 +34,8 @@ import com.iadv.dukaanlocker.*
 import com.iadv.dukaanlocker.ui.strings.AppStrings
 import com.iadv.dukaanlocker.ui.strings.LocalAppLanguage
 import com.iadv.dukaanlocker.ui.theme.*
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 // ── Apply-for-service URLs (IndiaAdvocacy service pages from text.txt) ───────
 fun applyUrlFor(type: String): String? = when (type) {
@@ -57,6 +59,32 @@ fun applyUrlFor(type: String): String? = when (type) {
 
 // Doc types that must keep the "REQUIRED" badge (no self-apply flow)
 private val applyExcludedTypes = setOf("LABOUR_LICENSE", "LabourLicense", "AADHAAR")
+
+// Server sends expiry as ISO LocalDateTime (e.g. "2026-01-02T00:00:00") or
+// "yyyy-MM-dd". Formats it as "02 Jan" for the expiry badge; returns the raw
+// string unchanged when blank or unparseable so the card never crashes.
+fun formatExpiryBadgeDate(raw: String, locale: Locale = Locale.getDefault()): String {
+    if (raw.isBlank()) return raw
+    val datePart = raw.trim().take(10)
+    return try {
+        val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(datePart) ?: return raw
+        SimpleDateFormat("dd MMM", locale).format(parsed)
+    } catch (e: Exception) {
+        raw
+    }
+}
+
+// Formats expiry for the card body line: "02 Jan 2026"
+fun formatExpiryBodyDate(raw: String, locale: Locale = Locale.getDefault()): String {
+    if (raw.isBlank()) return raw
+    val datePart = raw.trim().take(10)
+    return try {
+        val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(datePart) ?: return raw
+        SimpleDateFormat("dd MMM yyyy", locale).format(parsed)
+    } catch (e: Exception) {
+        raw
+    }
+}
 
 // ── Document Card ────────────────────────────────────────────────────────────
 @Composable
@@ -85,6 +113,8 @@ fun DocumentCard(
             when (doc.status) {
                 "FETCHED" -> colors.success.copy(alpha = 0.4f)
                 "UPLOADED" -> colors.secondary.copy(alpha = 0.4f)
+                "EXPIRED" -> colors.error.copy(alpha = 0.4f)
+                "EXPIRING_SOON" -> colors.warning.copy(alpha = 0.4f)
                 else -> colors.border
             }
         )
@@ -105,40 +135,45 @@ fun DocumentCard(
                 }
 
                 // Status Badge
+                val isExpired = doc.status == "EXPIRED"
+                val isExpiringSoon = doc.status == "EXPIRING_SOON"
+                val badgeColor = when {
+                    isExpired -> colors.error
+                    isExpiringSoon -> colors.warning
+                    doc.status == "FETCHED" -> colors.success
+                    doc.status == "UPLOADED" -> colors.secondary
+                    else -> colors.error
+                }
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
-                        .background(
-                            when (doc.status) {
-                                "FETCHED" -> colors.success.copy(alpha = 0.15f)
-                                "UPLOADED" -> colors.secondary.copy(alpha = 0.15f)
-                                else -> colors.error.copy(alpha = 0.15f)
-                            }
-                        )
+                        .background(badgeColor.copy(alpha = 0.15f))
                         .border(
                             1.dp,
-                            when (doc.status) {
-                                "FETCHED" -> colors.success.copy(alpha = 0.5f)
-                                "UPLOADED" -> colors.secondary.copy(alpha = 0.5f)
-                                else -> colors.error.copy(alpha = 0.5f)
-                            },
+                            badgeColor.copy(alpha = 0.5f),
                             RoundedCornerShape(6.dp)
                         )
                         .clickable(enabled = showApply && applyUrl != null) { showApplyDialog = true }
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        when (doc.status) {
-                            "FETCHED" -> AppStrings.get(lang, "FETCHED")
-                            "UPLOADED" -> AppStrings.get(lang, "UPLOADED")
+                        when {
+                            isExpired -> {
+                                val date = formatExpiryBadgeDate(doc.expiryDate)
+                                if (date.isBlank()) AppStrings.get(lang, "Expired")
+                                else "${AppStrings.get(lang, "Expired:")} $date"
+                            }
+                            isExpiringSoon -> {
+                                val date = formatExpiryBadgeDate(doc.expiryDate)
+                                if (date.isBlank()) AppStrings.get(lang, "Expiring")
+                                else "${AppStrings.get(lang, "Expiring:")} $date"
+                            }
+                            doc.status == "FETCHED" -> AppStrings.get(lang, "FETCHED")
+                            doc.status == "UPLOADED" -> AppStrings.get(lang, "UPLOADED")
                             else -> if (showApply) AppStrings.get(lang, "APPLY") else AppStrings.get(lang, "REQUIRED")
                         },
                         fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                        color = when (doc.status) {
-                            "FETCHED" -> colors.success
-                            "UPLOADED" -> colors.secondary
-                            else -> colors.error
-                        }
+                        color = badgeColor
                     )
                 }
             }
@@ -193,7 +228,7 @@ fun DocumentCard(
                             Text("${AppStrings.get(lang, "REG:")} ${doc.regNumber}", fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = colors.textPrimary)
                         }
                         if (doc.expiryDate.isNotBlank()) {
-                            Text("${AppStrings.get(lang, "Exp:")} ${doc.expiryDate}", fontSize = 10.sp, color = colors.textSecondary)
+                            Text("${AppStrings.get(lang, "Exp:")} ${formatExpiryBodyDate(doc.expiryDate)}", fontSize = 10.sp, color = colors.textSecondary)
                         }
                         if (doc.status == "UPLOADED" && !doc.fileUrl.isNullOrBlank()) {
                             Text(AppStrings.get(lang, "✓ Certificate uploaded"), fontSize = 10.sp, color = colors.success, fontWeight = FontWeight.Medium)

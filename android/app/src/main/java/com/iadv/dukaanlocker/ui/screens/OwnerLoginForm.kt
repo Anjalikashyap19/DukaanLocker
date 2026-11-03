@@ -200,7 +200,7 @@ fun OwnerLoginForm(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                 ) {
                     Text(
-                        AppStrings.get(lang, "Forgot password?"),
+                        AppStrings.get(lang, "forgot password?"),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         color = colors.primary

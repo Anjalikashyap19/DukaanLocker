@@ -97,8 +97,9 @@ object LockerStorage {
     private const val K_DOCS = "documents"
     private const val K_THEME = "dark_theme"
     private const val K_BIOMETRIC_ENABLED = "biometric_enabled"
-    private const val K_BIOMETRIC_LOGIN_ENABLED = "biometric_login_enabled"
-    private const val K_BIOMETRIC_LOGIN_DEFAULTS_V1 = "biometric_login_defaults_v1"
+private const val K_BIOMETRIC_LOGIN_ENABLED = "biometric_login_enabled"
+private const val K_BIOMETRIC_LOGIN_DEFAULTS_V1 = "biometric_login_defaults_v1"
+private const val K_APP_LOCK_ENABLED = "app_lock_enabled"
 
     // ── User ──────────────────────────────────────────────────────────────────
     private const val SECURE_PREFS = "dukaan_locker_secure"
@@ -288,9 +289,16 @@ object LockerStorage {
     fun getLanguage(ctx: Context): String =
         pref(ctx).getString("language", "en") ?: "en"
 
-    // ── Biometric App Unlock (Mandatory on every launch) ──────────────────
-    // Note: App unlock always uses device security, no toggle needed
-    // This is handled by checking if device has biometric/PIN/pattern
+    // ── Biometric App Unlock (device credential / biometric at launch) ─────
+    // The prompt itself is mandatory-by-default but can be turned off from
+    // App Settings → Security → App Lock (K_APP_LOCK_ENABLED).
+
+    // ── App Lock (toggle the launch unlock prompt) ─────────────────────────
+    fun saveAppLockEnabled(ctx: Context, enabled: Boolean) =
+        pref(ctx).edit().putBoolean(K_APP_LOCK_ENABLED, enabled).apply()
+
+    fun isAppLockEnabled(ctx: Context): Boolean =
+        pref(ctx).getBoolean(K_APP_LOCK_ENABLED, true) // default: prompt on launch
 
     // ── Biometric Login (Optional - for auto-login after logout) ───────────
     fun saveBiometricLoginEnabled(ctx: Context, enabled: Boolean) =

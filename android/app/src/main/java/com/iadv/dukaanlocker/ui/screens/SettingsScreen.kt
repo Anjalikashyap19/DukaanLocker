@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material3.*
@@ -43,7 +44,8 @@ fun SettingsScreen(
     onLogout: () -> Unit,
     businesses: List<ShopResponse> = emptyList(),
     isLoadingShops: Boolean = false,
-    onBack: () -> Unit = {}
+    onBack: () -> Unit = {},
+    onOpenAppSettings: () -> Unit = {}
 ) {
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
@@ -175,6 +177,41 @@ fun SettingsScreen(
                         Text("${AppStrings.get(lang, "Address:")} $businessAddress", fontSize = 14.sp, color = colors.textSecondary)
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBg),
+                    border = BorderStroke(1.dp, colors.border),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                        TextButton(
+                            onClick = onOpenAppSettings,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Lock,
+                                    contentDescription = AppStrings.get(lang, "App Settings"),
+                                    modifier = Modifier.size(20.dp),
+                                    tint = colors.primary
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    AppStrings.get(lang, "App Settings"),
+                                    color = colors.primary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
                             }
                         }
                     }

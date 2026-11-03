@@ -126,7 +126,7 @@ fun DukaanLockerApp(
 
     // ── APP UNLOCK ──
     LaunchedEffect(Unit) {
-        if (onAppUnlock != null) {
+        if (onAppUnlock != null && state.appLockEnabled) {
             vm.updateState { it.copy(showAppUnlockPrompt = true) }
         } else {
             vm.updateState { it.copy(isAppUnlocked = true) }
@@ -209,7 +209,7 @@ fun DukaanLockerApp(
                         BackHandler(enabled = state.viewDocumentId != null) {
                             vm.closeDocumentViewer()
                         }
-                        BackHandler(
+BackHandler(
                             enabled = state.currentScreen != Screen.Onboarding && state.currentScreen != Screen.Login && state.viewDocumentId == null
                                     && !(state.navigationHistory.isEmpty() && (state.currentScreen is Screen.OwnerHome || state.currentScreen is Screen.ManagerHome) && state.selectedBottomTab == BottomTab.Home)
                         ) {
@@ -270,7 +270,8 @@ fun DukaanLockerApp(
                                 onLogout = handleLogout,
                                 businesses = if (state.currentUserRole == "MANAGER") state.shops else emptyList(),
                                 isLoadingShops = state.isLoadingShops,
-                                onBack = handleTabBack
+                                onBack = handleTabBack,
+                                onOpenAppSettings = { vm.navigateTo(Screen.AppSettings) }
                             )
                         }
 
@@ -627,9 +628,20 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                     )
                                 }
                             }
-                        }
 
-                        // ── Document Viewer overlay ──
+                        // ── AppSettings Screen ────────────────────────────────────
+                        is Screen.AppSettings -> {
+                            AppSettingsScreen(
+                                onBack = { vm.goBack() },
+                                isDarkTheme = state.isDarkTheme,
+                                onAppLockChanged = { enabled ->
+                                    vm.setAppLock(enabled)
+                                }
+                            )
+                        }
+                    }
+
+                    // ── Document Viewer overlay ──
                         if (state.viewDocumentId != null) {
                             DocumentViewerScreen(
                                 documentId = state.viewDocumentId!!,
