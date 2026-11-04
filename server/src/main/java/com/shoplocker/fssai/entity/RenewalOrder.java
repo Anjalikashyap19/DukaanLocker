@@ -47,6 +47,14 @@ public class RenewalOrder {
     @Column(name = "dl_id", length = 10)
     private String dlId;
 
+    /** Easebuzz payment transaction id linked to this renewal order. */
+    @Column(name = "payment_id", length = 100)
+    private String paymentId;
+
+    /** Status of the linked payment (PENDING / COMPLETED / FAILED). */
+    @Column(name = "payment_status", length = 20)
+    private String paymentStatus;
+
     @Column(name = "requested_at", updatable = false)
     private Instant requestedAt;
 
@@ -105,6 +113,12 @@ public class RenewalOrder {
 
     public String getDlId() { return dlId; }
     public void setDlId(String dlId) { this.dlId = dlId; }
+
+    public String getPaymentId() { return paymentId; }
+    public void setPaymentId(String paymentId) { this.paymentId = paymentId; }
+
+    public String getPaymentStatus() { return paymentStatus; }
+    public void setPaymentStatus(String paymentStatus) { this.paymentStatus = paymentStatus; }
 
     public Instant getRequestedAt() { return requestedAt; }
     public void setRequestedAt(Instant requestedAt) { this.requestedAt = requestedAt; }

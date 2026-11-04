@@ -478,3 +478,45 @@ data class CreateRenewalRequest(
     @SerializedName("documentType") val documentType: String,
     @SerializedName("notes") val notes: String? = null
 )
+
+// ── Renewal Payments (Easebuzz) ──────────────────────────────────────────
+
+data class PaymentCreateRequest(
+    @SerializedName("shopId") val shopId: Long,
+    @SerializedName("documentType") val documentType: String,
+    @SerializedName("durationYears") val durationYears: Int
+)
+
+data class PaymentBreakdown(
+    @SerializedName("subtotal") val subtotal: Double? = null,
+    @SerializedName("govCharge") val govCharge: Double? = null,
+    @SerializedName("serviceCharge") val serviceCharge: Double? = null,
+    @SerializedName("gstAmount") val gstAmount: Double? = null,
+    @SerializedName("penalty") val penalty: Double? = null,
+    @SerializedName("totalAmount") val totalAmount: Double? = null,
+    @SerializedName("gstRate") val gstRate: Int? = null
+)
+
+data class PaymentCreateResponse(
+    @SerializedName("paymentId") val paymentId: Long? = null,
+    @SerializedName("breakdown") val breakdown: PaymentBreakdown? = null,
+    @SerializedName("status") val status: String? = null,
+    @SerializedName("currency") val currency: String? = null,
+    @SerializedName("gateway") val gateway: String? = null,
+    @SerializedName("gatewayOrderId") val gatewayOrderId: String? = null,
+    @SerializedName("gatewayCheckoutUrl") val gatewayCheckoutUrl: String? = null
+)
+
+data class PaymentStatusResponse(
+    @SerializedName("paymentId") val paymentId: Long? = null,
+    @SerializedName("status") val status: String? = null,
+    @SerializedName("totalAmount") val totalAmount: Double? = null,
+    @SerializedName("currency") val currency: String? = null,
+    @SerializedName("gatewayPaymentId") val gatewayPaymentId: String? = null,
+    @SerializedName("renewalOrderId") val renewalOrderId: Long? = null
+)
+
+enum class PaymentStatus {
+    PENDING, COMPLETED, FAILED
+}
+

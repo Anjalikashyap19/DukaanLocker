@@ -28,11 +28,13 @@ import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.StoreMallDirectory
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -726,7 +728,7 @@ private fun BusinessDetailView(
                     shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.4f))
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
+                    Text("✚", fontSize = 18.sp, color = colors.primary)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(AppStrings.get(lang, "Add Custom Document"), color = colors.primary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 }

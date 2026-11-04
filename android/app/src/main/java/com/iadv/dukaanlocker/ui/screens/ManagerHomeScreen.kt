@@ -27,14 +27,17 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.iadv.dukaanlocker.AppViewModel
 import com.iadv.dukaanlocker.BusinessProfile
 import com.iadv.dukaanlocker.DocumentItem
 import com.iadv.dukaanlocker.ManagerAccess

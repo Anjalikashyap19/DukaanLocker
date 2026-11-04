@@ -40,6 +40,12 @@ public class Document {
     @Column(name = "content_hash")
     private String contentHash;
 
+    /** FSSAI kind of business (KOB) returned by the upstream license lookup API.
+     *  Populated when the FSSAI certificate is fetched/verified so State-tier
+     *  renewal pricing can be calculated without re-calling the upstream API. */
+    @Column(name = "kind_of_business")
+    private String kindOfBusiness;
+
     @Column(name = "issue_date")
     private LocalDateTime issueDate;
 
@@ -101,6 +107,9 @@ public class Document {
 
     public String getContentHash() { return contentHash; }
     public void setContentHash(String contentHash) { this.contentHash = contentHash; }
+
+    public String getKindOfBusiness() { return kindOfBusiness; }
+    public void setKindOfBusiness(String kindOfBusiness) { this.kindOfBusiness = kindOfBusiness; }
 
     public LocalDateTime getIssueDate() { return issueDate; }
     public void setIssueDate(LocalDateTime issueDate) { this.issueDate = issueDate; }

@@ -97,6 +97,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var docForView by mutableStateOf<DocumentItem?>(null)
         private set
+var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
+    private set
+
+    // Payment result state
+    private var _paymentCreateResult = mutableStateOf<PaymentCreateResponse?>(null)
+    val paymentCreateResult: PaymentCreateResponse? by _paymentCreateResult
+    private var _paymentLoading = mutableStateOf(false)
+    val paymentLoading: Boolean by _paymentLoading
+    private var _paymentError = mutableStateOf<String?>(null)
+    val paymentError: String? by _paymentError
 
     init {
         val isLoggedIn = ApiClient.isLoggedIn(application)
@@ -463,6 +473,58 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         pendingUploadDoc = null
         fetchTargetDoc = null
         docForView = null
+        renewalPaymentDoc = null
+    }
+
+    fun startRenewalPayment(doc: DocumentItem) {
+        renewalPaymentDoc = doc
+        _paymentCreateResult.value = null
+        _paymentError.value = null
+    }
+
+    fun cancelRenewalPayment() {
+        renewalPaymentDoc = null
+        _paymentCreateResult.value = null
+        _paymentError.value = null
+        navigateToHome()
+    }
+
+    fun onRenewalPaymentSuccess() {
+        renewalPaymentDoc = null
+        _paymentCreateResult.value = null
+        _paymentError.value = null
+        showToast("Renewal payment initiated successfully", ToastType.SUCCESS)
+        navigateToHome()
+    }
+
+    fun createRenewalPayment(doc: DocumentItem, durationYears: Int) {
+        val shopId = doc.businessId.toLongOrNull()
+        if (shopId == null) {
+            _paymentError.value = "Invalid shop"
+            return
+        }
+        viewModelScope.launch {
+            _paymentLoading.value = true
+            _paymentError.value = null
+            try {
+                val response = api.createRenewalPayment(
+                    PaymentCreateRequest(shopId = shopId, documentType = doc.type, durationYears = durationYears)
+                )
+                if (response.isSuccessful) {
+                    val result = response.body()
+                    if (result != null) {
+                        _paymentCreateResult.value = result
+                    } else {
+                        _paymentError.value = "Failed to create payment"
+                    }
+                } else {
+                    _paymentError.value = response.parseErrorMessage()
+                }
+            } catch (e: Exception) {
+                _paymentError.value = "Network error: ${e.message}"
+            }
+            _paymentLoading.value = false
+        }
     }
 
     fun findBusinessFor(doc: DocumentItem): BusinessProfile? {
@@ -528,7 +590,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     api.getMyShops()
                 }
                 if (response.isSuccessful) {
-                    val shopList = response.body() ?: emptyList()
+                    val shopList = (response.body() ?: emptyList()).toList()
                     updateState { it.copy(shops = shopList) }
                     supervisorScope {
                         shopList.forEach { shop ->
@@ -567,7 +629,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val response = api.getManagers()
                 if (response.isSuccessful) {
-                    val mgrs = response.body() ?: emptyList()
+                    val mgrs = (response.body() ?: emptyList()).toList()
                     updateState { it.copy(managers = mgrs) }
                     val assignments = mutableMapOf<Long, List<String>>()
                     supervisorScope {
@@ -1446,7 +1508,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val response = api.getNotifications()
                 if (response.isSuccessful) {
-                    val notifications = response.body() ?: emptyList()
+                    val notifications = (response.body() ?: emptyList()).toList()
                     val unreadCount = notifications.count { !it.isRead }.toLong()
                     updateState { it.copy(notifications = notifications, unreadNotificationCount = unreadCount) }
                 }
@@ -1495,7 +1557,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val response = api.getBinNotifications()
                 if (response.isSuccessful) {
-                    val binNotifications = response.body() ?: emptyList()
+                    val binNotifications = (response.body() ?: emptyList()).toList()
                     updateState { it.copy(binNotifications = binNotifications) }
                 }
             } catch (e: Exception) {

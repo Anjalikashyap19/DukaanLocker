@@ -1,6 +1,7 @@
 package com.iadv.dukaanlocker.ui.navigation
 
 import com.iadv.dukaanlocker.api.ShopResponse
+import com.iadv.dukaanlocker.DocumentItem
 
 /**
  * Type-safe navigation routes for the app.
@@ -16,6 +17,7 @@ sealed class Screen(val route: String) {
     data object Notifications : Screen("notifications")
     data object Bin : Screen("bin")
     data object AppSettings : Screen("app_settings")
+    data class RenewalPayment(val doc: DocumentItem) : Screen("renewal_payment")
 }
 
 /**

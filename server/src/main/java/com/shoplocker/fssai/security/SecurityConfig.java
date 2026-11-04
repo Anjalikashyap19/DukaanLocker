@@ -135,6 +135,8 @@ public class SecurityConfig {
                     // ── Notification & device token endpoints (JWT required) ──
                     .requestMatchers("/api/notifications/**").authenticated()
                     .requestMatchers("/api/device-token/**").authenticated()
+                    // ── Payment endpoints (JWT required, access checked in service) ──
+                    .requestMatchers("/api/payments/**").authenticated()
                     // Default: any other application endpoint requires authentication
                     .anyRequest().authenticated();
             })

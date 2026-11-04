@@ -406,11 +406,11 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                         onUploadDoc = { doc -> vm.setPendingUpload(doc) },
                                         onViewDoc = { doc -> vm.openDocument(doc) },
                                         onDeleteDoc = { doc -> vm.showToast("${doc.name} - delete via API", ToastType.INFO) },
-                                        onLogout = { vm.logout() },
                                         onAddCustomDoc = { shopId -> vm.showCustomDocDialog(shopId.toLongOrNull() ?: return@OwnerHomeScreen) },
                                         isLoadingShops = state.isLoadingShops,
                                         isLoadingDocuments = state.isLoadingDocuments,
                                         unreadNotificationCount = state.unreadNotificationCount,
+                                        onLogout = { vm.logout() },
                                         onNotifications = { vm.navigateTo(Screen.Notifications) }
                                     )
                                 }
@@ -639,6 +639,9 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                 }
                             )
                         }
+                        is Screen.RenewalPayment -> {
+                            // Handled via overlay below
+                        }
                     }
 
                     // ── Document Viewer overlay ──
@@ -647,6 +650,16 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                 documentId = state.viewDocumentId!!,
                                 documentName = state.viewDocumentName,
                                 onBack = { vm.closeDocumentViewer() }
+                            )
+                        }
+
+                        // ── Renewal Payment overlay ──
+                        val renewalDoc = vm.renewalPaymentDoc
+                        if (renewalDoc != null) {
+                            RenewalPaymentScreen(
+                                doc = renewalDoc,
+                                onBack = { vm.cancelRenewalPayment() },
+                                onPaySuccess = { vm.onRenewalPaymentSuccess() }
                             )
                         }
 

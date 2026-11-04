@@ -4,6 +4,8 @@ import okhttp3.MultipartBody
 import retrofit2.Response
 import retrofit2.http.*
 
+import java.util.List
+
 interface ApiService {
 
     // ── Authentication ───────────────────────────────────────────────────────
@@ -194,4 +196,18 @@ interface ApiService {
         @Header("Authorization") authorization: String,
         @Body body: Map<String, String>
     ): Response<Map<String, String>>
+
+    // ── Renewal Payments (Easebuzz) ──────────────────────────────────────
+
+    @POST("api/payments/renew")
+    suspend fun createRenewalPayment(@Body request: PaymentCreateRequest): Response<PaymentCreateResponse>
+
+    @GET("api/payments/{id}")
+    suspend fun getPayment(@Path("id") id: Long): Response<PaymentStatusResponse>
+
+    @POST("api/payments/{id}/callback")
+    suspend fun paymentCallback(@Path("id") id: Long, @Body body: Map<String, String>): Response<PaymentStatusResponse>
+
+    @GET("api/payments/my")
+    suspend fun getMyPayments(): Response<List<PaymentStatusResponse>>
 }
