@@ -41,6 +41,7 @@ fun DocsScreen(
     onUploadDoc: (DocumentItem) -> Unit,
     onViewDoc: (DocumentItem) -> Unit,
     onDeleteDoc: (DocumentItem) -> Unit = {},
+    onRenewDoc: (DocumentItem) -> Unit = {},
     businesses: List<ShopResponse> = emptyList(),
     isLoadingDocuments: Boolean = false,
     onAddCustomDoc: (String) -> Unit = {},
@@ -134,19 +135,20 @@ items(orderedTypes) { type ->
                         val docs = grouped[type] ?: emptyList()
                         val isTargetMissing = targetMissingDocumentType != null && type == targetMissingDocumentType
                          DocTypeSection(
-                            title = docs.first().name,
-                            count = docs.size,
-                            docs = docs,
-                            shopNameById = shopNameById,
-                            lang = lang,
-                            onFetchDoc = onFetchDoc,
-                            onUploadDoc = onUploadDoc,
-                            onViewDoc = onViewDoc,
-                            onDeleteDoc = onDeleteDoc,
-                            isExpanded = expandedType == type,
-                            onExpandChange = { expandedType = if (expandedType == type) null else type },
-                            isTargetMissing = isTargetMissing
-                        )
+                             title = docs.first().name,
+                             count = docs.size,
+                             docs = docs,
+                             shopNameById = shopNameById,
+                             lang = lang,
+                             onFetchDoc = onFetchDoc,
+                             onUploadDoc = onUploadDoc,
+                             onViewDoc = onViewDoc,
+                             onDeleteDoc = onDeleteDoc,
+                             onRenewDoc = onRenewDoc,
+                             isExpanded = expandedType == type,
+                             onExpandChange = { expandedType = if (expandedType == type) null else type },
+                             isTargetMissing = isTargetMissing
+                         )
                     }
                 if (businesses.isNotEmpty()) {
                     item {
@@ -179,6 +181,7 @@ fun DocTypeSection(
     onUploadDoc: (DocumentItem) -> Unit,
     onViewDoc: (DocumentItem) -> Unit,
     onDeleteDoc: (DocumentItem) -> Unit = {},
+    onRenewDoc: (DocumentItem) -> Unit = {},
     isExpanded: Boolean,
     onExpandChange: (Boolean) -> Unit,
     isTargetMissing: Boolean = false
@@ -253,7 +256,8 @@ fun DocTypeSection(
                                 onFetch = { onFetchDoc(doc) },
                                 onUpload = { onUploadDoc(doc) },
                                 onView = { onViewDoc(doc) },
-                                onDelete = { onDeleteDoc(doc) }
+                                onDelete = { onDeleteDoc(doc) },
+                                onRenew = { onRenewDoc(doc) }
                             )
                         }
                     }

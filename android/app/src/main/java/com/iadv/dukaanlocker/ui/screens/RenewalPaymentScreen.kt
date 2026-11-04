@@ -3,6 +3,10 @@ package com.iadv.dukaanlocker.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Payment
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Button
@@ -74,11 +78,11 @@ fun RenewalPaymentScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Text("←", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                Icon(Icons.Default.ArrowBack, contentDescription = AppStrings.get(lang, "Back"), tint = colors.textPrimary, modifier = Modifier.size(24.dp))
             }
             Text("FSSAI Renewal Payment", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
             IconButton(onClick = {}) {
-                Text("💳", fontSize = 24.sp, color = colors.primary)
+                Icon(Icons.Default.Payment, contentDescription = null, tint = colors.primary, modifier = Modifier.size(24.dp))
             }
         }
 
@@ -207,7 +211,7 @@ fun RenewalPaymentScreen(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("💳", fontSize = 20.sp, color = Color(0xFFFFFFFF))
+                    Icon(Icons.Default.Payment, contentDescription = null, tint = Color(0xFFFFFFFF), modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         "Pay \u20B9${formatAmount(breakdown.totalAmount)}",
@@ -223,7 +227,7 @@ fun RenewalPaymentScreen(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("✓", fontSize = 48.sp, fontWeight = FontWeight.Bold, color = colors.success)
+                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = colors.success, modifier = Modifier.size(48.dp))
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     "Payment Successful",

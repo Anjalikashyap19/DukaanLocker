@@ -8,6 +8,12 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.Composable
@@ -15,7 +21,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -92,16 +97,15 @@ fun DocumentCard(
     onDelete: () -> Unit = {},
     onRenew: () -> Unit = {},
 ) {
-    val vm: AppViewModel = viewModel<AppViewModel>()
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
     val context = LocalContext.current
     val applyUrl = applyUrlFor(doc.type)
     val needsApply = doc.status != "FETCHED" && doc.status != "UPLOADED"
     val showApply = needsApply && doc.type !in applyExcludedTypes
-    // Renew button shows only when the FSSAI doc is expiring within 15 days
-    val isExpiringFssai = doc.status == "EXPIRING_SOON" &&
-        doc.type.equals("FSSAI_FOOD_LICENSE", ignoreCase = true)
+    // Renew button shows when FSSAI doc is expiring within 15 days OR already expired
+    val isRenewable = doc.status == "EXPIRING_SOON" || doc.status == "EXPIRED"
+    val isRenewableFssai = isRenewable && doc.type.equals("FSSAI_FOOD_LICENSE", ignoreCase = true)
     var showApplyDialog by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier
@@ -154,7 +158,7 @@ fun DocumentCard(
                             badgeColor.copy(alpha = 0.5f),
                             RoundedCornerShape(6.dp)
                         )
-                        .clickable(enabled = showApply && applyUrl != null) { showApplyDialog = true }
+                        .clickable(enabled = showApply && applyUrl != null && doc.status != "EXPIRED") { showApplyDialog = true }
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
@@ -197,7 +201,7 @@ fun DocumentCard(
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(vertical = 6.dp)
                     ) {
-                        Text("↓", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(AppStrings.get(lang, "Auto-Fetch"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
@@ -213,7 +217,7 @@ fun DocumentCard(
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(vertical = 6.dp)
                     ) {
-                        Text("↑", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(AppStrings.get(lang, "Upload"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
@@ -239,23 +243,23 @@ fun DocumentCard(
                         // Show preview button if fileUrl is available
                         if (!doc.fileUrl.isNullOrBlank()) {
                             IconButton(onClick = onView, modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.success.copy(alpha = 0.15f))) {
-                                Text("👁", fontSize = 14.sp)
+                                Icon(Icons.Default.Visibility, contentDescription = AppStrings.get(lang, "Preview Certificate"), tint = colors.success, modifier = Modifier.size(14.dp))
                             }
                         } else {
                             IconButton(onClick = onView, modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.border)) {
-                                Text("👁", fontSize = 14.sp)
+                                Icon(Icons.Default.Visibility, contentDescription = AppStrings.get(lang, "View"), tint = colors.accent, modifier = Modifier.size(14.dp))
                             }
                         }
                         IconButton(onClick = onUpload, modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.secondary.copy(alpha = 0.15f))) {
-                            Text("🔄", fontSize = 14.sp)
+                            Icon(Icons.Default.Refresh, contentDescription = AppStrings.get(lang, "Reupload"), tint = colors.secondary, modifier = Modifier.size(14.dp))
                         }
                         // Renew button — shown only for FSSAI docs expiring within 15 days
-                        if (isExpiringFssai) {
+                        if (isRenewableFssai) {
                             IconButton(
-                                onClick = { vm.startRenewalPayment(doc) },
+                                onClick = onRenew,
                                 modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.warning.copy(alpha = 0.15f))
                             ) {
-                                Text("🔄", fontSize = 14.sp)
+                                Icon(Icons.Default.Refresh, contentDescription = AppStrings.get(lang, "Renew License"), tint = colors.warning, modifier = Modifier.size(14.dp))
                             }
                         }
                     }
@@ -282,7 +286,7 @@ fun DocumentCard(
                             .background(colors.primary.copy(alpha = 0.1f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("📄", fontSize = 28.sp)
+                        Icon(Icons.Default.Description, contentDescription = null, tint = colors.primary, modifier = Modifier.size(28.dp))
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(

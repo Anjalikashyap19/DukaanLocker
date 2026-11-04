@@ -57,11 +57,13 @@ fun ManagerHomeScreen(
     onUploadDoc: (DocumentItem) -> Unit,
     onViewDoc: (DocumentItem) -> Unit,
     onDeleteDoc: (DocumentItem) -> Unit,
+    onRenewDoc: (DocumentItem) -> Unit = {},
     onLogout: () -> Unit,
     isDarkTheme: Boolean = true,
     onToggleTheme: () -> Unit = {},
     isLoadingShops: Boolean = false
 ) {
+    val renewalVm: AppViewModel = viewModel<AppViewModel>()
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
     val assignedBusinesses = if (!isLoadingShops) businesses.filter { it.id in managerAccess.assignedBusinessIds } else emptyList()
@@ -233,7 +235,8 @@ fun ManagerHomeScreen(
                     onFetch = onFetchDoc,
                     onUpload = onUploadDoc,
                     onView = onViewDoc,
-                    onDelete = onDeleteDoc
+                    onDelete = onDeleteDoc,
+                    onRenewDoc = onRenewDoc
                 )
             }
         }
@@ -249,8 +252,10 @@ private fun ManagerBusinessDetailView(
     onFetch: (DocumentItem) -> Unit,
     onUpload: (DocumentItem) -> Unit,
     onView: (DocumentItem) -> Unit,
-    onDelete: (DocumentItem) -> Unit
+    onDelete: (DocumentItem) -> Unit,
+    onRenewDoc: (DocumentItem) -> Unit = {},
 ) {
+    val renewalVm: AppViewModel = viewModel<AppViewModel>()
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
     val secured = documents.count { it.status != "MISSING" }

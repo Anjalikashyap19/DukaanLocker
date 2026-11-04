@@ -57,6 +57,7 @@ fun OwnerHomeScreen(
     onUploadDoc: (DocumentItem) -> Unit,
     onViewDoc: (DocumentItem) -> Unit,
     onDeleteDoc: (DocumentItem) -> Unit,
+    onRenewDoc: (DocumentItem) -> Unit = {},
     onLogout: () -> Unit,
     onBusinessSelected: (String) -> Unit = {},
     onAddCustomDoc: (String) -> Unit = {},
@@ -245,7 +246,8 @@ fun OwnerHomeScreen(
                         onUpload = onUploadDoc,
                         onView = onViewDoc,
                         onDelete = onDeleteDoc,
-                        onAddCustomDoc = { onAddCustomDoc(selectedBusiness.id) }
+                        onAddCustomDoc = { onAddCustomDoc(selectedBusiness.id) },
+                        onRenewDoc = onRenewDoc
                     )
                 }
             }
@@ -612,7 +614,8 @@ private fun BusinessDetailView(
     onUpload: (DocumentItem) -> Unit,
     onView: (DocumentItem) -> Unit,
     onDelete: (DocumentItem) -> Unit,
-    onAddCustomDoc: () -> Unit = {}
+    onAddCustomDoc: () -> Unit = {},
+    onRenewDoc: (DocumentItem) -> Unit = {}
 ) {
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
@@ -718,7 +721,8 @@ private fun BusinessDetailView(
                     onFetch = { onFetch(doc) },
                     onUpload = { onUpload(doc) },
                     onView = { onView(doc) },
-                    onDelete = { onDelete(doc) }
+                    onDelete = { onDelete(doc) },
+                    onRenew = { onRenewDoc(doc) }
                 )
             }
             item {
@@ -728,7 +732,7 @@ private fun BusinessDetailView(
                     shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.4f))
                 ) {
-                    Text("✚", fontSize = 18.sp, color = colors.primary)
+                    Icon(Icons.Default.Add, contentDescription = AppStrings.get(lang, "Add Custom Document"), modifier = Modifier.size(28.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(AppStrings.get(lang, "Add Custom Document"), color = colors.primary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 }

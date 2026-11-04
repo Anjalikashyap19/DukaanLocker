@@ -29,7 +29,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -121,9 +123,14 @@ public class PaymentService {
         this.notificationService = notificationService;
     }
 
-    /** Calculate the full cost breakdown for a renewal payment. */
+    /** Calculate the full cost breakdown for a renewal payment.
+     *
+     * @param daysExpired Days past expiry (0 if not expired). Used to calculate penalty:
+     *   0-90 days: 3x gov charge, 90-180 days: 5x gov charge, 180+ days: cannot renew.
+     */
     @Transactional(readOnly = true)
-    public PaymentBreakdown calculateBreakdown(String documentType, Integer durationYears, String kob) {
+    public PaymentBreakdown calculateBreakdown(String documentType, Integer durationYears, String kob,
+                                               long daysExpired) {
         if (durationYears == null || durationYears < 1 || durationYears > 5) {
             throw new FssaiException("durationYears must be between 1 and 5", FailureCode.INVALID_REQUEST);
         }
@@ -166,14 +173,28 @@ public class PaymentService {
         BigDecimal subtotal = govChargePerYear.multiply(new BigDecimal(durationYears));
         BigDecimal serviceCharge = serviceChargePerYear.multiply(new BigDecimal(durationYears));
         BigDecimal gstAmount = serviceCharge.multiply(GST_RATE).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal totalAmount = subtotal.add(serviceCharge).add(gstAmount);
+
+        // Penalty calculation for expired documents
+        BigDecimal penalty = BigDecimal.ZERO;
+        if (daysExpired > 0) {
+            if (daysExpired <= 90) {
+                penalty = govChargePerYear.multiply(new BigDecimal(3));
+            } else if (daysExpired <= 180) {
+                penalty = govChargePerYear.multiply(new BigDecimal(5));
+            } else {
+                throw new FssaiException("License expired more than 180 days ago. Cannot renew.",
+                        FailureCode.INVALID_REQUEST);
+            }
+        }
+
+        BigDecimal totalAmount = subtotal.add(serviceCharge).add(gstAmount).add(penalty);
 
         return new PaymentBreakdown(
                 subtotal.setScale(2, RoundingMode.HALF_UP),
                 govChargePerYear.setScale(2, RoundingMode.HALF_UP),
                 serviceCharge.setScale(2, RoundingMode.HALF_UP),
                 gstAmount,
-                BigDecimal.ZERO, // penalty reserved for after-expiry
+                penalty.setScale(2, RoundingMode.HALF_UP),
                 totalAmount.setScale(2, RoundingMode.HALF_UP),
                 18
         );
@@ -234,7 +255,13 @@ public class PaymentService {
         // Determine license tier from stored category / document type
         String licenseCategory = doc.getDocumentType() != null ? doc.getDocumentType().name() : "FSSAI_FOOD_LICENSE";
 
-        PaymentBreakdown breakdown = calculateBreakdown(documentType, durationYears, kob);
+        // Calculate days expired for penalty calculation
+        long daysExpired = 0;
+        if (doc.getExpiryDate() != null && doc.getExpiryDate().toLocalDate().isBefore(LocalDate.now())) {
+            daysExpired = ChronoUnit.DAYS.between(doc.getExpiryDate().toLocalDate(), LocalDate.now());
+        }
+
+        PaymentBreakdown breakdown = calculateBreakdown(documentType, durationYears, kob, daysExpired);
 
         // Idempotency: return an existing open PENDING payment for the same shop+doc+duration
         Optional<PaymentTransaction> existing = paymentTransactionRepository
