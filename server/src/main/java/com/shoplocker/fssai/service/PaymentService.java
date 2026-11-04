@@ -222,85 +222,103 @@ public class PaymentService {
     @Transactional
     public PaymentCreateResponse createPayment(User user, Long shopId, String documentType,
                                                Integer durationYears) {
-        shopAccessService.validateShopAccess(user, shopId);
+        try {
+            log.info("Creating renewal payment for user={}, shopId={}, documentType={}, durationYears={}",
+                    user.getId(), shopId, documentType, durationYears);
 
-        Shop shop = shopRepository.findById(shopId)
-                .orElseThrow(() -> new FssaiException("Shop not found", FailureCode.SHOP_NOT_FOUND));
+            shopAccessService.validateShopAccess(user, shopId);
 
-        // Look up the previously uploaded FSSAI document for this shop
-        Optional<Document> existingDoc = documentRepository.findByShopIdAndDocumentType(
-                shopId, DocumentType.FSSAI_FOOD_LICENSE);
-        if (existingDoc.isEmpty()) {
-            throw new FssaiException("No FSSAI Food License document found for this shop",
-                    FailureCode.DOCUMENT_NOT_FOUND);
-        }
+            Shop shop = shopRepository.findById(shopId)
+                    .orElseThrow(() -> new FssaiException("Shop not found", FailureCode.SHOP_NOT_FOUND));
 
-        Document doc = existingDoc.get();
-        String licenseNumber = doc.getDocumentNumber();
-        if (licenseNumber == null || licenseNumber.isBlank()) {
-            throw new FssaiException("FSSAI license number not found on the uploaded document",
-                    FailureCode.INVALID_REQUEST);
-        }
-
-        // Resolve KOB: prefer stored value, otherwise call the upstream FSSAI API
-        String kob = doc.getKindOfBusiness();
-        if (kob == null || kob.isBlank()) {
-            kob = fetchKobFromFssaiApi(licenseNumber);
-            if (kob != null && !kob.isBlank()) {
-                doc.setKindOfBusiness(kob);
-                documentRepository.save(doc);
+            // Look up the previously uploaded FSSAI document for this shop
+            Optional<Document> existingDoc = documentRepository.findByShopIdAndDocumentType(
+                    shopId, DocumentType.FSSAI_FOOD_LICENSE);
+            if (existingDoc.isEmpty()) {
+                log.warn("No FSSAI Food License document found for shopId={}, user={}", shopId, user.getId());
+                throw new FssaiException("No FSSAI Food License document found for this shop",
+                        FailureCode.DOCUMENT_NOT_FOUND);
             }
+
+            Document doc = existingDoc.get();
+            String licenseNumber = doc.getDocumentNumber();
+            if (licenseNumber == null || licenseNumber.isBlank()) {
+                throw new FssaiException("FSSAI license number not found on the uploaded document",
+                        FailureCode.INVALID_REQUEST);
+            }
+
+            // Resolve KOB: prefer stored value, otherwise call the upstream FSSAI API
+            String kob = doc.getKindOfBusiness();
+            if (kob == null || kob.isBlank()) {
+                try {
+                    kob = fetchKobFromFssaiApi(licenseNumber);
+                    if (kob != null && !kob.isBlank()) {
+                        doc.setKindOfBusiness(kob);
+                        documentRepository.save(doc);
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to fetch KOB from FSSAI API for licenseNumber={}: {}", licenseNumber, e.getMessage());
+                    // Continue without KOB — pricing will fall back to Basic tier
+                }
+            }
+
+            // Determine license tier from stored category / document type
+            String licenseCategory = doc.getDocumentType() != null ? doc.getDocumentType().name() : "FSSAI_FOOD_LICENSE";
+
+            // Calculate days expired for penalty calculation
+            long daysExpired = 0;
+            if (doc.getExpiryDate() != null && doc.getExpiryDate().toLocalDate().isBefore(LocalDate.now())) {
+                daysExpired = ChronoUnit.DAYS.between(doc.getExpiryDate().toLocalDate(), LocalDate.now());
+            }
+
+            PaymentBreakdown breakdown = calculateBreakdown(documentType, durationYears, kob, daysExpired);
+
+            // Idempotency: return an existing open PENDING payment for the same shop+doc+duration
+            Optional<PaymentTransaction> existing = paymentTransactionRepository
+                    .findTopByUserIdAndShopIdAndDocumentTypeAndDocumentIdAndStatusOrderByCreatedAtDesc(
+                            user.getId(), shopId, documentType, doc.getId(),
+                            PaymentTransaction.STATUS_PENDING);
+            if (existing.isPresent()) {
+                PaymentTransaction pt = existing.get();
+                return toResponse(pt, breakdownFromEntity(pt));
+            }
+
+            PaymentTransaction tx = new PaymentTransaction(
+                    user, shop, DocumentType.FSSAI_FOOD_LICENSE, doc.getId(),
+                    durationYears,                 breakdown.getSubtotal(), breakdown.getGovCharge(),
+                    breakdown.getServiceCharge(), breakdown.getGstAmount(),
+                    breakdown.getPenalty(), breakdown.getTotalAmount(), "INR"
+            );
+            tx = paymentTransactionRepository.save(tx);
+
+            // Build Easebuzz checkout data
+            String orderId = "DL" + tx.getId() + System.currentTimeMillis();
+            String gatewayCheckoutUrl = buildEasebuzzCheckoutUrl(orderId, breakdown.getTotalAmount(),
+                    user, shop, tx.getId());
+
+            tx.setGatewayOrderId(orderId);
+            paymentTransactionRepository.save(tx);
+
+            log.info("Payment created: tx={} user={} shop={} amount={} orderId={}",
+                    tx.getId(), user.getId(), shopId, breakdown.getTotalAmount(), orderId);
+
+            return new PaymentCreateResponse(
+                    tx.getId(),
+                    breakdown,
+                    tx.getStatus(),
+                    tx.getCurrency(),
+                    tx.getGateway(),
+                    orderId,
+                    gatewayCheckoutUrl
+            );
+        } catch (FssaiException e) {
+            log.warn("Payment creation failed with FssaiException: {} (code={})", e.getMessage(), e.getFailureCode());
+            throw e;
+        } catch (Exception e) {
+            log.error("Unexpected error creating payment for user={}, shopId={}, docType={}: {}",
+                    user.getId(), shopId, documentType, e.getMessage(), e);
+            throw new FssaiException("Unexpected error: " + e.getMessage(), FailureCode.INTERNAL_ERROR, e);
         }
-
-        // Determine license tier from stored category / document type
-        String licenseCategory = doc.getDocumentType() != null ? doc.getDocumentType().name() : "FSSAI_FOOD_LICENSE";
-
-        // Calculate days expired for penalty calculation
-        long daysExpired = 0;
-        if (doc.getExpiryDate() != null && doc.getExpiryDate().toLocalDate().isBefore(LocalDate.now())) {
-            daysExpired = ChronoUnit.DAYS.between(doc.getExpiryDate().toLocalDate(), LocalDate.now());
-        }
-
-        PaymentBreakdown breakdown = calculateBreakdown(documentType, durationYears, kob, daysExpired);
-
-        // Idempotency: return an existing open PENDING payment for the same shop+doc+duration
-        Optional<PaymentTransaction> existing = paymentTransactionRepository
-                .findTopByUserIdAndShopIdAndDocumentTypeAndDocumentIdAndStatusOrderByCreatedAtDesc(
-                        user.getId(), shopId, documentType, doc.getId(),
-                        PaymentTransaction.STATUS_PENDING);
-        if (existing.isPresent()) {
-            PaymentTransaction pt = existing.get();
-            return toResponse(pt, breakdownFromEntity(pt));
-        }
-
-        PaymentTransaction tx = new PaymentTransaction(
-                user, shop, DocumentType.FSSAI_FOOD_LICENSE, doc.getId(),
-                durationYears,                 breakdown.getSubtotal(), breakdown.getGovCharge(),
-                breakdown.getServiceCharge(), breakdown.getGstAmount(),
-                breakdown.getPenalty(), breakdown.getTotalAmount(), "INR"
-        );
-        tx = paymentTransactionRepository.save(tx);
-
-        // Build Easebuzz checkout data
-        String orderId = "DL" + tx.getId() + System.currentTimeMillis();
-        String gatewayCheckoutUrl = buildEasebuzzCheckoutUrl(orderId, breakdown.getTotalAmount(),
-                user, shop, tx.getId());
-
-        tx.setGatewayOrderId(orderId);
-        paymentTransactionRepository.save(tx);
-
-        log.info("Payment created: tx={} user={} shop={} amount={} orderId={}",
-                tx.getId(), user.getId(), shopId, breakdown.getTotalAmount(), orderId);
-
-        return new PaymentCreateResponse(
-                tx.getId(),
-                breakdown,
-                tx.getStatus(),
-                tx.getCurrency(),
-                tx.getGateway(),
-                orderId,
-                gatewayCheckoutUrl
-        );
     }
 
     /**
