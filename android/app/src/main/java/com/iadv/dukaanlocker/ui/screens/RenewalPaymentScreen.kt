@@ -1,16 +1,17 @@
 package com.iadv.dukaanlocker.ui.screens
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Payment
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Dialog
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,6 +29,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.easebuzz.core.EasebuzzSdk
+import com.easebuzz.core.listener.PaymentListener
 import com.iadv.dukaanlocker.*
 import com.iadv.dukaanlocker.api.*
 import com.iadv.dukaanlocker.ui.strings.AppStrings
@@ -36,7 +39,7 @@ import com.iadv.dukaanlocker.ui.theme.*
 import java.math.BigDecimal
 import java.math.RoundingMode
 
-// ── Renewal Payment Screen (FSSAI document renewal via Easebuzz) ───────────────
+// ── Renewal Payment Screen (FSSAI document renewal via Easebuzz SDK) ───────────────
 @Composable
 fun RenewalPaymentScreen(
     doc: DocumentItem,
@@ -65,9 +68,41 @@ fun RenewalPaymentScreen(
         }
     }
 
-    // Store the checkout URL when the backend returns a pending payment
-    if (result != null && result.status == "PENDING" && result.gatewayCheckoutUrl != null) {
-        // Payment URL would be opened in a WebView here
+    // Open Easebuzz payment SDK screen when payment is pending
+    LaunchedEffect(result) {
+        if (result != null && result.status == "PENDING" && result.gatewayCheckoutUrl != null && !paymentSuccess) {
+            try {
+                EasebuzzSdk.startPayment(
+                    context,
+                    result.totalAmount.toString(),
+                    result.gatewayOrderId ?: "DL${System.currentTimeMillis()}",
+                    "${result.userName ?: result.mobileNumber ?: ""}",
+                    "${result.userEmail ?: result.mobileNumber ?: ""}",
+                    object : PaymentListener {
+                        override fun onPaymentSuccess(transactionId: String?) {
+                            vm.showToast("Payment successful via Easebuzz SDK", com.iadv.dukaanlocker.ui.theme.ToastType.SUCCESS)
+                            paymentSuccess = true
+                            onPaySuccess()
+                        }
+
+                        override fun onPaymentFailed(error: String?) {
+                            vm.showToast("Payment failed: $error", com.iadv.dukaanlocker.ui.theme.ToastType.ERROR)
+                            paymentError = error
+                        }
+
+                        override fun onPaymentCancelled() {
+                            vm.showToast("Payment cancelled", com.iadv.dukaanlocker.ui.theme.ToastType.WARNING)
+                        }
+                    }
+                )
+            } catch (e: Exception) {
+                vm.showToast("Easebuzz SDK error: ${e.message}", com.iadv.dukaanlocker.ui.theme.ToastType.ERROR)
+                // Fall back to WebView approach
+                val intent = android.content.Intent(Intent.ACTION_VIEW)
+                intent.data = android.net.Uri.parse(result.gatewayCheckoutUrl)
+                context.startActivity(intent)
+            }
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -198,10 +233,10 @@ fun RenewalPaymentScreen(
             )
         }
 
-        // Pay button
-        if (!paymentSuccess && !isLoading && breakdown != null && result != null) {
+        // Pay button - shown when no payment in progress
+        if (!paymentSuccess && !isLoading && breakdown != null && result == null) {
             Button(
-                onClick = { paymentSuccess = true },
+                onClick = { vm.createRenewalPayment(doc, durationYears) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
@@ -221,7 +256,7 @@ fun RenewalPaymentScreen(
             }
         }
 
-        // Success state
+        // Success state - shown when SDK payment is completed
         if (paymentSuccess) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
@@ -253,12 +288,7 @@ fun RenewalPaymentScreen(
     }
 
     // ── Payment processing notice ──
-    Text(
-        "Redirecting to secure payment gateway...",
-        fontSize = 14.sp,
-        color = colors.textSecondary,
-        textAlign = TextAlign.Center
-    )
+    // SDK handles payment flow; no notice needed
 }
 
 @Composable

@@ -39,9 +39,7 @@ services:
       - dukaanlocker-network
 
   backend:
-    build:
-      context: .
-      dockerfile: server/Dockerfile
+    image: dukaanlocker-backend:latest
     container_name: dukaanlocker-backend
     restart: unless-stopped
     env_file:
@@ -49,7 +47,7 @@ services:
     environment:
       STORAGE_BASE_PATH: /app/Documents
     ports:
-      - "127.0.0.1:8082:8081"
+      - "127.0.0.1:8082:8082"
     volumes:
       - ./secrets:/app/secrets:ro
       - ./Documents:/app/Documents

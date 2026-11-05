@@ -322,8 +322,7 @@ public class UdyamVerificationService {
 
             // Check for common error patterns (case-insensitive)
             String verifyLower = verifyResult.toLowerCase();
-            if (verifyLower.contains("invalid captcha") || verifyLower.contains("wrong captcha")
-                    || verifyLower.contains("captcha mismatch") || verifyLower.contains("please enter captcha")) {
+            if (isCaptchaError(verifyResult)) {
                 return UdyamVerifyResponse.error("The CAPTCHA you entered is incorrect. Please try again.");
             }
             if (verifyLower.contains("udyam number not found") || verifyLower.contains("invalid udyam")
@@ -423,6 +422,20 @@ public class UdyamVerificationService {
                                 "Please try again with a fresh CAPTCHA.");
             }
 
+            // The page must actually BE the certificate. A failed verification (wrong
+            // CAPTCHA, expired session) makes the portal serve its normal-looking
+            // landing/home page with HTTP 200 and plenty of HTML, so neither the HTTP
+            // status nor the response length tells success from failure. Require the
+            // certificate's own markers instead of trusting whatever came back.
+            if (!isCertificatePage(printHtml)) {
+                log.warn("Udyam print page for {} is not a certificate (missing certificate markers); " +
+                        "treating verification as failed.", request.getUdyamNumber());
+                return UdyamVerifyResponse.error(
+                        "We couldn't retrieve your Udyam certificate from the government portal. " +
+                                "This usually means the CAPTCHA was entered incorrectly or the session " +
+                                "expired. Please go back and try again with a fresh CAPTCHA.");
+            }
+
              // ── Convert HTML to PDF + upload to local storage ──
             // This step runs ONLY after the government portal has already confirmed
             // the Udyam number is valid. A failure here (PDF rendering, storage outage,
@@ -464,6 +477,62 @@ public class UdyamVerificationService {
                     "We couldn't complete the Udyam verification right now. Please try again in a few minutes.",
                     FailureCode.TEXTRACT_FAILURE, t);
         }
+    }
+
+    /** The portal renders a verification failure inside this span. */
+    private static final Pattern CAPTCHA_LABEL_PATTERN = Pattern.compile(
+            "id=\"[^\"]*lblCaptcha\"[^>]*>(.*?)</span>",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+
+    /**
+     * Detects a failed CAPTCHA from the government portal's verify response.
+     *
+     * <p>The portal reports the common case as
+     * {@code <span id="ctl00_ContentPlaceHolder1_lblCaptcha" class="msgRed">Incorrect
+     * verification code. Please try again.</span>}, which none of the earlier literal
+     * phrases matched — so a bad CAPTCHA used to fall through and get treated as a
+     * successful verification. This checks both the known phrases and the contents of
+     * the {@code lblCaptcha} span.</p>
+     */
+    private boolean isCaptchaError(String verifyResult) {
+        String lower = verifyResult.toLowerCase(Locale.ROOT);
+        if (lower.contains("invalid captcha") || lower.contains("wrong captcha")
+                || lower.contains("captcha mismatch") || lower.contains("please enter captcha")
+                || lower.contains("incorrect verification code") || lower.contains("invalid verification code")
+                || lower.contains("verification code is incorrect")) {
+            return true;
+        }
+
+        Matcher m = CAPTCHA_LABEL_PATTERN.matcher(verifyResult);
+        if (m.find()) {
+            String text = m.group(1).replaceAll("<[^>]+>", " ").replaceAll("\\s+", " ").trim();
+            if (!text.isEmpty()) {
+                String t = text.toLowerCase(Locale.ROOT);
+                if (t.contains("incorrect") || t.contains("invalid") || t.contains("mismatch")
+                        || t.contains("required") || t.contains("try again")) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Heuristic guard that the fetched print page is the actual Udyam certificate
+     * and not the portal's landing/home page. A failed verification makes the portal
+     * serve a normal page with HTTP 200, so we require at least two independent
+     * certificate markers before accepting the result.
+     */
+    private boolean isCertificatePage(String printHtml) {
+        if (printHtml == null || printHtml.isBlank()) {
+            return false;
+        }
+        String lower = printHtml.toLowerCase(Locale.ROOT);
+        int markers = 0;
+        if (lower.contains("udyam registration certificate")) markers++;
+        if (lower.contains("name of enterprise") || lower.contains("lblenterprisename")) markers++;
+        if (lower.contains("udyam registration number")) markers++;
+        return markers >= 2;
     }
 
     // ─── HTML \u2192 PDF CONVERSION ─────────────────────────────────────────────

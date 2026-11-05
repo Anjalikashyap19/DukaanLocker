@@ -33,14 +33,14 @@ public class OpenApiConfig {
 
     /**
      * Default returned by {@code application.properties}'s
-     * {@code app.external-url=${EXTERNAL_URL:http://localhost:8081}} when
+     * {@code app.external-url=${EXTERNAL_URL:http://localhost:8082}} when
      * neither the env var nor IMDS resolves. We never match against this
      * string to decide whether to attempt IMDS — that's dictated purely by
      * whether {@code EXTERNAL_URL} is present in the JVM env (see
      * {@link #resolveExternalUrl}). This constant exists only so the
      * {@code @Value} fallback can reuse it without a magic string.
      */
-    private static final String LOCALHOST_DEFAULT = "http://localhost:8081";
+    private static final String LOCALHOST_DEFAULT = "http://localhost:8082";
 
     /**
      * Strict dotted-quad + per-octet range check for the public IPv4 body
@@ -63,7 +63,7 @@ public class OpenApiConfig {
      *   <li>EC2 Instance Metadata Service (IMDS) auto-detect, with IMDSv2
      *       token flow plus IMDSv1 fallback for legacy instances. Opt out
      *       with {@code SKIP_EC2_AUTODETECT=1}.</li>
-     *   <li>{@code http://localhost:8081} (local-dev fallback).</li>
+     *   <li>{@code http://localhost:8082} (local-dev fallback).</li>
      * </ol></p>
      */
     @Bean
@@ -118,7 +118,7 @@ public class OpenApiConfig {
      *
      * <p>The IMDS auto-detect is gated on the JVM env, NOT on whether the
      * candidate string equals the localhost default. This means an
-     * operator who explicitly sets {@code EXTERNAL_URL=http://localhost:8081}
+     * operator who explicitly sets {@code EXTERNAL_URL=http://localhost:8082}
      * (e.g. a test rig that wants Swagger to mirror dev on a prod-style
      * box) gets exactly what they asked for; we don't silently reach out
      * to IMDS and overwrite.</p>
@@ -136,7 +136,7 @@ public class OpenApiConfig {
         }
         String ec2Ip = fetchEc2PublicIp(2);
         if (ec2Ip != null) {
-            String url = "http://" + ec2Ip + ":8081";
+            String url = "http://" + ec2Ip + ":8082";
             log.info("EC2 IMDS auto-detected OpenAPI server URL: {}", url);
             return url;
         }

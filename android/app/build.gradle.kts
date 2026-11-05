@@ -175,6 +175,7 @@ dependencies {
 
     // Encrypted storage for auth tokens
     implementation(libs.androidx.security.crypto)
+implementation(libs.easebuzzCore)
 
     // ViewModel + Navigation
     implementation(libs.androidx.lifecycle.viewmodel.compose)

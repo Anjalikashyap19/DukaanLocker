@@ -131,30 +131,37 @@ public class UdyamVerificationController {
             return ResponseEntity.ok(verifyResult);
         }
 
-        // Parse MSME data from HTML and regenerate PDF from parsed data
-        String finalPdfUrl = verifyResult.getPdfUrl();
-        if (verifyResult.getCertificateHtml() != null) {
-            try {
-                MsmeParsedData parsedData = MsmeDataParser.parse(verifyResult.getCertificateHtml());
-                if (parsedData != null) {
-                    // Name validation: ensure certificate belongs to this shop
-                    Shop shop = shopService.getShopById(shopId);
-                    String enterpriseName = parsedData.getEnterpriseName();
-                    if (enterpriseName != null && !enterpriseName.isBlank()) {
-                        boolean nameMatches = namesMatch(shop.getShopName(), enterpriseName);
-                        if (!nameMatches) {
-                            return ResponseEntity.ok(UdyamVerifyResponse.error("This certificate does not belong to your business."));
-                        }
-                    }
+        // Parse MSME data from HTML. Fail closed: a page without a real enterprise
+        // name is not the certificate (wrong CAPTCHA / expired session served the
+        // portal's landing page), so it must never be persisted as a verified document.
+        MsmeParsedData parsedData;
+        try {
+            parsedData = verifyResult.getCertificateHtml() == null
+                    ? null
+                    : MsmeDataParser.parse(verifyResult.getCertificateHtml());
+        } catch (Exception e) {
+            parsedData = null;
+        }
+        if (parsedData == null || parsedData.getEnterpriseName() == null
+                || parsedData.getEnterpriseName().isBlank()) {
+            return ResponseEntity.ok(UdyamVerifyResponse.error(
+                    "We couldn't read the Udyam certificate from the government portal. " +
+                            "This usually means the CAPTCHA was entered incorrectly or the session expired. " +
+                            "Please try again with a fresh CAPTCHA."));
+        }
 
-                    String regeneratedPdfUrl = udyamService.generatePdfFromParsedData(parsedData, request.getUdyamNumber(), user.getId(), shopId);
-                    if (regeneratedPdfUrl != null) {
-                        finalPdfUrl = regeneratedPdfUrl;
-                    }
-                }
-            } catch (Exception e) {
-                // Graceful degradation — keep the original PDF URL
-            }
+        // Name validation: ensure certificate belongs to this shop
+        Shop shop = shopService.getShopById(shopId);
+        if (!namesMatch(shop.getShopName(), parsedData.getEnterpriseName())) {
+            return ResponseEntity.ok(UdyamVerifyResponse.error("This certificate does not belong to your business."));
+        }
+
+        // Regenerate PDF from parsed data so the stored certificate has reliable content
+        String finalPdfUrl = verifyResult.getPdfUrl();
+        String regeneratedPdfUrl = udyamService.generatePdfFromParsedData(
+                parsedData, request.getUdyamNumber(), user.getId(), shopId);
+        if (regeneratedPdfUrl != null) {
+            finalPdfUrl = regeneratedPdfUrl;
         }
 
         // Persist document

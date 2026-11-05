@@ -13,7 +13,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * (e.g. {@code /swagger-ui/index.html}, {@code /swagger-ui/swagger-ui-bundle.js},
  * etc.) but does NOT emit a 302 for the bare directory URL. Combined with
  * Spring's trailing-slash normalization, browsers that open
- * {@code http://host:8081/swagger-ui} get redirected to
+ * {@code http://host:8082/swagger-ui} get redirected to
  * {@code /swagger-ui/} which serves the Whitelabel 404 — even though
  * {@code /swagger-ui/index.html} would gladly serve the Swagger UI HTML.</p>
  *

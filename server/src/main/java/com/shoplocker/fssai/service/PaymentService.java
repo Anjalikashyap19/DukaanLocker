@@ -473,19 +473,19 @@ public class PaymentService {
         String base = "sandbox".equalsIgnoreCase(easbuzzEnvironment)
                 ? "https://sandbox.easebuzz.in/pg/merchant/payment"
                 : "https://www.easebuzz.in/pg/merchant/payment";
-        // Easebuzz expects the merchant to POST form fields; we provide a URL the
-        // Android WebView / Custom Tabs can load. The actual signature is verified
-        // server-side on the webhook callback.
+        // Easebuzz expects form fields: key|order_id|amount|productinfo|firstname|email|udf5|salt
+        // for signature. We include productinfo and udf5 for proper SDK/hosted page support.
         return base + "?key=" + encode(easbuzzMerchantKey)
                 + "&order_id=" + encode(orderId)
                 + "&amount=" + encode(amount.setScale(2, RoundingMode.HALF_UP).toPlainString())
                 + "&currency=INR"
+                + "&productinfo=FSSAI Renewal"
                 + "&name=" + encode(user.getUserName())
                 + "&email=" + encode(user.getEmailId() != null ? user.getEmailId() : user.getMobileNumber())
-                + "&phone=" + encode(user.getMobileNumber())
                 + "&udf1=" + encode(String.valueOf(txId))
                 + "&udf2=" + encode(shop.getShopName())
                 + "&udf3=" + encode(String.valueOf(shop.getId()))
+                + "&udf5=" + encode(user.getUserName())
                 + "&return_url=" + encode(appReturnUrl(txId))
                 + "&cancel_url=" + encode(appCancelUrl(txId));
     }
@@ -518,11 +518,11 @@ public class PaymentService {
         if (gatewaySignature == null || gatewaySignature.isBlank()) return false;
 
         // Easebuzz checksum: sha512(key|txnid|amount|productinfo|firstname|email|udf5|salt)
-        // We simplify: verify the signature matches a hash of known fields + salt.
+        // Fields must match exactly what is sent in the checkout URL
         String data = easbuzzMerchantKey + "|" + tx.getGatewayOrderId() + "|"
                 + tx.getTotalAmount() + "|FSSAI Renewal|" + tx.getUser().getUserName() + "|"
                 + (tx.getUser().getEmailId() != null ? tx.getUser().getEmailId() : tx.getUser().getMobileNumber())
-                + "|" + easbuzzMerchantSalt;
+                + "|" + tx.getUser().getUserName() + "|" + easbuzzMerchantSalt;
         String expected = sha512(data);
         return expected.equalsIgnoreCase(gatewaySignature);
     }

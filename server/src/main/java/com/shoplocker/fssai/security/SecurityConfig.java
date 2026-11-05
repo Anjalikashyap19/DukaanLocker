@@ -58,7 +58,7 @@ public class SecurityConfig {
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
     private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
 
-    @Value("${app.external-url:http://localhost:8081}")
+    @Value("${app.external-url:http://localhost:8082}")
     private String externalUrl;
 
     @Value("${app.security.expose-devtools:false}")
@@ -153,7 +153,7 @@ public class SecurityConfig {
         origins.add(externalUrl);
         // Only include localhost in non-production (when external URL is not a production domain)
         if (!externalUrl.contains("dukaanlocker.com") && !externalUrl.contains("iadv.cloud")) {
-            origins.add("http://localhost:8081");
+            origins.add("http://localhost:8082");
         }
         config.setAllowedOrigins(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));

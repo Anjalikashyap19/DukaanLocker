@@ -14,15 +14,15 @@ cd "$(dirname "$0")"
 
 ./mvnw -q -B -DskipTests package
 
-# Refuse to start if port 8081 is already taken -- surfaces the actual
+# Refuse to start if port 8082 is already taken -- surfaces the actual
 # blocking PID instead of letting `java -jar` fail with a generic BindException.
-if command -v lsof >/dev/null 2>&1 && lsof -i :8081 >/dev/null 2>&1; then
-  echo "ERROR: port 8081 is already in use:" >&2
-  lsof -i :8081 >&2 || true
+if command -v lsof >/dev/null 2>&1 && lsof -i :8082 >/dev/null 2>&1; then
+  echo "ERROR: port 8082 is already in use:" >&2
+  lsof -i :8082 >&2 || true
   exit 1
-elif command -v ss >/dev/null 2>&1 && ss -ltn | awk '{print $4}' | grep -qE '[:.]8081$'; then
-  echo "ERROR: port 8081 is already in use." >&2
-  ss -ltnp | grep ':8081' >&2 || true
+elif command -v ss >/dev/null 2>&1 && ss -ltn | awk '{print $4}' | grep -qE '[:.]8082$'; then
+  echo "ERROR: port 8082 is already in use." >&2
+  ss -ltnp | grep ':8082' >&2 || true
   exit 1
 fi
 
@@ -44,15 +44,15 @@ if [ -z "${EXTERNAL_URL:-}" ] && [ "${SKIP_EC2_AUTODETECT:-0}" != "1" ]; then
       && [[ "$ec2_ip" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]] \
       && [ "${BASH_REMATCH[1]}" -le 255 ] && [ "${BASH_REMATCH[2]}" -le 255 ] \
       && [ "${BASH_REMATCH[3]}" -le 255 ] && [ "${BASH_REMATCH[4]}" -le 255 ]; then
-    export EXTERNAL_URL="http://${ec2_ip}:8081"
+    export EXTERNAL_URL="http://${ec2_ip}:8082"
     echo "EC2 detected: EXTERNAL_URL=$EXTERNAL_URL"
   fi
 fi
 
 # Hand a clean hint to whoever SSH'd in: which URLs to point a browser at.
-echo "  Spring Boot is starting on http://0.0.0.0:8081 (binds all interfaces)"
-echo "  Swagger UI : http://${EXTERNAL_URL:-http://localhost:8081}/swagger-ui/index.html"
-echo "  OpenAPI    : http://${EXTERNAL_URL:-http://localhost:8081}/v3/api-docs"
+echo "  Spring Boot is starting on http://0.0.0.0:8082 (binds all interfaces)"
+echo "  Swagger UI : http://${EXTERNAL_URL:-http://localhost:8082}/swagger-ui/index.html"
+echo "  OpenAPI    : http://${EXTERNAL_URL:-http://localhost:8082}/v3/api-docs"
 echo "  (Override EXTERNAL_URL in .env if you're not on EC2 and don't want the auto-detected IP.)"
 
-java -jar target/DukaanLocker-0.0.1-SNAPSHOT.jar --server.port=8081
+java -jar target/DukaanLocker-0.0.1-SNAPSHOT.jar --server.port=8082

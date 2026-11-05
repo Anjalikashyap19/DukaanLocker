@@ -556,6 +556,21 @@ public class AuthService {
             parsedData.setMobileNumber(mobile);
         }
 
+        // Fail closed: without a parsed enterprise name we cannot trust the
+        // certificate. This happens when the portal served a non-certificate page
+        // (e.g. a wrong CAPTCHA that slipped past), and it used to create an account
+        // named "MSME Owner" with the Udyam number as the shop name and a certificate
+        // full of placeholders. Reject instead so the user retries with a good CAPTCHA.
+        if (parsedData == null || parsedData.getEnterpriseName() == null
+                || parsedData.getEnterpriseName().isBlank()) {
+            log.warn("MSME registration aborted: no enterprise name parsed from the certificate for Udyam {}", udyamNumber);
+            throw new FssaiException(
+                    "We couldn't read your Udyam certificate from the government portal. " +
+                            "This usually means the CAPTCHA was entered incorrectly or the session expired. " +
+                            "Please go back and try again with a fresh CAPTCHA.",
+                    FailureCode.INVALID_REQUEST);
+        }
+
         // ── Step 2b: Regenerate PDF from parsed data for reliable content ──
         // The initial PDF from verifyAndGeneratePdf() may have empty fields if the
         // government portal HTML was not fully populated. Regenerating from parsed
