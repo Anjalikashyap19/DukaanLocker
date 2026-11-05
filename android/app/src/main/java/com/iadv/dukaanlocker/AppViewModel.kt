@@ -1,6 +1,7 @@
 package com.iadv.dukaanlocker
 
 import android.app.Application
+import android.content.Intent
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -480,6 +481,19 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
         renewalPaymentDoc = doc
         _paymentCreateResult.value = null
         _paymentError.value = null
+    }
+
+    fun startApplyNewLicence(doc: DocumentItem) {
+        // For cancelled licence (>180 days expired), open the IndiaAdvocacy apply page
+        val applyUrl = "https://indiaadvocacy.in/license/food-license/"
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(applyUrl))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            showToast("Opening FSSAI licence application page", ToastType.INFO)
+        } catch (e: Exception) {
+            showToast("Could not open application page: ${e.message}", ToastType.ERROR)
+        }
     }
 
     fun cancelRenewalPayment() {

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.Composable
@@ -96,6 +97,7 @@ fun DocumentCard(
     onView: () -> Unit,
     onDelete: () -> Unit = {},
     onRenew: () -> Unit = {},
+    onApplyNew: (DocumentItem) -> Unit = {},
 ) {
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
@@ -106,6 +108,10 @@ fun DocumentCard(
     // Renew button shows when FSSAI doc is expiring within 15 days OR already expired
     val isRenewable = doc.status == "EXPIRING_SOON" || doc.status == "EXPIRED"
     val isRenewableFssai = isRenewable && doc.type.equals("FSSAI_FOOD_LICENSE", ignoreCase = true)
+    // Check if FSSAI doc is expired >180 days (license cancelled)
+    val daysExpired = calculateDaysExpired(doc.expiryDate)
+    val isFssaiCancelled = doc.type.equals("FSSAI_FOOD_LICENSE", ignoreCase = true) &&
+        doc.status == "EXPIRED" && daysExpired > 180
     var showApplyDialog by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier
@@ -253,8 +259,48 @@ fun DocumentCard(
                         IconButton(onClick = onUpload, modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.secondary.copy(alpha = 0.15f))) {
                             Icon(Icons.Default.Refresh, contentDescription = AppStrings.get(lang, "Reupload"), tint = colors.secondary, modifier = Modifier.size(14.dp))
                         }
-                        // Renew button — shown only for FSSAI docs expiring within 15 days
-                        if (isRenewableFssai) {
+                        // FSSAI licence cancelled (>180 days expired) - show "Licence Cancelled" badge + Apply New button
+                        if (isFssaiCancelled) {
+                            Column(
+                                modifier = Modifier.padding(start = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    "Licence Cancelled",
+                                    fontSize = 8.sp, fontWeight = FontWeight.Bold, color = colors.error
+                                )
+                                IconButton(
+                                    onClick = { onApplyNew(doc) },
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(colors.primary.copy(alpha = 0.15f))
+                                ) {
+                                    Icon(
+                                        Icons.Default.Add,
+                                        contentDescription = AppStrings.get(lang, "Apply New Licence"),
+                                        tint = colors.primary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+}
+}
+
+fun calculateDaysExpired(expiryDate: String): Long {
+    if (expiryDate.isBlank()) return 0
+    val datePart = expiryDate.trim().take(10)
+    return try {
+        val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(datePart) ?: return 0
+        val expiry = parsed.time
+        val now = System.currentTimeMillis()
+        val diffDays = (now - expiry) / (1000 * 60 * 60 * 24)
+        if (diffDays > 0) diffDays else 0
+    } catch (e: Exception) {
+        0
+    }
+}
+                        }
+                        // Renew button — shown only for FSSAI docs expiring within 15 days OR expired <=180 days
+                        else if (isRenewableFssai) {
                             IconButton(
                                 onClick = onRenew,
                                 modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.warning.copy(alpha = 0.15f))
@@ -352,5 +398,19 @@ fun CertificateField(
             color = effectiveTextColor, fontFamily = if (isHighlight) FontFamily.Monospace else FontFamily.Default)
         Spacer(modifier = Modifier.height(2.dp))
         HorizontalDivider(color = colors.border.copy(alpha = 0.5f), thickness = 0.5.dp)
+    }
+}
+
+fun calculateDaysExpired(expiryDate: String): Long {
+    if (expiryDate.isBlank()) return 0
+    val datePart = expiryDate.trim().take(10)
+    return try {
+        val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(datePart) ?: return 0
+        val expiry = parsed.time
+        val now = System.currentTimeMillis()
+        val diffDays = (now - expiry) / (1000 * 60 * 60 * 24)
+        if (diffDays > 0) diffDays else 0
+    } catch (e: Exception) {
+        0
     }
 }

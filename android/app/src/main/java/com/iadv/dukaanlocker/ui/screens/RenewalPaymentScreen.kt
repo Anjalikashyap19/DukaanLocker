@@ -7,11 +7,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Payment
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Dialog
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -20,6 +20,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.*
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,9 +30,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.easebuzz.core.EasebuzzSdk
-import com.easebuzz.core.listener.PaymentListener
 import com.iadv.dukaanlocker.*
+import com.iadv.dukaanlocker.ToastType
 import com.iadv.dukaanlocker.api.*
 import com.iadv.dukaanlocker.ui.strings.AppStrings
 import com.iadv.dukaanlocker.ui.strings.LocalAppLanguage
@@ -54,7 +54,6 @@ fun RenewalPaymentScreen(
     var durationYears by remember { mutableIntStateOf(1) }
     var kobSelection by remember { mutableStateOf<String?>(null) }
     var paymentSuccess by remember { mutableStateOf(false) }
-    var paymentError by remember { mutableStateOf<String?>(null) }
 
     val breakdown = vm.paymentCreateResult?.breakdown
     val isLoading = vm.paymentLoading
@@ -68,39 +67,15 @@ fun RenewalPaymentScreen(
         }
     }
 
-    // Open Easebuzz payment SDK screen when payment is pending
+    // Open Easebuzz payment screen when payment is pending
     LaunchedEffect(result) {
-        if (result != null && result.status == "PENDING" && result.gatewayCheckoutUrl != null && !paymentSuccess) {
+        val checkoutUrl = result?.gatewayCheckoutUrl
+        if (result != null && result.status == "PENDING" && !checkoutUrl.isNullOrBlank() && !paymentSuccess) {
             try {
-                EasebuzzSdk.startPayment(
-                    context,
-                    result.totalAmount.toString(),
-                    result.gatewayOrderId ?: "DL${System.currentTimeMillis()}",
-                    "${result.userName ?: result.mobileNumber ?: ""}",
-                    "${result.userEmail ?: result.mobileNumber ?: ""}",
-                    object : PaymentListener {
-                        override fun onPaymentSuccess(transactionId: String?) {
-                            vm.showToast("Payment successful via Easebuzz SDK", com.iadv.dukaanlocker.ui.theme.ToastType.SUCCESS)
-                            paymentSuccess = true
-                            onPaySuccess()
-                        }
-
-                        override fun onPaymentFailed(error: String?) {
-                            vm.showToast("Payment failed: $error", com.iadv.dukaanlocker.ui.theme.ToastType.ERROR)
-                            paymentError = error
-                        }
-
-                        override fun onPaymentCancelled() {
-                            vm.showToast("Payment cancelled", com.iadv.dukaanlocker.ui.theme.ToastType.WARNING)
-                        }
-                    }
-                )
-            } catch (e: Exception) {
-                vm.showToast("Easebuzz SDK error: ${e.message}", com.iadv.dukaanlocker.ui.theme.ToastType.ERROR)
-                // Fall back to WebView approach
-                val intent = android.content.Intent(Intent.ACTION_VIEW)
-                intent.data = android.net.Uri.parse(result.gatewayCheckoutUrl)
+                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(checkoutUrl))
                 context.startActivity(intent)
+            } catch (e: Exception) {
+                vm.showToast("Easebuzz payment error: ${e.message}", ToastType.ERROR)
             }
         }
     }

@@ -11,4 +11,5 @@ public record RenewalOrderResponse(
         String dlId,
         String notes,
         Instant requestedAt,
-        Instant completedAt) {}
+        Instant completedAt,
+        Integer durationYears) {}

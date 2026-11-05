@@ -55,6 +55,10 @@ public class RenewalOrder {
     @Column(name = "payment_status", length = 20)
     private String paymentStatus;
 
+    /** Duration in years for the renewal (1-5). */
+    @Column(name = "duration_years")
+    private Integer durationYears;
+
     @Column(name = "requested_at", updatable = false)
     private Instant requestedAt;
 
@@ -119,6 +123,9 @@ public class RenewalOrder {
 
     public String getPaymentStatus() { return paymentStatus; }
     public void setPaymentStatus(String paymentStatus) { this.paymentStatus = paymentStatus; }
+
+    public Integer getDurationYears() { return durationYears; }
+    public void setDurationYears(Integer durationYears) { this.durationYears = durationYears; }
 
     public Instant getRequestedAt() { return requestedAt; }
     public void setRequestedAt(Instant requestedAt) { this.requestedAt = requestedAt; }

@@ -11,6 +11,7 @@ import com.shoplocker.fssai.repository.ShopRepository;
 import com.shoplocker.fssai.repository.UserRepository;
 import com.shoplocker.fssai.util.DlIds;
 import lombok.extern.slf4j.Slf4j;
+import java.util.Arrays;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
@@ -135,11 +136,19 @@ public class PaymentService {
             throw new FssaiException("durationYears must be between 1 and 5", FailureCode.INVALID_REQUEST);
         }
 
+        if (documentType == null || documentType.isBlank()) {
+            log.warn("calculateBreakdown called with null/blank documentType");
+            throw new FssaiException("documentType is required", FailureCode.INVALID_REQUEST);
+        }
+
+        // Handle case where documentType might already be a DocumentType enum name or have different casing
+        String normalizedType = documentType.trim().toUpperCase().replace("-", "_");
         DocumentType docType;
         try {
-            docType = DocumentType.valueOf(documentType.toUpperCase().replace("-", "_"));
+            docType = DocumentType.valueOf(normalizedType);
         } catch (IllegalArgumentException e) {
-            throw new FssaiException("Invalid document type: " + documentType, FailureCode.INVALID_REQUEST);
+            log.warn("Invalid document type received: '{}' (normalized: '{}')", documentType, normalizedType);
+            throw new FssaiException("Invalid document type: " + documentType + ". Supported: " + Arrays.toString(DocumentType.values()), FailureCode.INVALID_REQUEST);
         }
 
         BigDecimal govChargePerYear;
@@ -223,6 +232,10 @@ public class PaymentService {
     public PaymentCreateResponse createPayment(User user, Long shopId, String documentType,
                                                Integer durationYears) {
         try {
+            if (documentType == null || documentType.isBlank()) {
+                log.warn("createPayment called with null/blank documentType for user={}, shopId={}", user.getId(), shopId);
+                throw new FssaiException("documentType is required", FailureCode.INVALID_REQUEST);
+            }
             log.info("Creating renewal payment for user={}, shopId={}, documentType={}, durationYears={}",
                     user.getId(), shopId, documentType, durationYears);
 
@@ -355,6 +368,7 @@ public class PaymentService {
         );
         renewalOrder.setPaymentId(String.valueOf(tx.getId()));
         renewalOrder.setPaymentStatus(PaymentTransaction.STATUS_COMPLETED);
+        renewalOrder.setDurationYears(tx.getDurationYears());
         renewalOrder.setNotes("Renewal paid via Easebuzz (payment id " + tx.getId() + ")");
         renewalOrder = renewalOrderRepository.save(renewalOrder);
 

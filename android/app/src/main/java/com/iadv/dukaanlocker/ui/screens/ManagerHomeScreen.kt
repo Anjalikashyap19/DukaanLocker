@@ -58,6 +58,7 @@ fun ManagerHomeScreen(
     onViewDoc: (DocumentItem) -> Unit,
     onDeleteDoc: (DocumentItem) -> Unit,
     onRenewDoc: (DocumentItem) -> Unit = {},
+    onApplyNew: (DocumentItem) -> Unit = {},
     onLogout: () -> Unit,
     isDarkTheme: Boolean = true,
     onToggleTheme: () -> Unit = {},
@@ -236,7 +237,8 @@ fun ManagerHomeScreen(
                     onUpload = onUploadDoc,
                     onView = onViewDoc,
                     onDelete = onDeleteDoc,
-                    onRenewDoc = onRenewDoc
+                    onRenewDoc = onRenewDoc,
+                    onApplyNew = onApplyNew
                 )
             }
         }
@@ -254,6 +256,7 @@ private fun ManagerBusinessDetailView(
     onView: (DocumentItem) -> Unit,
     onDelete: (DocumentItem) -> Unit,
     onRenewDoc: (DocumentItem) -> Unit = {},
+    onApplyNew: (DocumentItem) -> Unit = {}
 ) {
     val renewalVm: AppViewModel = viewModel<AppViewModel>()
     val colors = LocalAppColors.current
@@ -298,7 +301,9 @@ private fun ManagerBusinessDetailView(
                     onFetch = { onFetch(doc) },
                     onUpload = { onUpload(doc) },
                     onView = { onView(doc) },
-                    onDelete = { onDelete(doc) }
+                    onDelete = { onDelete(doc) },
+                    onRenew = { onRenewDoc(doc) },
+                    onApplyNew = { onApplyNew(doc) }
                 )
             }
             item { Spacer(modifier = Modifier.height(16.dp)) }

@@ -42,6 +42,7 @@ fun DocsScreen(
     onViewDoc: (DocumentItem) -> Unit,
     onDeleteDoc: (DocumentItem) -> Unit = {},
     onRenewDoc: (DocumentItem) -> Unit = {},
+    onApplyNewLicence: (DocumentItem) -> Unit,
     businesses: List<ShopResponse> = emptyList(),
     isLoadingDocuments: Boolean = false,
     onAddCustomDoc: (String) -> Unit = {},
@@ -145,6 +146,7 @@ items(orderedTypes) { type ->
                              onViewDoc = onViewDoc,
                              onDeleteDoc = onDeleteDoc,
                              onRenewDoc = onRenewDoc,
+                             onApplyNewLicence = onApplyNewLicence,
                              isExpanded = expandedType == type,
                              onExpandChange = { expandedType = if (expandedType == type) null else type },
                              isTargetMissing = isTargetMissing
@@ -182,6 +184,7 @@ fun DocTypeSection(
     onViewDoc: (DocumentItem) -> Unit,
     onDeleteDoc: (DocumentItem) -> Unit = {},
     onRenewDoc: (DocumentItem) -> Unit = {},
+    onApplyNewLicence: (DocumentItem) -> Unit = {},
     isExpanded: Boolean,
     onExpandChange: (Boolean) -> Unit,
     isTargetMissing: Boolean = false
@@ -239,6 +242,7 @@ fun DocTypeSection(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    val applyNewCallback: (DocumentItem) -> Unit = onApplyNewLicence
                     docs.forEach { doc ->
                         Column {
                             val shopName = shopNameById[doc.businessId]
@@ -257,7 +261,8 @@ fun DocTypeSection(
                                 onUpload = { onUploadDoc(doc) },
                                 onView = { onViewDoc(doc) },
                                 onDelete = { onDeleteDoc(doc) },
-                                onRenew = { onRenewDoc(doc) }
+                                onRenew = { onRenewDoc(doc) },
+                                onApplyNew = { applyNewCallback(it) }
                             )
                         }
                     }

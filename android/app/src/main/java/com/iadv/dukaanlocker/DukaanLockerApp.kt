@@ -255,6 +255,7 @@ BackHandler(
                                 onUploadDoc = { doc -> vm.setPendingUpload(doc) },
                                 onViewDoc = { doc -> vm.openDocument(doc) },
                                 onRenewDoc = { doc -> vm.startRenewalPayment(doc) },
+                                onApplyNewLicence = { doc -> vm.startApplyNewLicence(doc) },
                                 businesses = filteredBusinesses,
                                 isLoadingDocuments = state.isLoadingDocuments,
                                 onAddCustomDoc = { shopId -> vm.showCustomDocDialog(shopId.toLongOrNull() ?: return@DocsScreen) },
@@ -408,6 +409,7 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                         onViewDoc = { doc -> vm.openDocument(doc) },
                                         onDeleteDoc = { doc -> vm.showToast("${doc.name} - delete via API", ToastType.INFO) },
                                         onRenewDoc = { doc -> vm.startRenewalPayment(doc) },
+                                        onApplyNew = { doc -> vm.startApplyNewLicence(doc) },
                                         onAddCustomDoc = { shopId -> vm.showCustomDocDialog(shopId.toLongOrNull() ?: return@OwnerHomeScreen) },
                                         isLoadingShops = state.isLoadingShops,
                                         isLoadingDocuments = state.isLoadingDocuments,
@@ -437,6 +439,8 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                         onUploadDoc = { doc -> vm.setPendingUpload(doc) },
                                         onViewDoc = { doc -> vm.openDocument(doc) },
                                         onDeleteDoc = { },
+                                        onRenewDoc = { doc -> vm.startRenewalPayment(doc) },
+                                        onApplyNew = { doc -> vm.startApplyNewLicence(doc) },
                                         onLogout = { vm.logoutManager() },
                                         isLoadingShops = state.isLoadingShops
                                     )

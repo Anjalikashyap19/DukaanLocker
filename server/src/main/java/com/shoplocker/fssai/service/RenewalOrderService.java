@@ -2,6 +2,7 @@ package com.shoplocker.fssai.service;
 
 import com.shoplocker.fssai.dto.RenewalOrderResponse;
 import com.shoplocker.fssai.entity.Document;
+import com.shoplocker.fssai.entity.DocumentStatus;
 import com.shoplocker.fssai.entity.DocumentType;
 import com.shoplocker.fssai.entity.RenewalOrder;
 import com.shoplocker.fssai.entity.Shop;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -137,6 +139,11 @@ public class RenewalOrderService {
         if (justCompleted) order.setCompletedAt(Instant.now());
         renewalOrderRepository.save(order);
 
+        // Extend document expiry when renewal is completed
+        if (justCompleted && order.getDocumentId() != null && order.getDurationYears() != null) {
+            extendDocumentExpiry(order.getDocumentId(), order.getDurationYears());
+        }
+
         if (justCompleted) {
             String docName = com.shoplocker.fssai.scheduler.NotificationCopy.formatDocumentName(order.getDocumentType());
             notificationService.sendPushAndCreateNotification(
@@ -154,6 +161,27 @@ public class RenewalOrderService {
             );
         }
         return toResponse(order);
+    }
+
+    /**
+     * Extends the expiry date of a document by the given number of years.
+     * If the document has no expiry date, sets it to now + years.
+     * If the document is already expired, extends from the old expiry date.
+     */
+    private void extendDocumentExpiry(Long documentId, Integer years) {
+        documentRepository.findById(documentId).ifPresent(doc -> {
+            LocalDateTime currentExpiry = doc.getExpiryDate();
+            LocalDateTime newExpiry;
+            if (currentExpiry == null) {
+                newExpiry = LocalDateTime.now().plusYears(years);
+            } else {
+                newExpiry = currentExpiry.plusYears(years);
+            }
+            doc.setExpiryDate(newExpiry);
+            doc.setStatus(DocumentStatus.UPLOADED);
+            documentRepository.save(doc);
+            log.info("Extended document {} expiry to {} (+{} years)", documentId, newExpiry, years);
+        });
     }
 
     /** Returns the user's DL ID, assigning and persisting it on first use. */
@@ -177,6 +205,7 @@ public class RenewalOrderService {
                 order.getDlId(),
                 order.getNotes(),
                 order.getRequestedAt(),
-                order.getCompletedAt());
+                order.getCompletedAt(),
+                order.getDurationYears());
     }
 }

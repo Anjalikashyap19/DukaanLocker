@@ -58,6 +58,7 @@ fun OwnerHomeScreen(
     onViewDoc: (DocumentItem) -> Unit,
     onDeleteDoc: (DocumentItem) -> Unit,
     onRenewDoc: (DocumentItem) -> Unit = {},
+    onApplyNew: (DocumentItem) -> Unit = {},
     onLogout: () -> Unit,
     onBusinessSelected: (String) -> Unit = {},
     onAddCustomDoc: (String) -> Unit = {},
@@ -247,7 +248,8 @@ fun OwnerHomeScreen(
                         onView = onViewDoc,
                         onDelete = onDeleteDoc,
                         onAddCustomDoc = { onAddCustomDoc(selectedBusiness.id) },
-                        onRenewDoc = onRenewDoc
+                        onRenewDoc = onRenewDoc,
+                        onApplyNew = onApplyNew
                     )
                 }
             }
@@ -615,7 +617,8 @@ private fun BusinessDetailView(
     onView: (DocumentItem) -> Unit,
     onDelete: (DocumentItem) -> Unit,
     onAddCustomDoc: () -> Unit = {},
-    onRenewDoc: (DocumentItem) -> Unit = {}
+    onRenewDoc: (DocumentItem) -> Unit = {},
+    onApplyNew: (DocumentItem) -> Unit = {}
 ) {
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
@@ -722,7 +725,8 @@ private fun BusinessDetailView(
                     onUpload = { onUpload(doc) },
                     onView = { onView(doc) },
                     onDelete = { onDelete(doc) },
-                    onRenew = { onRenewDoc(doc) }
+                    onRenew = { onRenewDoc(doc) },
+                    onApplyNew = { onApplyNew(doc) }
                 )
             }
             item {

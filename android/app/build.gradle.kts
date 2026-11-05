@@ -173,9 +173,13 @@ dependencies {
     implementation(libs.coroutines.android)
     implementation(libs.coil.compose)
 
+    // Material Components & AppCompat (Required by Easebuzz SDK AAR layouts)
+    implementation("com.google.android.material:material:1.12.0")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+
     // Encrypted storage for auth tokens
     implementation(libs.androidx.security.crypto)
-implementation(libs.easebuzzCore)
+    implementation(files("libs/peb-lib-android-x.aar"))
 
     // ViewModel + Navigation
     implementation(libs.androidx.lifecycle.viewmodel.compose)
