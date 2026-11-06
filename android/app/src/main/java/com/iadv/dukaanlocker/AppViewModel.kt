@@ -112,6 +112,10 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
     private var _renewalPaymentSuccess = mutableStateOf(false)
     val renewalPaymentSuccess: Boolean by _renewalPaymentSuccess
 
+    /** KOB resolved by the backend for the current pending renewal payment (display only). */
+    val renewalKobText: String?
+        get() = paymentCreateResult?.kob
+
     init {
         val isLoggedIn = ApiClient.isLoggedIn(application)
         val role = ApiClient.getUserRole(application)

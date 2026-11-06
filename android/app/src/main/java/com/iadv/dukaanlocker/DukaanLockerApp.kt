@@ -206,12 +206,12 @@ fun DukaanLockerApp(
                     Box(modifier = Modifier.fillMaxWidth().statusBarsPadding().background(statusBarBg))
 
                     Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        BackHandler(enabled = state.viewDocumentId != null) {
+                        BackHandler(enabled = state.viewDocumentId != null && vm.renewalPaymentDoc == null) {
                             vm.closeDocumentViewer()
                         }
 BackHandler(
-                            enabled = state.currentScreen != Screen.Onboarding && state.currentScreen != Screen.Login && state.viewDocumentId == null
-                                    && !(state.navigationHistory.isEmpty() && (state.currentScreen is Screen.OwnerHome || state.currentScreen is Screen.ManagerHome) && state.selectedBottomTab == BottomTab.Home)
+    enabled = state.currentScreen != Screen.Onboarding && state.currentScreen != Screen.Login && state.viewDocumentId == null && vm.renewalPaymentDoc == null
+            && !(state.navigationHistory.isEmpty() && (state.currentScreen is Screen.OwnerHome || state.currentScreen is Screen.ManagerHome) && state.selectedBottomTab == BottomTab.Home)
                         ) {
                             if (state.navigationHistory.isNotEmpty()) {
                                 vm.goBack()
@@ -662,11 +662,22 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                         // ── Renewal Payment overlay ──
                         val renewalDoc = vm.renewalPaymentDoc
                         if (renewalDoc != null) {
-                            RenewalPaymentScreen(
-                                doc = renewalDoc,
-                                onBack = { vm.cancelRenewalPayment() },
-                                onPaySuccess = { vm.onRenewalPaymentSuccess() }
-                            )
+                            val colors = LocalAppColors.current
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(colors.background),
+                                contentAlignment = Alignment.TopStart
+                            ) {
+                                BackHandler(enabled = true) {
+                                    vm.cancelRenewalPayment()
+                                }
+                                RenewalPaymentScreen(
+                                    doc = renewalDoc,
+                                    onBack = { vm.cancelRenewalPayment() },
+                                    onPaySuccess = { vm.onRenewalPaymentSuccess() }
+                                )
+                            }
                         }
 
                         // ── Loading overlay ──

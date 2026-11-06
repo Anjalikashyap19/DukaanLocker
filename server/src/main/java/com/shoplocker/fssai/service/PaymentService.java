@@ -350,6 +350,7 @@ public class PaymentService {
                     tx.getCurrency(),
                     tx.getGateway(),
                     orderId,
+                    kob,
                     gatewayCheckoutUrl
             );
         } catch (FssaiException e) {
@@ -677,7 +678,8 @@ public class PaymentService {
     private PaymentCreateResponse toResponse(PaymentTransaction tx, PaymentBreakdown breakdown) {
         return new PaymentCreateResponse(
                 tx.getId(), breakdown, tx.getStatus(), tx.getCurrency(),
-                tx.getGateway(), tx.getGatewayOrderId(), tx.getGatewayCheckoutUrl()
+                tx.getGateway(), tx.getGatewayOrderId(), null,
+                tx.getGatewayCheckoutUrl()
         );
     }
 

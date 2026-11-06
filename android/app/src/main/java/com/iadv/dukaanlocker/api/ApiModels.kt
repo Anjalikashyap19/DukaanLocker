@@ -505,6 +505,7 @@ data class PaymentCreateResponse(
     @SerializedName("currency") val currency: String? = null,
     @SerializedName("gateway") val gateway: String? = null,
     @SerializedName("gatewayOrderId") val gatewayOrderId: String? = null,
+    @SerializedName("kob") val kob: String? = null,
     @SerializedName("gatewayCheckoutUrl") val gatewayCheckoutUrl: String? = null
 )
 

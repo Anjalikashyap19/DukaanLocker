@@ -2,6 +2,8 @@ package com.iadv.dukaanlocker.ui.screens
 
 import android.content.Intent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -17,11 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.*
-import androidx.compose.ui.window.Dialog
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.iadv.dukaanlocker.*
 import com.iadv.dukaanlocker.ToastType
 import com.iadv.dukaanlocker.api.*
@@ -40,6 +39,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 
 // ── Renewal Payment Screen (FSSAI document renewal via Easebuzz EasyCollect link) ──
+// KOB is resolved by the backend from the FSSAI API automatically — no KOB dropdown on client.
 @Composable
 fun RenewalPaymentScreen(
     doc: DocumentItem,
@@ -52,15 +52,27 @@ fun RenewalPaymentScreen(
     val lang = LocalAppLanguage.current
 
     var durationYears by remember { mutableIntStateOf(1) }
-    var kobSelection by remember { mutableStateOf<String?>(null) }
 
     val breakdown = vm.paymentCreateResult?.breakdown
     val isLoading = vm.paymentLoading
     val error = vm.paymentError
     val result = vm.paymentCreateResult
     val paymentSuccess = vm.renewalPaymentSuccess
+    val kobText = vm.renewalKobText
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    // Consume the Easebuzz payment return deep-link once when screen appears / result changes
+    LaunchedEffect(result) {
+        vm.consumePendingPaymentRoute()
+    }
+    LaunchedEffect(Unit) {
+        vm.consumePendingPaymentRoute()
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
         // Header
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -96,55 +108,56 @@ fun RenewalPaymentScreen(
                         fontSize = 12.sp, color = colors.textSecondary, modifier = Modifier.padding(top = 2.dp)
                     )
                 }
+                if (kobText != null && kobText.isNotBlank()) {
+                    Text(
+                        "Kind of Business: $kobText",
+                        fontSize = 12.sp, color = colors.textSecondary, modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Duration selector
+        // Duration selector (simple buttons — no popup placement issues)
         Text(AppStrings.get(lang, "Select Duration"), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
         Spacer(modifier = Modifier.height(8.dp))
-        DropdownMenu(
-            expanded = true,
-            onDismissRequest = {},
-            modifier = Modifier.fillMaxWidth()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             (1..5).forEach { years ->
-                DropdownMenuItem(
-                    text = { Text("$years ${if (years == 1) "Year" else "Years"}", fontSize = 14.sp, color = colors.textPrimary) },
-                    onClick = { durationYears = years }
-                )
+                val selected = durationYears == years
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { durationYears = years }
+                        .background(
+                            if (selected) colors.primary else Color.Transparent,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .border(
+                            if (selected) 0.dp else 1.dp,
+                            if (selected) Color.Transparent else colors.border,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .padding(vertical = 10.dp)
+                ) {
+                    Text(
+                        if (years == 1) "1 Year" else "$years Years",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (selected) Color.White else colors.textPrimary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
             }
         }
         Text(
             "$durationYears ${if (durationYears == 1) "Year" else "Years"} selected",
             fontSize = 12.sp, color = colors.textSecondary, modifier = Modifier.padding(top = 4.dp)
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // KOB selector (for State-tier pricing)
-        Text("Kind of Business (KOB)", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-        Spacer(modifier = Modifier.height(8.dp))
-        DropdownMenu(
-            expanded = true,
-            onDismissRequest = {},
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            listOf(
-                "Retailer / Wholeseller / Hotels / Restaurant",
-                "Manufacturing / Dairy Products",
-                "Mills"
-            ).forEach { kob ->
-                DropdownMenuItem(
-                    text = { Text(kob, fontSize = 14.sp, color = colors.textPrimary) },
-                    onClick = { kobSelection = kob }
-                )
-            }
-        }
-        if (kobSelection != null) {
-            Text("KOB: $kobSelection", fontSize = 12.sp, color = colors.textSecondary, modifier = Modifier.padding(top = 4.dp))
-        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -191,7 +204,7 @@ fun RenewalPaymentScreen(
         // Create payment - shown when no payment exists yet (explicit action, no auto-create)
         if (result == null && !isLoading && !paymentSuccess) {
             Button(
-                onClick = { vm.createRenewalPayment(doc, durationYears, kobSelection) },
+                onClick = { vm.createRenewalPayment(doc, durationYears) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
@@ -278,6 +291,8 @@ fun RenewalPaymentScreen(
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(24.dp))
     }
 
     // ── Payment processing notice ──
