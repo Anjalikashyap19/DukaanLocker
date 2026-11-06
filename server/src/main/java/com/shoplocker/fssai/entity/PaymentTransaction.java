@@ -1,5 +1,6 @@
 package com.shoplocker.fssai.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -11,6 +12,7 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "payment_transactions")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class PaymentTransaction {
 
     public static final String STATUS_PENDING = "PENDING";
@@ -23,14 +25,16 @@ public class PaymentTransaction {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "password", "createdByAdmin", "shops"})
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "shop_id", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "user"})
     private Shop shop;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "document_type", nullable = false, length = 50)
+    @Enumerated(EnumType.ORDINAL)
+    @Column(name = "document_type", nullable = false)
     private DocumentType documentType;
 
     @Column(name = "document_id")

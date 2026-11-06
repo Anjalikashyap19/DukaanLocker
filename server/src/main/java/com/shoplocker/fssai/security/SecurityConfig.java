@@ -137,7 +137,7 @@ public class SecurityConfig {
                     .requestMatchers("/api/device-token/**").authenticated()
                     // ── Payment endpoints (JWT required, access checked in service) ──
                     // Easebuzz webhook callback is invoked by the gateway server, not the app:
-                    .requestMatchers(HttpMethod.POST, "/api/payments/**/callback").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/payments/*/callback").permitAll()
                     .requestMatchers("/api/payments/**").authenticated()
                     // Default: any other application endpoint requires authentication
                     .anyRequest().authenticated();

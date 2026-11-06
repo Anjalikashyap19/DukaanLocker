@@ -69,16 +69,30 @@ public class PaymentController {
      */
     @Operation(summary = "Easebuzz payment callback",
             description = "Webhook endpoint called by Easebuzz after the customer completes payment.")
-    @PostMapping("/{id}/callback")
-    public ResponseEntity<PaymentStatusResponse> callback(
+    @PostMapping(value = "/{id}/callback")
+    public Object callback(
             @PathVariable Long id,
-            @RequestBody Map<String, String> body) {
+            @RequestParam(required = false) Map<String, String> formParams,
+            @RequestBody(required = false) Map<String, String> jsonBody,
+            @RequestHeader(value = "Content-Type", required = false) String contentType) {
+        Map<String, String> body = (formParams != null && !formParams.isEmpty())
+                ? formParams
+                : (jsonBody != null ? jsonBody : Map.of());
         String gatewayPaymentId = body.get("easepayid") != null ? body.get("easepayid")
                 : body.get("payment_id") != null ? body.get("payment_id")
                 : body.get("txnid");
         String gatewaySignature = body.get("signature") != null ? body.get("signature")
                 : body.get("hash");
         PaymentStatusResponse response = paymentService.completePayment(id, gatewayPaymentId, gatewaySignature);
+
+        if (contentType != null && contentType.contains("application/x-www-form-urlencoded")) {
+            String redirectUrl = "dukaanlocker://payment/"
+                    + ("COMPLETED".equalsIgnoreCase(response.getStatus()) ? "success" : "cancel")
+                    + "?tx=" + id;
+            return ResponseEntity.status(org.springframework.http.HttpStatus.FOUND)
+                    .header("Location", redirectUrl)
+                    .build();
+        }
         return ResponseEntity.ok(response);
     }
 
