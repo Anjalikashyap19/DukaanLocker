@@ -35,9 +35,16 @@ class MainActivity : FragmentActivity() {
         val action: String?
     )
 
+    /** Routing info carried by the Easebuzz payment return deep-link. */
+    data class PendingPaymentRoute(val type: String?) // "PAYMENT_SUCCESS" | "PAYMENT_CANCEL"
+
     companion object {
         @Volatile
         var pendingNotificationRoute: PendingNotificationRoute? = null
+            private set
+
+        @Volatile
+        var pendingPaymentRoute: PendingPaymentRoute? = null
             private set
 
         private fun readPendingRoute(intent: android.content.Intent?): PendingNotificationRoute? {
@@ -51,12 +58,28 @@ class MainActivity : FragmentActivity() {
             )
         }
 
+        private fun readPaymentRoute(intent: android.content.Intent?): PendingPaymentRoute? {
+            val data = intent?.data ?: return null
+            if ("dukaanlocker" != data.scheme || "payment" != data.host) return null
+            val type = when (data.path) {
+                "/success" -> "PAYMENT_SUCCESS"
+                "/cancel" -> "PAYMENT_CANCEL"
+                else -> null
+            }
+            return type?.let { PendingPaymentRoute(it) }
+        }
+
         private fun capturePendingRoute(intent: android.content.Intent?) {
             readPendingRoute(intent)?.let { pendingNotificationRoute = it }
+            readPaymentRoute(intent)?.let { pendingPaymentRoute = it }
         }
 
         fun clearPendingNotificationRoute() {
             pendingNotificationRoute = null
+        }
+
+        fun clearPendingPaymentRoute() {
+            pendingPaymentRoute = null
         }
     }
 

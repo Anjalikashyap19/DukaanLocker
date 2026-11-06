@@ -1,7 +1,6 @@
 package com.iadv.dukaanlocker.ui.screens
 
 import android.content.Intent
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,7 +39,7 @@ import com.iadv.dukaanlocker.ui.theme.*
 import java.math.BigDecimal
 import java.math.RoundingMode
 
-// ── Renewal Payment Screen (FSSAI document renewal via Easebuzz SDK) ───────────────
+// ── Renewal Payment Screen (FSSAI document renewal via Easebuzz EasyCollect link) ──
 @Composable
 fun RenewalPaymentScreen(
     doc: DocumentItem,
@@ -54,19 +53,12 @@ fun RenewalPaymentScreen(
 
     var durationYears by remember { mutableIntStateOf(1) }
     var kobSelection by remember { mutableStateOf<String?>(null) }
-    var paymentSuccess by remember { mutableStateOf(false) }
 
     val breakdown = vm.paymentCreateResult?.breakdown
     val isLoading = vm.paymentLoading
     val error = vm.paymentError
     val result = vm.paymentCreateResult
-
-    // (Re)create payment when duration or KOB changes (loads the cost breakdown)
-    LaunchedEffect(durationYears, kobSelection) {
-        if (!isLoading && error == null && !paymentSuccess && result == null) {
-            vm.createRenewalPayment(doc, durationYears)
-        }
-    }
+    val paymentSuccess = vm.renewalPaymentSuccess
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         // Header
@@ -196,6 +188,29 @@ fun RenewalPaymentScreen(
             )
         }
 
+        // Create payment - shown when no payment exists yet (explicit action, no auto-create)
+        if (result == null && !isLoading && !paymentSuccess) {
+            Button(
+                onClick = { vm.createRenewalPayment(doc, durationYears, kobSelection) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Payment, contentDescription = null, tint = Color(0xFFFFFFFF), modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Create Payment",
+                        fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFFFFF)
+                    )
+                }
+            }
+        }
+
         // Pay button - shown when a pending Easebuzz payment link exists
         if (!paymentSuccess && !isLoading && result != null
                 && result.status == "PENDING"
@@ -234,7 +249,7 @@ fun RenewalPaymentScreen(
             }
         }
 
-        // Success state - shown when SDK payment is completed
+        // Success state - shown when the payment return deep-link confirms success
         if (paymentSuccess) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
@@ -266,7 +281,7 @@ fun RenewalPaymentScreen(
     }
 
     // ── Payment processing notice ──
-    // SDK handles payment flow; no notice needed
+    // Link handles payment flow; return deep-link confirms success
 }
 
 @Composable

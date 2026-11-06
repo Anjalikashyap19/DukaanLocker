@@ -255,7 +255,7 @@ public class PaymentService {
      */
     @Transactional
     public PaymentCreateResponse createPayment(User user, Long shopId, String documentType,
-                                               Integer durationYears) {
+                                               Integer durationYears, String requestKob) {
         try {
             if (documentType == null || documentType.isBlank()) {
                 log.warn("createPayment called with null/blank documentType for user={}, shopId={}", user.getId(), shopId);
@@ -285,8 +285,11 @@ public class PaymentService {
                         FailureCode.INVALID_REQUEST);
             }
 
-            // Resolve KOB: prefer stored value, otherwise call the upstream FSSAI API
-            String kob = doc.getKindOfBusiness();
+            // Resolve KOB: prefer the value sent by the client, then stored value, then FSSAI API
+            String kob = requestKob;
+            if (kob == null || kob.isBlank()) {
+                kob = doc.getKindOfBusiness();
+            }
             if (kob == null || kob.isBlank()) {
                 try {
                     kob = fetchKobFromFssaiApi(licenseNumber);
@@ -296,7 +299,6 @@ public class PaymentService {
                     }
                 } catch (Exception e) {
                     log.warn("Failed to fetch KOB from FSSAI API for licenseNumber={}: {}", licenseNumber, e.getMessage());
-                    // Continue without KOB — pricing will fall back to Basic tier
                 }
             }
 

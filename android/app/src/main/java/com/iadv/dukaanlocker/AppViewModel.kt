@@ -109,6 +109,9 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
     private var _paymentError = mutableStateOf<String?>(null)
     val paymentError: String? by _paymentError
 
+    private var _renewalPaymentSuccess = mutableStateOf(false)
+    val renewalPaymentSuccess: Boolean by _renewalPaymentSuccess
+
     init {
         val isLoggedIn = ApiClient.isLoggedIn(application)
         val role = ApiClient.getUserRole(application)
@@ -253,6 +256,17 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
             "MISSING_DOCUMENT" -> openMissingDocumentRoute(pending.shopId, pending.documentType)
             "EXPIRING_SOON", "EXPIRED", "RENEWAL_REQUESTED", "RENEWAL_COMPLETED" ->
                 if (uiState.value.currentScreen != Screen.Notifications) navigateTo(Screen.Notifications)
+        }
+    }
+
+    /** Consumes the Easebuzz payment return deep-link and marks renewal payment success. */
+    fun consumePendingPaymentRoute() {
+        val pending = MainActivity.pendingPaymentRoute ?: return
+        MainActivity.clearPendingPaymentRoute()
+        if (pending.type == "PAYMENT_SUCCESS") {
+            _renewalPaymentSuccess.value = true
+        } else if (pending.type == "PAYMENT_CANCEL") {
+            resetRenewalPayment()
         }
     }
 
@@ -507,11 +521,12 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
         renewalPaymentDoc = null
         _paymentCreateResult.value = null
         _paymentError.value = null
+        _renewalPaymentSuccess.value = false
         showToast("Renewal payment initiated successfully", ToastType.SUCCESS)
         navigateToHome()
     }
 
-    fun createRenewalPayment(doc: DocumentItem, durationYears: Int) {
+    fun createRenewalPayment(doc: DocumentItem, durationYears: Int, kob: String? = null) {
         val shopId = doc.businessId.toLongOrNull()
         if (shopId == null) {
             _paymentError.value = "Invalid shop"
@@ -522,7 +537,7 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
             _paymentError.value = null
             try {
                 val response = api.createRenewalPayment(
-                    PaymentCreateRequest(shopId = shopId, documentType = doc.type, durationYears = durationYears)
+                    PaymentCreateRequest(shopId = shopId, documentType = doc.type, durationYears = durationYears, kob = kob)
                 )
                 if (response.isSuccessful) {
                     val result = response.body()

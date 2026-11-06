@@ -47,7 +47,7 @@ public class PaymentController {
             Authentication authentication) {
         User user = shopAccessService.getAuthenticatedUser(authentication);
         PaymentCreateResponse response = paymentService.createPayment(
-                user, request.getShopId(), request.getDocumentType(), request.getDurationYears());
+                user, request.getShopId(), request.getDocumentType(), request.getDurationYears(), request.getKob());
         return ResponseEntity.ok(response);
     }
 

@@ -484,7 +484,8 @@ data class CreateRenewalRequest(
 data class PaymentCreateRequest(
     @SerializedName("shopId") val shopId: Long,
     @SerializedName("documentType") val documentType: String,
-    @SerializedName("durationYears") val durationYears: Int
+    @SerializedName("durationYears") val durationYears: Int,
+    @SerializedName("kob") val kob: String? = null
 )
 
 data class PaymentBreakdown(
