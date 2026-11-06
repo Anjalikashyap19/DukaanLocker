@@ -75,6 +75,9 @@ public class PaymentTransaction {
     @Column(name = "gateway_signature", length = 200)
     private String gatewaySignature;
 
+    @Column(name = "gateway_checkout_url", length = 500)
+    private String gatewayCheckoutUrl;
+
     @Column(name = "renewal_order_id")
     private Long renewalOrderId;
 
@@ -176,6 +179,9 @@ public class PaymentTransaction {
 
     public String getGatewaySignature() { return gatewaySignature; }
     public void setGatewaySignature(String gatewaySignature) { this.gatewaySignature = gatewaySignature; }
+
+    public String getGatewayCheckoutUrl() { return gatewayCheckoutUrl; }
+    public void setGatewayCheckoutUrl(String gatewayCheckoutUrl) { this.gatewayCheckoutUrl = gatewayCheckoutUrl; }
 
     public Long getRenewalOrderId() { return renewalOrderId; }
     public void setRenewalOrderId(Long renewalOrderId) { this.renewalOrderId = renewalOrderId; }

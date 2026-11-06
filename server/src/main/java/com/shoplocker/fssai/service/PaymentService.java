@@ -11,13 +11,23 @@ import com.shoplocker.fssai.repository.ShopRepository;
 import com.shoplocker.fssai.repository.UserRepository;
 import com.shoplocker.fssai.util.DlIds;
 import lombok.extern.slf4j.Slf4j;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.classic.methods.HttpPost;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.util.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,6 +99,12 @@ public class PaymentService {
 
     @Value("${app.payment.easbuzz.environment:test}")
     private String easbuzzEnvironment;
+
+    @Value("${app.payment.easbuzz.create-url-test:https://testdashboard.easebuzz.in/easycollect/v1/create}")
+    private String easbuzzCreateUrlTest;
+
+    @Value("${app.payment.easbuzz.create-url-live:https://dashboard.easebuzz.in/easycollect/v1/create}")
+    private String easbuzzCreateUrlLive;
 
     @Value("${app.fssai.license-url:https://iadv.in/tracker/dist/check-details.php?lic_num=}")
     private String fssaiLicenseApiUrl;
@@ -304,16 +320,17 @@ public class PaymentService {
             );
             tx = paymentTransactionRepository.save(tx);
 
-            // Build Easebuzz checkout data
+            // Build Easebuzz payment via the official EasyCollect create-link API
             String orderId = "DL" + tx.getId() + System.currentTimeMillis();
-            String gatewayCheckoutUrl = buildEasebuzzCheckoutUrl(orderId, breakdown.getTotalAmount(),
+            String gatewayCheckoutUrl = createEasyCollectPayment(orderId, breakdown.getTotalAmount(),
                     user, shop, tx.getId());
 
             tx.setGatewayOrderId(orderId);
+            tx.setGatewayCheckoutUrl(gatewayCheckoutUrl);
             paymentTransactionRepository.save(tx);
 
-            log.info("Payment created: tx={} user={} shop={} amount={} orderId={}",
-                    tx.getId(), user.getId(), shopId, breakdown.getTotalAmount(), orderId);
+            log.info("Payment created: tx={} user={} shop={} amount={} orderId={} url={}",
+                    tx.getId(), user.getId(), shopId, breakdown.getTotalAmount(), orderId, gatewayCheckoutUrl);
 
             return new PaymentCreateResponse(
                     tx.getId(),
@@ -481,27 +498,92 @@ public class PaymentService {
         return (text == null || text.trim().isEmpty()) ? null : text.trim();
     }
 
-    /** Build the Easebuzz checkout URL for the Android client to open. */
-    private String buildEasebuzzCheckoutUrl(String orderId, BigDecimal amount,
-                                            User user, Shop shop, Long txId) {
-        String base = "sandbox".equalsIgnoreCase(easbuzzEnvironment)
-                ? "https://sandbox.easebuzz.in/pg/merchant/payment"
-                : "https://www.easebuzz.in/pg/merchant/payment";
-        // Easebuzz expects form fields: key|order_id|amount|productinfo|firstname|email|udf5|salt
-        // for signature. We include productinfo and udf5 for proper SDK/hosted page support.
-        return base + "?key=" + encode(easbuzzMerchantKey)
-                + "&order_id=" + encode(orderId)
-                + "&amount=" + encode(amount.setScale(2, RoundingMode.HALF_UP).toPlainString())
-                + "&currency=INR"
-                + "&productinfo=FSSAI Renewal"
-                + "&name=" + encode(user.getUserName())
-                + "&email=" + encode(user.getEmailId() != null ? user.getEmailId() : user.getMobileNumber())
-                + "&udf1=" + encode(String.valueOf(txId))
-                + "&udf2=" + encode(shop.getShopName())
-                + "&udf3=" + encode(String.valueOf(shop.getId()))
-                + "&udf5=" + encode(user.getUserName())
-                + "&return_url=" + encode(appReturnUrl(txId))
-                + "&cancel_url=" + encode(appCancelUrl(txId));
+    /** Build Easebuzz payment via the official EasyCollect create-link API; returns the payment URL. */
+    private String createEasyCollectPayment(String orderId, BigDecimal amount,
+                                            User user, Shop shop, Long txId) throws Exception {
+        if (easbuzzMerchantKey == null || easbuzzMerchantKey.isBlank()
+                || easbuzzMerchantSalt == null || easbuzzMerchantSalt.isBlank()) {
+            throw new FssaiException("Easebuzz merchant key/salt not configured",
+                    FailureCode.INTERNAL_ERROR);
+        }
+        String apiEndpoint = "test".equalsIgnoreCase(easbuzzEnvironment)
+                ? easbuzzCreateUrlTest : easbuzzCreateUrlLive;
+
+        String amountStr = amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
+        String name = user.getUserName() != null ? user.getUserName() : "";
+        String email = user.getEmailId() != null ? user.getEmailId()
+                : (user.getMobileNumber() != null ? user.getMobileNumber() : "");
+        String phone = user.getMobileNumber() != null ? user.getMobileNumber() : "";
+        String message = "FSSAI Renewal Payment";
+
+        String udf1 = String.valueOf(txId);
+        String udf2 = shop.getShopName() != null ? shop.getShopName() : "";
+        String udf3 = String.valueOf(shop.getId());
+        String udf4 = "";
+        String udf5 = name;
+
+        // Request hash: SHA512(key|merchant_txn|name|email|phone|amount|udf1|udf2|udf3|udf4|udf5|message|salt)
+        String hashInput = easbuzzMerchantKey + "|" + orderId + "|" + name + "|" + email + "|"
+                + phone + "|" + amountStr + "|"
+                + udf1 + "|" + udf2 + "|" + udf3 + "|" + udf4 + "|" + udf5 + "|"
+                + message + "|" + easbuzzMerchantSalt;
+        String hash = sha512(hashInput);
+
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("key", easbuzzMerchantKey);
+        params.put("merchant_txn", orderId);
+        params.put("amount", amountStr);
+        params.put("name", name);
+        params.put("email", email);
+        params.put("phone", phone);
+        params.put("message", message);
+        params.put("udf1", udf1);
+        params.put("udf2", udf2);
+        params.put("udf3", udf3);
+        params.put("udf4", udf4);
+        params.put("udf5", udf5);
+        params.put("hash", hash);
+        params.put("surl", appReturnUrl(txId));
+        params.put("furl", appCancelUrl(txId));
+
+        StringBuilder body = new StringBuilder();
+        for (Map.Entry<String, String> e : params.entrySet()) {
+            if (body.length() > 0) body.append('&');
+            body.append(URLEncoder.encode(e.getKey(), StandardCharsets.UTF_8))
+                .append('=')
+                .append(URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8));
+        }
+
+        HttpPost post = new HttpPost(apiEndpoint);
+        post.setEntity(new StringEntity(body.toString(), ContentType.create("application/x-www-form-urlencoded", StandardCharsets.UTF_8)));
+        post.setHeader("User-Agent", "DukaanLocker/1.0");
+        post.setHeader("Accept", "application/json");
+
+        try (CloseableHttpClient client = HttpClients.createDefault();
+             org.apache.hc.core5.http.ClassicHttpResponse resp = client.execute(post)) {
+            int code = resp.getCode();
+            String responseBody = EntityUtils.toString(resp.getEntity());
+            if (code != 200) {
+                throw new FssaiException("Easebuzz EasyCollect returned HTTP " + code + ": " + responseBody,
+                        FailureCode.INTERNAL_ERROR);
+            }
+            JsonNode root = objectMapper.readTree(responseBody);
+            String status = root.path("status").asText();
+            if (!"true".equalsIgnoreCase(status) && !"1".equals(status)) {
+                throw new FssaiException("Easebuzz EasyCollect failed: " + root.path("error").asText(),
+                        FailureCode.INTERNAL_ERROR);
+            }
+            JsonNode data = root.path("data");
+            String paymentUrl = data.path("payment_url").asText();
+            if (paymentUrl == null || paymentUrl.isBlank()) {
+                paymentUrl = root.path("payment_url").asText();
+            }
+            if (paymentUrl == null || paymentUrl.isBlank()) {
+                throw new FssaiException("Easebuzz EasyCollect returned no payment_url",
+                        FailureCode.INTERNAL_ERROR);
+            }
+            return paymentUrl;
+        }
     }
 
     private String appReturnUrl(Long txId) {
@@ -512,16 +594,7 @@ public class PaymentService {
         return "dukaanlocker://payment/cancel?tx=" + txId;
     }
 
-    private static String encode(String s) {
-        if (s == null) return "";
-        try {
-            return java.net.URLEncoder.encode(s, java.nio.charset.StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            return s;
-        }
-    }
-
-    /** Verify the Easebuzz webhook signature (merchant key + salt based checksum). */
+    /** Verify the Easebuzz EasyCollect callback signature (matches the request hash formula). */
     private boolean verifyEasebuzzSignature(PaymentTransaction tx, String gatewayPaymentId,
                                             String gatewaySignature) {
         if (easbuzzMerchantKey == null || easbuzzMerchantKey.isBlank()
@@ -531,12 +604,22 @@ public class PaymentService {
         }
         if (gatewaySignature == null || gatewaySignature.isBlank()) return false;
 
-        // Easebuzz checksum: sha512(key|txnid|amount|productinfo|firstname|email|udf5|salt)
-        // Fields must match exactly what is sent in the checkout URL
-        String data = easbuzzMerchantKey + "|" + tx.getGatewayOrderId() + "|"
-                + tx.getTotalAmount() + "|FSSAI Renewal|" + tx.getUser().getUserName() + "|"
-                + (tx.getUser().getEmailId() != null ? tx.getUser().getEmailId() : tx.getUser().getMobileNumber())
-                + "|" + tx.getUser().getUserName() + "|" + easbuzzMerchantSalt;
+        // EasyCollect hash: SHA512(key|merchant_txn|name|email|phone|amount|udf1|udf2|udf3|udf4|udf5|message|salt)
+        var user = tx.getUser();
+        var shop = tx.getShop();
+        String name = user != null && user.getUserName() != null ? user.getUserName() : "";
+        String email = user != null && user.getEmailId() != null ? user.getEmailId()
+                : (user != null && user.getMobileNumber() != null ? user.getMobileNumber() : "");
+        String phone = user != null && user.getMobileNumber() != null ? user.getMobileNumber() : "";
+        String message = "FSSAI Renewal Payment";
+        String amountStr = tx.getTotalAmount() != null
+                ? tx.getTotalAmount().setScale(2, RoundingMode.HALF_UP).toPlainString() : "0.00";
+
+        String data = easbuzzMerchantKey + "|" + (tx.getGatewayOrderId() != null ? tx.getGatewayOrderId() : "") + "|"
+                + name + "|" + email + "|" + phone + "|" + amountStr + "|"
+                + String.valueOf(tx.getId()) + "|" + (shop != null && shop.getShopName() != null ? shop.getShopName() : "") + "|"
+                + String.valueOf(shop != null ? shop.getId() : 0) + "||" + name + "|"
+                + message + "|" + easbuzzMerchantSalt;
         String expected = sha512(data);
         return expected.equalsIgnoreCase(gatewaySignature);
     }
@@ -556,7 +639,7 @@ public class PaymentService {
     private PaymentCreateResponse toResponse(PaymentTransaction tx, PaymentBreakdown breakdown) {
         return new PaymentCreateResponse(
                 tx.getId(), breakdown, tx.getStatus(), tx.getCurrency(),
-                tx.getGateway(), tx.getGatewayOrderId(), null
+                tx.getGateway(), tx.getGatewayOrderId(), tx.getGatewayCheckoutUrl()
         );
     }
 

@@ -73,7 +73,8 @@ public class PaymentController {
     public ResponseEntity<PaymentStatusResponse> callback(
             @PathVariable Long id,
             @RequestBody Map<String, String> body) {
-        String gatewayPaymentId = body.get("payment_id") != null ? body.get("payment_id")
+        String gatewayPaymentId = body.get("easepayid") != null ? body.get("easepayid")
+                : body.get("payment_id") != null ? body.get("payment_id")
                 : body.get("txnid");
         String gatewaySignature = body.get("signature") != null ? body.get("signature")
                 : body.get("hash");

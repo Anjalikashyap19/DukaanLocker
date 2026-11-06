@@ -1,6 +1,7 @@
 package com.iadv.dukaanlocker.ui.screens
 
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -60,23 +61,10 @@ fun RenewalPaymentScreen(
     val error = vm.paymentError
     val result = vm.paymentCreateResult
 
-    // (Re)create payment when duration or KOB changes
+    // (Re)create payment when duration or KOB changes (loads the cost breakdown)
     LaunchedEffect(durationYears, kobSelection) {
         if (!isLoading && error == null && !paymentSuccess && result == null) {
             vm.createRenewalPayment(doc, durationYears)
-        }
-    }
-
-    // Open Easebuzz payment screen when payment is pending
-    LaunchedEffect(result) {
-        val checkoutUrl = result?.gatewayCheckoutUrl
-        if (result != null && result.status == "PENDING" && !checkoutUrl.isNullOrBlank() && !paymentSuccess) {
-            try {
-                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(checkoutUrl))
-                context.startActivity(intent)
-            } catch (e: Exception) {
-                vm.showToast("Easebuzz payment error: ${e.message}", ToastType.ERROR)
-            }
         }
     }
 
@@ -208,10 +196,25 @@ fun RenewalPaymentScreen(
             )
         }
 
-        // Pay button - shown when no payment in progress
-        if (!paymentSuccess && !isLoading && breakdown != null && result == null) {
+        // Pay button - shown when a pending Easebuzz payment link exists
+        if (!paymentSuccess && !isLoading && result != null
+                && result.status == "PENDING"
+                && result.gatewayCheckoutUrl?.isNotBlank() == true) {
             Button(
-                onClick = { vm.createRenewalPayment(doc, durationYears) },
+                onClick = {
+                    result?.gatewayCheckoutUrl?.let { checkoutUrl ->
+                        try {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                data = android.net.Uri.parse(checkoutUrl)
+                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                        or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            vm.showToast("Could not open payment link: ${e.message}", ToastType.ERROR)
+                        }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
@@ -224,7 +227,7 @@ fun RenewalPaymentScreen(
                     Icon(Icons.Default.Payment, contentDescription = null, tint = Color(0xFFFFFFFF), modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        "Pay \u20B9${formatAmount(breakdown.totalAmount)}",
+                        "Pay \u20B9${formatAmount(result?.breakdown?.totalAmount)}",
                         fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFFFFF)
                     )
                 }

@@ -2,8 +2,7 @@ package com.shoplocker.fssai.dto;
 
 /**
  * Response returned when a renewal payment is created. Contains the cost
- * breakdown and the Easebuzz gateway order reference the client uses to
- * launch the checkout.
+ * breakdown and the Easebuzz payment link (checkout URL) the client opens.
  */
 public class PaymentCreateResponse {
 

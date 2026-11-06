@@ -541,6 +541,12 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
         }
     }
 
+    /** Clear a pending renewal payment result so the Pay button can be shown again (retry). */
+    fun resetRenewalPayment() {
+        _paymentCreateResult.value = null
+        _paymentError.value = null
+    }
+
     fun findBusinessFor(doc: DocumentItem): BusinessProfile? {
         return _uiState.value.shops.find { it.id.toString() == doc.businessId }?.let { shopToBusiness(it) }
     }
