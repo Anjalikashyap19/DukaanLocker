@@ -48,6 +48,7 @@ docs/.launch_pid
 server/data/
 sample.txt
 root cause and solutions.txt
+session-*.md
 secrets/
 
 ### Production artefacts (never commit: contains user documents and DB dumps) ###
