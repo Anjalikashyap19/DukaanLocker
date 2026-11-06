@@ -289,7 +289,7 @@ public class PaymentService {
             // Idempotency: return an existing open PENDING payment for the same shop+doc+duration
             Optional<PaymentTransaction> existing = paymentTransactionRepository
                     .findTopByUserIdAndShopIdAndDocumentTypeAndDocumentIdAndStatusOrderByCreatedAtDesc(
-                            user.getId(), shopId, documentType, doc.getId(),
+                            user.getId(), shopId, DocumentType.valueOf(documentType.toUpperCase().replace("-", "_")), doc.getId(),
                             PaymentTransaction.STATUS_PENDING);
             if (existing.isPresent()) {
                 PaymentTransaction pt = existing.get();

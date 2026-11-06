@@ -13,7 +13,7 @@ import java.util.Optional;
 public interface PaymentTransactionRepository extends JpaRepository<PaymentTransaction, Long> {
 
     Optional<PaymentTransaction> findTopByUserIdAndShopIdAndDocumentTypeAndDocumentIdAndStatusOrderByCreatedAtDesc(
-            Long userId, Long shopId, String documentType, Long documentId, String status);
+            Long userId, Long shopId, DocumentType documentType, Long documentId, String status);
 
     List<PaymentTransaction> findByUserIdOrderByCreatedAtDesc(Long userId);
 }
