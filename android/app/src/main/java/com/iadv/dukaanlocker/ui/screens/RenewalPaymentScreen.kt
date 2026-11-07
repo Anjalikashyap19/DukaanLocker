@@ -4,7 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import com.easebuzz.payment.kit.PWECouponsActivity
+import com.easebuzz.payment.kit.PWECheckoutActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -72,7 +72,7 @@ fun RenewalPaymentScreen(
         vm.consumePendingPaymentRoute()
     }
 
-    // Easebuzz Android SDK launcher — opens payment page in-app via PWECouponsActivity
+    // Easebuzz Android SDK launcher — opens payment page in-app via PWECheckoutActivity
     val payLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { activityResult ->
         val data = activityResult.data
         if (data != null) {
@@ -264,7 +264,7 @@ fun RenewalPaymentScreen(
                         try {
                             val payMode = result?.payMode
                                 ?: if (result?.gatewayCheckoutUrl?.contains("testpay") == true) "test" else "production"
-                            val intent = Intent(context, PWECouponsActivity::class.java)
+                            val intent = Intent(context, PWECheckoutActivity::class.java)
                             intent.putExtra("access_key", accessKey)
                             intent.putExtra("pay_mode", payMode)
                             payLauncher.launch(intent)

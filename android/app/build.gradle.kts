@@ -179,7 +179,7 @@ dependencies {
 
     // Encrypted storage for auth tokens
     implementation(libs.androidx.security.crypto)
-    implementation(files("libs/peb-lib-android-x.aar"))
+    implementation(libs.easebuzz)
 
     // ViewModel + Navigation
     implementation(libs.androidx.lifecycle.viewmodel.compose)
