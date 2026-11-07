@@ -148,7 +148,13 @@ fun DukaanLockerApp(
     LaunchedEffect(state.isLoggedIn, state.isAppUnlocked, state.currentScreen) {
         if (state.isLoggedIn && state.isAppUnlocked) {
             vm.consumePendingNotificationRoute()
+            vm.consumePendingPaymentRoute()
         }
+    }
+
+// Consume payment deep-link route on initial composition (fresh start from deep link)
+    LaunchedEffect(Unit) {
+        vm.consumePendingPaymentRoute()
     }
 
     // ── BIOMETRIC LOGIN ──

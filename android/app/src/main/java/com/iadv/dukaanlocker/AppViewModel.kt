@@ -263,14 +263,36 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
         }
     }
 
-    /** Consumes the Easebuzz payment return deep-link and marks renewal payment success. */
+    /** Consumes the Easebuzz payment return deep-link and verifies payment with backend before marking success. */
     fun consumePendingPaymentRoute() {
         val pending = MainActivity.pendingPaymentRoute ?: return
         MainActivity.clearPendingPaymentRoute()
         if (pending.type == "PAYMENT_SUCCESS") {
-            _renewalPaymentSuccess.value = true
+            pending.paymentId?.let { verifyPayment(it) }
+                ?: run { _renewalPaymentSuccess.value = true }
         } else if (pending.type == "PAYMENT_CANCEL") {
             resetRenewalPayment()
+        }
+    }
+
+    /** Verifies a payment with the backend before marking renewal success. Never trusts client-only result. */
+    fun verifyPayment(paymentId: Long) {
+        viewModelScope.launch {
+            try {
+                val response = api.getPayment(paymentId)
+                if (response.isSuccessful) {
+                    val status = response.body()?.status
+                    if (status == "COMPLETED") {
+                        _renewalPaymentSuccess.value = true
+                    } else {
+                        _paymentError.value = "Payment not yet completed: $status"
+                    }
+                } else {
+                    _paymentError.value = "Failed to verify payment: ${response.parseErrorMessage()}"
+                }
+            } catch (e: Exception) {
+                _paymentError.value = "Network error verifying payment: ${e.message}"
+            }
         }
     }
 

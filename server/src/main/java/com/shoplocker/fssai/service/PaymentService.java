@@ -100,26 +100,20 @@ public class PaymentService {
     @Value("${app.payment.easbuzz.environment:test}")
     private String easbuzzEnvironment;
 
-    @Value("${app.payment.easbuzz.create-url-test:https://testpay.easebuzz.in/payment/initiateLink}")
+    @Value("${app.payment.easbuzz.create-url-test:https://testdashboard.easebuzz.in/easycollect/v1/create}")
     private String easbuzzCreateUrlTest;
 
-    @Value("${app.payment.easbuzz.create-url-live:https://pay.easebuzz.in/payment/initiateLink}")
+    @Value("${app.payment.easbuzz.create-url-live:https://dashboard.easebuzz.in/easycollect/v1/create}")
     private String easbuzzCreateUrlLive;
-
-    @Value("${app.payment.easbuzz.pay-url-test:https://testpay.easebuzz.in/pay/}")
-    private String easbuzzPayUrlTest;
-
-    @Value("${app.payment.easbuzz.pay-url-live:https://pay.easebuzz.in/pay/}")
-    private String easbuzzPayUrlLive;
-
-    @Value("${app.external-url:https://api.dukaanlocker.iadv.cloud}")
-    private String externalUrl;
 
     @Value("${app.fssai.license-url:https://iadv.in/tracker/dist/check-details.php?lic_num=}")
     private String fssaiLicenseApiUrl;
 
     @Value("${app.fssai.referer:https://iadv.in/}")
     private String fssaiReferer;
+
+    @Value("${app.external-url:http://localhost:8082}")
+    private String externalUrl;
 
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final DocumentRepository documentRepository;
@@ -180,10 +174,12 @@ public class PaymentService {
         BigDecimal serviceChargePerYear;
 
         String licenseCategory = docType.name();
+        // license tier category: BASIC / STATE / CENTRAL (used for pricing tier selection)
+        String category = "";
 
         if (docType == DocumentType.FSSAI_FOOD_LICENSE) {
             // Determine tier from license category (Basic / State / Central)
-            String category = licenseCategory != null ? licenseCategory.toUpperCase(Locale.ROOT) : "";
+            category = licenseCategory != null ? licenseCategory.toUpperCase(Locale.ROOT) : "";
             if (category.contains("CENTRAL")) {
                 govChargePerYear = new BigDecimal("8850");
                 serviceChargePerYear = new BigDecimal("2000");
@@ -205,7 +201,16 @@ public class PaymentService {
         }
 
         BigDecimal subtotal = govChargePerYear.multiply(new BigDecimal(durationYears));
-        BigDecimal serviceCharge = serviceChargePerYear.multiply(new BigDecimal(durationYears));
+        // serviceChargePerYear is already a per-duration total (from BASIC_SERVICE_CHARGE map)
+        // or a per-year rate (State/Central tiers). Multiply by duration only for per-year rates.
+        BigDecimal serviceCharge;
+        if (docType == DocumentType.FSSAI_FOOD_LICENSE && !category.contains("CENTRAL") && !category.contains("STATE")) {
+            // Basic tier: map values are already per-duration totals, do NOT multiply again
+            serviceCharge = serviceChargePerYear;
+        } else {
+            // State/Central tiers: per-year rate, multiply by duration
+            serviceCharge = serviceChargePerYear.multiply(new BigDecimal(durationYears));
+        }
         BigDecimal gstAmount = serviceCharge.multiply(GST_RATE).setScale(2, RoundingMode.HALF_UP);
 
         // Penalty calculation for expired documents
@@ -351,6 +356,7 @@ public class PaymentService {
                     tx.getGateway(),
                     orderId,
                     kob,
+                    gatewayCheckoutUrl,
                     gatewayCheckoutUrl
             );
         } catch (FssaiException e) {
@@ -510,7 +516,7 @@ public class PaymentService {
         return (text == null || text.trim().isEmpty()) ? null : text.trim();
     }
 
-    /** Build Easebuzz payment via the Payment Gateway initiateLink API; returns the checkout URL. */
+    /** Build Easebuzz payment via the official EasyCollect create-link API; returns the payment URL and access_key. */
     private String createEasyCollectPayment(String orderId, BigDecimal amount,
                                             User user, Shop shop, Long txId) throws Exception {
         if (easbuzzMerchantKey == null || easbuzzMerchantKey.isBlank()
@@ -518,33 +524,30 @@ public class PaymentService {
             throw new FssaiException("Easebuzz merchant key/salt not configured",
                     FailureCode.INTERNAL_ERROR);
         }
-        boolean isTest = "test".equalsIgnoreCase(easbuzzEnvironment) || "sandbox".equalsIgnoreCase(easbuzzEnvironment);
-        String apiEndpoint = isTest ? easbuzzCreateUrlTest : easbuzzCreateUrlLive;
-        String payBase = isTest ? easbuzzPayUrlTest : easbuzzPayUrlLive;
+        String apiEndpoint = "test".equalsIgnoreCase(easbuzzEnvironment)
+                ? easbuzzCreateUrlTest : easbuzzCreateUrlLive;
 
         String amountStr = amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
-        String name = user.getUserName() != null && !user.getUserName().isBlank() ? user.getUserName().trim() : "Customer";
+        String firstname = user.getUserName() != null && !user.getUserName().isBlank() ? user.getUserName().trim() : "Customer";
         String email = user.getEmailId() != null && !user.getEmailId().isBlank() ? user.getEmailId().trim()
                 : (user.getMobileNumber() != null ? user.getMobileNumber() + "@dukaanlocker.com" : "customer@dukaanlocker.com");
         String phone = user.getMobileNumber() != null && !user.getMobileNumber().isBlank() ? user.getMobileNumber().trim() : "9999999999";
-        String productInfo = "FSSAI Renewal";
+        String productInfo = "FSSAI Renewal Payment";
+
+        String callbackBase = externalUrl.endsWith("/") ? externalUrl : externalUrl + "/";
+        String surl = callbackBase + "api/payments/" + txId + "/callback";
+        String furl = callbackBase + "api/payments/" + txId + "/callback";
 
         String udf1 = String.valueOf(txId);
         String udf2 = shop.getShopName() != null ? shop.getShopName() : "";
         String udf3 = String.valueOf(shop.getId());
         String udf4 = "";
-        String udf5 = name;
-        String udf6 = "";
-        String udf7 = "";
-        String udf8 = "";
-        String udf9 = "";
-        String udf10 = "";
+        String udf5 = firstname;
 
-        // SHA512(key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5|udf6|udf7|udf8|udf9|udf10|salt)
-        String hashInput = easbuzzMerchantKey + "|" + orderId + "|" + amountStr + "|" + productInfo + "|"
-                + name + "|" + email + "|"
+        // Official Easebuzz hash: SHA512(key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5|salt)
+        String hashInput = easbuzzMerchantKey + "|" + orderId + "|" + amountStr + "|"
+                + productInfo + "|" + firstname + "|" + email + "|"
                 + udf1 + "|" + udf2 + "|" + udf3 + "|" + udf4 + "|" + udf5 + "|"
-                + udf6 + "|" + udf7 + "|" + udf8 + "|" + udf9 + "|" + udf10 + "|"
                 + easbuzzMerchantSalt;
         String hash = sha512(hashInput);
 
@@ -553,11 +556,11 @@ public class PaymentService {
         params.put("txnid", orderId);
         params.put("amount", amountStr);
         params.put("productinfo", productInfo);
-        params.put("firstname", name);
+        params.put("firstname", firstname);
         params.put("email", email);
         params.put("phone", phone);
-        params.put("surl", appReturnUrl(txId));
-        params.put("furl", appCancelUrl(txId));
+        params.put("surl", surl);
+        params.put("furl", furl);
         params.put("udf1", udf1);
         params.put("udf2", udf2);
         params.put("udf3", udf3);
@@ -583,37 +586,39 @@ public class PaymentService {
             int code = resp.getCode();
             String responseBody = EntityUtils.toString(resp.getEntity());
             if (code != 200) {
-                throw new FssaiException("Easebuzz returned HTTP " + code + ": " + responseBody,
+                throw new FssaiException("Easebuzz EasyCollect returned HTTP " + code + ": " + responseBody,
                         FailureCode.INTERNAL_ERROR);
             }
             JsonNode root = objectMapper.readTree(responseBody);
-            int status = root.path("status").asInt(0);
-            if (status != 1) {
-                String errorDesc = root.path("error_desc").asText();
-                if (errorDesc == null || errorDesc.isBlank()) {
-                    errorDesc = root.path("data").asText();
+            String status = root.path("status").asText();
+            if (!"true".equalsIgnoreCase(status) && !"1".equals(status)) {
+                String err = root.path("error").asText();
+                if (err == null || err.isBlank()) {
+                    err = root.path("message").asText();
                 }
-                throw new FssaiException("Easebuzz initiation failed: " + errorDesc,
+                if (err == null || err.isBlank()) {
+                    err = responseBody;
+                }
+                throw new FssaiException("Easebuzz EasyCollect failed: " + err,
                         FailureCode.INTERNAL_ERROR);
             }
-            String accessKey = root.path("data").asText();
+            JsonNode data = root.path("data");
+            String paymentUrl = data.path("payment_url").asText();
+            if (paymentUrl == null || paymentUrl.isBlank()) {
+                paymentUrl = root.path("payment_url").asText();
+            }
+            String accessKey = data.path("access_key").asText();
             if (accessKey == null || accessKey.isBlank()) {
-                throw new FssaiException("Easebuzz returned no access key",
+                accessKey = root.path("access_key").asText();
+            }
+            if ((paymentUrl == null || paymentUrl.isBlank()) && (accessKey == null || accessKey.isBlank())) {
+                throw new FssaiException("Easebuzz EasyCollect returned no payment_url or access_key",
                         FailureCode.INTERNAL_ERROR);
             }
-            String base = payBase.endsWith("/") ? payBase : payBase + "/";
-            return base + accessKey;
+            log.info("Easebuzz EasyCollect link created: txId={} orderId={} url={} accessKey={}",
+                    txId, orderId, paymentUrl, accessKey != null ? "present" : "absent");
+            return accessKey != null && !accessKey.isBlank() ? accessKey : paymentUrl;
         }
-    }
-
-    private String appReturnUrl(Long txId) {
-        String base = (externalUrl != null && !externalUrl.isBlank()) ? externalUrl.replaceAll("/+$", "") : "https://api.dukaanlocker.iadv.cloud";
-        return base + "/api/payments/" + txId + "/callback";
-    }
-
-    private String appCancelUrl(Long txId) {
-        String base = (externalUrl != null && !externalUrl.isBlank()) ? externalUrl.replaceAll("/+$", "") : "https://api.dukaanlocker.iadv.cloud";
-        return base + "/api/payments/" + txId + "/callback";
     }
 
     /** Verify the Easebuzz callback signature. */
@@ -621,8 +626,8 @@ public class PaymentService {
                                             String gatewaySignature) {
         if (easbuzzMerchantKey == null || easbuzzMerchantKey.isBlank()
                 || easbuzzMerchantSalt == null || easbuzzMerchantSalt.isBlank()) {
-            log.warn("Easebuzz merchant key/salt not configured; accepting callback without signature");
-            return true;
+            log.error("Easebuzz merchant key/salt not configured; rejecting callback without signature verification");
+            return false;
         }
         if (gatewaySignature == null || gatewaySignature.isBlank()) return false;
 
@@ -679,7 +684,7 @@ public class PaymentService {
         return new PaymentCreateResponse(
                 tx.getId(), breakdown, tx.getStatus(), tx.getCurrency(),
                 tx.getGateway(), tx.getGatewayOrderId(), null,
-                tx.getGatewayCheckoutUrl()
+                tx.getGatewayCheckoutUrl(), tx.getGatewayCheckoutUrl()
         );
     }
 

@@ -1,6 +1,10 @@
 package com.iadv.dukaanlocker.ui.screens
 
 import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.easebuzz.payment.kit.PWECouponsActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -66,6 +70,32 @@ fun RenewalPaymentScreen(
     }
     LaunchedEffect(Unit) {
         vm.consumePendingPaymentRoute()
+    }
+
+    // Easebuzz Android SDK launcher — opens payment page in-app via PWECouponsActivity
+    val payLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { activityResult ->
+        val data = activityResult.data
+        if (data != null) {
+            val sdkResult = data.getStringExtra("result")
+            val paymentResponse = data.getStringExtra("payment_response")
+            when (sdkResult) {
+                "payment_successfull" -> {
+                    // Verify with backend before showing success (never trust client-only result)
+                    result?.paymentId?.let { vm.verifyPayment(it) }
+                }
+                "payment_failed", "txn_session_timeout", "user_cancelled", "back_pressed", "error_server_error" -> {
+                    vm.showToast("Payment cancelled or failed: $sdkResult", ToastType.ERROR)
+                    vm.resetRenewalPayment()
+                }
+                else -> {
+                    vm.showToast("Unknown payment result: $sdkResult", ToastType.ERROR)
+                    vm.resetRenewalPayment()
+                }
+            }
+        } else {
+            vm.showToast("Payment activity returned no result", ToastType.ERROR)
+            vm.resetRenewalPayment()
+        }
     }
 
     Column(
@@ -227,19 +257,39 @@ fun RenewalPaymentScreen(
         // Pay button - shown when a pending Easebuzz payment link exists
         if (!paymentSuccess && !isLoading && result != null
                 && result.status == "PENDING"
-                && result.gatewayCheckoutUrl?.isNotBlank() == true) {
+                && (result.accessKey?.isNotBlank() == true || result.gatewayCheckoutUrl?.isNotBlank() == true)) {
             Button(
                 onClick = {
-                    result?.gatewayCheckoutUrl?.let { checkoutUrl ->
+                    result?.accessKey?.let { accessKey ->
                         try {
-                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                                data = android.net.Uri.parse(checkoutUrl)
-                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK
-                                        or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                            }
-                            context.startActivity(intent)
+                            val intent = Intent(context, PWECouponsActivity::class.java)
+                            intent.putExtra("access_key", accessKey)
+                            intent.putExtra("pay_mode", if (BuildConfig.DEBUG) "test" else "production")
+                            payLauncher.launch(intent)
                         } catch (e: Exception) {
-                            vm.showToast("Could not open payment link: ${e.message}", ToastType.ERROR)
+                            // Fallback: open checkout URL in browser
+                            result?.gatewayCheckoutUrl?.let { checkoutUrl ->
+                                try {
+                                    val browserIntent = Intent(Intent.ACTION_VIEW).apply {
+                                        data = Uri.parse(checkoutUrl)
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                                                or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                                    }
+                                    context.startActivity(browserIntent)
+                                } catch (e2: Exception) {
+                                    vm.showToast("Could not open payment link: ${e2.message}", ToastType.ERROR)
+                                }
+                            }
+                        }
+                    } ?: run {
+                        // No access key — try URL fallback
+                        result?.gatewayCheckoutUrl?.let { checkoutUrl ->
+                            val browserIntent = Intent(Intent.ACTION_VIEW).apply {
+                                data = Uri.parse(checkoutUrl)
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                                        or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                            }
+                            context.startActivity(browserIntent)
                         }
                     }
                 },

@@ -19,7 +19,9 @@ import com.iadv.dukaanlocker.api.BiometricCredentialManager
 import com.iadv.dukaanlocker.api.GoogleSignInHelper
 import com.iadv.dukaanlocker.api.ApiClient
 import com.iadv.dukaanlocker.api.GoogleRegisterRequest
+import com.iadv.dukaanlocker.AppViewModel
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -36,7 +38,7 @@ class MainActivity : FragmentActivity() {
     )
 
     /** Routing info carried by the Easebuzz payment return deep-link. */
-    data class PendingPaymentRoute(val type: String?) // "PAYMENT_SUCCESS" | "PAYMENT_CANCEL"
+    data class PendingPaymentRoute(val type: String?, val paymentId: Long?) // "PAYMENT_SUCCESS" | "PAYMENT_CANCEL"
 
     companion object {
         @Volatile
@@ -66,7 +68,8 @@ class MainActivity : FragmentActivity() {
                 "/cancel" -> "PAYMENT_CANCEL"
                 else -> null
             }
-            return type?.let { PendingPaymentRoute(it) }
+            val paymentId = data.getQueryParameter("tx")?.toLongOrNull()
+            return type?.let { PendingPaymentRoute(it, paymentId) }
         }
 
         private fun capturePendingRoute(intent: android.content.Intent?) {
@@ -86,6 +89,10 @@ class MainActivity : FragmentActivity() {
     lateinit var googleSignInHelper: GoogleSignInHelper
         private set
     lateinit var biometricAuthManager: BiometricAuthManager
+        private set
+
+    /** ViewModel reference set by DukaanLockerApp composable, used to consume payment deep-link routes. */
+    var appViewModel: AppViewModel? = null
         private set
 
     // Callbacks for Google Sign-Up result
@@ -180,6 +187,10 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         capturePendingRoute(intent)
+        // Consume payment deep-link route immediately so the payment screen updates
+        if (pendingPaymentRoute != null) {
+            appViewModel?.consumePendingPaymentRoute()
+        }
     }
 
     private fun applyLanguage(base: Context): Context {
@@ -214,7 +225,10 @@ class MainActivity : FragmentActivity() {
         biometricAuthManager = BiometricAuthManager(this)
         
         setContent {
+            val vm = viewModel<AppViewModel>()
+            appViewModel = vm
             DukaanLockerApp(
+                vm = vm,
                 onLanguageChanged = { code ->
                     LockerStorage.saveLanguage(this, code)
                 },
