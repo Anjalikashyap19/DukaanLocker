@@ -4,7 +4,6 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import com.easebuzz.payment.kit.PWECheckoutActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -129,30 +128,49 @@ fun RenewalPaymentScreen(
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(16.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(doc.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                Text(
-                    "Shop ID: ${doc.businessId}  •  Type: ${doc.type.replace("_", " ").capitalize()}",
-                    fontSize = 12.sp, color = colors.textSecondary, modifier = Modifier.padding(top = 4.dp)
-                )
-                if (doc.expiryDate.isNotBlank()) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(colors.primary.copy(alpha = 0.12f), shape = RoundedCornerShape(12.dp))
+                        .wrapContentSize(Alignment.Center)
+                ) {
                     Text(
-                        "Expires: ${formatExpiryBodyDate(doc.expiryDate)}",
-                        fontSize = 12.sp, color = colors.textSecondary, modifier = Modifier.padding(top = 2.dp)
+                        "📄",
+                        fontSize = 24.sp,
+                        color = colors.primary,
+                        modifier = Modifier.align(Alignment.Center)
                     )
                 }
-                if (kobText != null && kobText.isNotBlank()) {
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(doc.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
                     Text(
-                        "Kind of Business: $kobText",
+                        "Shop ID: ${doc.businessId}  •  Type: ${doc.type.replace("_", " ").capitalize()}",
                         fontSize = 12.sp, color = colors.textSecondary, modifier = Modifier.padding(top = 4.dp)
                     )
+                    if (doc.expiryDate.isNotBlank()) {
+                        Text(
+                            "Expires: ${formatExpiryBodyDate(doc.expiryDate)}",
+                            fontSize = 12.sp, color = colors.textSecondary, modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                    if (kobText != null && kobText.isNotBlank()) {
+                        Text(
+                            "Kind of Business: $kobText",
+                            fontSize = 12.sp, color = colors.textSecondary, modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         // Duration selector (simple buttons — no popup placement issues)
         Text(AppStrings.get(lang, "Select Duration"), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
@@ -199,34 +217,47 @@ fun RenewalPaymentScreen(
             fontSize = 12.sp, color = colors.textSecondary, modifier = Modifier.padding(top = 4.dp)
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         // Cost breakdown
         if (breakdown != null || isLoading) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(16.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Cost Breakdown (INR)", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                    Spacer(modifier = Modifier.height(12.dp))
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Cost Breakdown (INR)", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                color = colors.primary,
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     if (isLoading) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 12.dp),
+                                .padding(vertical = 14.dp),
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             CircularProgressIndicator(
                                 color = colors.primary,
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
+                                modifier = Modifier.size(22.dp),
+                                strokeWidth = 3.dp
                             )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text("Calculating cost...", fontSize = 13.sp, color = colors.textSecondary)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("Calculating renewal quote...", fontSize = 14.sp, color = colors.textSecondary)
                         }
                     } else if (breakdown != null) {
                         moneyRow("Subtotal", breakdown.subtotal ?: 0.0, colors.textSecondary, false)
@@ -235,13 +266,26 @@ fun RenewalPaymentScreen(
                         moneyRow("GST (18%)", breakdown.gstAmount ?: 0.0, colors.textSecondary, false)
                         val penalty = breakdown.penalty ?: 0.0
                         if (penalty > 0) moneyRow("Penalty", penalty, colors.error, false)
-                        Divider(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
-                        moneyRow("Total", breakdown.totalAmount ?: 0.0, colors.primary, true)
+                        Divider(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Total Payable",
+                                fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary
+                            )
+                            Text(
+                                "\u20B9${formatAmount(breakdown.totalAmount)}",
+                                fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.primary
+                            )
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
         }
 
         // Error
@@ -251,37 +295,6 @@ fun RenewalPaymentScreen(
                 fontSize = 12.sp, color = colors.error,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
-        }
-
-        // Loading state button
-        if (isLoading && !paymentSuccess) {
-            Button(
-                onClick = {},
-                enabled = false,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    disabledContainerColor = colors.primary.copy(alpha = 0.6f),
-                    disabledContentColor = Color.White
-                )
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    CircularProgressIndicator(
-                        color = Color.White,
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        "Updating Quote...",
-                        fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White
-                    )
-                }
-            }
         }
 
         // Retry button - shown when quote failed or not loaded and not currently loading
@@ -313,17 +326,18 @@ fun RenewalPaymentScreen(
                 && (result.accessKey?.isNotBlank() == true || result.gatewayCheckoutUrl?.isNotBlank() == true)) {
             Button(
                 onClick = {
-                    result?.accessKey?.let { accessKey ->
+                    val accessKey = result.accessKey
+                    if (accessKey != null && accessKey.isNotBlank()) {
                         try {
-                            val payMode = result?.payMode
-                                ?: if (result?.gatewayCheckoutUrl?.contains("testpay") == true) "test" else "production"
-                            val intent = Intent(context, PWECheckoutActivity::class.java)
+                            val payMode = if (BuildConfig.DEBUG) "test" else "production"
+                            val sdkClass = Class.forName("com.easebuzz.payment.kit.PWECouponsActivity")
+                            val intent = Intent(context, sdkClass)
                             intent.putExtra("access_key", accessKey)
                             intent.putExtra("pay_mode", payMode)
                             payLauncher.launch(intent)
                         } catch (e: Exception) {
                             // Fallback: open checkout URL in browser
-                            result?.gatewayCheckoutUrl?.let { checkoutUrl ->
+                            result.gatewayCheckoutUrl?.let { checkoutUrl ->
                                 try {
                                     val browserIntent = Intent(Intent.ACTION_VIEW).apply {
                                         data = Uri.parse(checkoutUrl)
@@ -336,9 +350,9 @@ fun RenewalPaymentScreen(
                                 }
                             }
                         }
-                    } ?: run {
+                    } else {
                         // No access key — try URL fallback
-                        result?.gatewayCheckoutUrl?.let { checkoutUrl ->
+                        result.gatewayCheckoutUrl?.let { checkoutUrl ->
                             val browserIntent = Intent(Intent.ACTION_VIEW).apply {
                                 data = Uri.parse(checkoutUrl)
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK

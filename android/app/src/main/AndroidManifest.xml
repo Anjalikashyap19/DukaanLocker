@@ -59,6 +59,27 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- Easebuzz SDK activities (bundled via peb-lib-android-x.aar) -->
+        <activity
+            android:name="com.easebuzz.payment.kit.PWECouponsActivity"
+            android:label="Select Coupons"
+            android:launchMode="singleTop"
+            android:screenOrientation="portrait"
+            android:theme="@style/PWENoABar"
+            android:windowSoftInputMode="stateUnchanged"
+            android:exported="false" />
+        <activity
+            android:name="com.easebuzz.payment.kit.PWEBankPageActivity"
+            android:launchMode="singleTop"
+            android:screenOrientation="portrait"
+            android:theme="@style/PWENoABar"
+            android:exported="false" />
+        <service
+            android:name="com.easebuzz.payment.kit.PWETimerService"
+            android:enabled="true"
+            android:stopWithTask="false"
+            android:exported="false" />
     </application>
 
 </manifest>

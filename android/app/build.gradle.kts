@@ -179,7 +179,8 @@ dependencies {
 
     // Encrypted storage for auth tokens
     implementation(libs.androidx.security.crypto)
-    implementation(libs.easebuzz)
+    // Easebuzz SDK — local AAR in libs/
+    implementation(files("libs/peb-lib-android-x.aar"))
 
     // ViewModel + Navigation
     implementation(libs.androidx.lifecycle.viewmodel.compose)

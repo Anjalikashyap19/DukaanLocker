@@ -635,13 +635,26 @@ public class PaymentService {
                 throw new FssaiException("Easebuzz initiation failed: " + errorDesc,
                         FailureCode.INTERNAL_ERROR);
             }
-            String accessKey = root.path("data").asText();
+            // Easebuzz returns data as either a string (access_key) or an object
+            // containing access_key and payment_url fields.
+            JsonNode dataNode = root.path("data");
+            String accessKey = null;
+            String paymentUrl = null;
+            if (dataNode.isObject()) {
+                accessKey = text(dataNode, "access_key");
+                paymentUrl = text(dataNode, "payment_url");
+            } else if (!dataNode.isMissingNode() && !dataNode.isNull()) {
+                accessKey = dataNode.asText();
+            }
             if (accessKey == null || accessKey.isBlank()) {
                 throw new FssaiException("Easebuzz returned no access key",
                         FailureCode.INTERNAL_ERROR);
             }
-            String base = payBase.endsWith("/") ? payBase : payBase + "/";
-            String checkoutUrl = base + accessKey;
+            String checkoutUrl = paymentUrl;
+            if ((checkoutUrl == null || checkoutUrl.isBlank()) && accessKey != null) {
+                String base = payBase.endsWith("/") ? payBase : payBase + "/";
+                checkoutUrl = base + accessKey;
+            }
             log.info("Easebuzz link created: txId={} orderId={} url={} accessKey={}",
                     txId, orderId, checkoutUrl, accessKey);
             return new EasebuzzPaymentLink(checkoutUrl, accessKey);

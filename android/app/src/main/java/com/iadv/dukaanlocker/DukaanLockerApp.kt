@@ -867,7 +867,10 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                     )
 
                     // ── Bottom Navigation Bar ──
-                    if (state.isLoggedIn && state.viewDocumentId == null && (state.currentScreen is Screen.OwnerHome || state.currentScreen is Screen.ManagerHome)) {
+                    // Hidden while the renewal payment overlay is active so it doesn't
+                    // paint on top of the payment screen.
+                    if (state.isLoggedIn && state.viewDocumentId == null && vm.renewalPaymentDoc == null
+                            && (state.currentScreen is Screen.OwnerHome || state.currentScreen is Screen.ManagerHome)) {
                         BottomNavBar(
                             currentTab = state.selectedBottomTab,
                             onNavigate = { tab ->
