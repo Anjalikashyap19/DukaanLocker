@@ -262,9 +262,11 @@ fun RenewalPaymentScreen(
                 onClick = {
                     result?.accessKey?.let { accessKey ->
                         try {
+                            val payMode = result?.payMode
+                                ?: if (result?.gatewayCheckoutUrl?.contains("testpay") == true) "test" else "production"
                             val intent = Intent(context, PWECouponsActivity::class.java)
                             intent.putExtra("access_key", accessKey)
-                            intent.putExtra("pay_mode", if (BuildConfig.DEBUG) "test" else "production")
+                            intent.putExtra("pay_mode", payMode)
                             payLauncher.launch(intent)
                         } catch (e: Exception) {
                             // Fallback: open checkout URL in browser

@@ -15,12 +15,20 @@ public class PaymentCreateResponse {
     private String kob;
     private String gatewayCheckoutUrl;
     private String accessKey;
+    private String payMode;
 
     public PaymentCreateResponse() {}
 
     public PaymentCreateResponse(Long paymentId, PaymentBreakdown breakdown, String status,
                                  String currency, String gateway, String gatewayOrderId,
                                  String kob, String gatewayCheckoutUrl, String accessKey) {
+        this(paymentId, breakdown, status, currency, gateway, gatewayOrderId, kob, gatewayCheckoutUrl, accessKey, "production");
+    }
+
+    public PaymentCreateResponse(Long paymentId, PaymentBreakdown breakdown, String status,
+                                 String currency, String gateway, String gatewayOrderId,
+                                 String kob, String gatewayCheckoutUrl, String accessKey,
+                                 String payMode) {
         this.paymentId = paymentId;
         this.breakdown = breakdown;
         this.status = status;
@@ -30,6 +38,7 @@ public class PaymentCreateResponse {
         this.kob = kob;
         this.gatewayCheckoutUrl = gatewayCheckoutUrl;
         this.accessKey = accessKey;
+        this.payMode = payMode;
     }
 
     public Long getPaymentId() { return paymentId; }
@@ -58,4 +67,7 @@ public class PaymentCreateResponse {
 
     public String getAccessKey() { return accessKey; }
     public void setAccessKey(String accessKey) { this.accessKey = accessKey; }
+
+    public String getPayMode() { return payMode; }
+    public void setPayMode(String payMode) { this.payMode = payMode; }
 }

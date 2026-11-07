@@ -507,7 +507,8 @@ data class PaymentCreateResponse(
     @SerializedName("gatewayOrderId") val gatewayOrderId: String? = null,
     @SerializedName("kob") val kob: String? = null,
     @SerializedName("gatewayCheckoutUrl") val gatewayCheckoutUrl: String? = null,
-    @SerializedName("accessKey") val accessKey: String? = null
+    @SerializedName("accessKey") val accessKey: String? = null,
+    @SerializedName("payMode") val payMode: String? = null
 )
 
 data class PaymentStatusResponse(

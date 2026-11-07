@@ -325,13 +325,25 @@ public class PaymentService {
             PaymentBreakdown breakdown = calculateBreakdown(documentType, durationYears, kob, daysExpired);
 
             // Idempotency: return an existing open PENDING payment for the same shop+doc+duration
+            // only if created within the last 15 minutes (Easebuzz access keys expire after 15-20 min)
+            // and matching durationYears
             Optional<PaymentTransaction> existing = paymentTransactionRepository
                     .findTopByUserIdAndShopIdAndDocumentTypeAndDocumentIdAndStatusOrderByCreatedAtDesc(
                             user.getId(), shopId, DocumentType.valueOf(documentType.toUpperCase().replace("-", "_")), doc.getId(),
                             PaymentTransaction.STATUS_PENDING);
             if (existing.isPresent()) {
                 PaymentTransaction pt = existing.get();
-                return toResponse(pt, breakdownFromEntity(pt));
+                boolean isExpired = pt.getCreatedAt() != null &&
+                        pt.getCreatedAt().isBefore(LocalDateTime.now().minusMinutes(15));
+                boolean durationMismatch = pt.getDurationYears() != null &&
+                        !pt.getDurationYears().equals(durationYears);
+
+                if (isExpired || durationMismatch) {
+                    pt.setStatus(PaymentTransaction.STATUS_FAILED);
+                    paymentTransactionRepository.save(pt);
+                } else {
+                    return toResponse(pt, breakdownFromEntity(pt));
+                }
             }
 
             PaymentTransaction tx = new PaymentTransaction(
@@ -351,8 +363,9 @@ public class PaymentService {
             tx.setGatewayCheckoutUrl(link.checkoutUrl());
             paymentTransactionRepository.save(tx);
 
-            log.info("Payment created: tx={} user={} shop={} amount={} orderId={} url={} accessKey={}",
-                    tx.getId(), user.getId(), shopId, breakdown.getTotalAmount(), orderId, link.checkoutUrl(), link.accessKey());
+            String payMode = "live".equalsIgnoreCase(easbuzzEnvironment) ? "production" : "test";
+            log.info("Payment created: tx={} user={} shop={} amount={} orderId={} url={} accessKey={} payMode={}",
+                    tx.getId(), user.getId(), shopId, breakdown.getTotalAmount(), orderId, link.checkoutUrl(), link.accessKey(), payMode);
 
             return new PaymentCreateResponse(
                     tx.getId(),
@@ -363,7 +376,8 @@ public class PaymentService {
                     orderId,
                     kob,
                     link.checkoutUrl(),
-                    link.accessKey()
+                    link.accessKey(),
+                    payMode
             );
         } catch (FssaiException e) {
             log.warn("Payment creation failed with FssaiException: {} (code={})", e.getMessage(), e.getFailureCode());
@@ -699,10 +713,12 @@ public class PaymentService {
         if (checkoutUrl != null && checkoutUrl.contains("/")) {
             accessKey = checkoutUrl.substring(checkoutUrl.lastIndexOf('/') + 1);
         }
+        String payMode = (checkoutUrl != null && checkoutUrl.contains("testpay")) ? "test" :
+                ("live".equalsIgnoreCase(easbuzzEnvironment) ? "production" : "test");
         return new PaymentCreateResponse(
                 tx.getId(), breakdown, tx.getStatus(), tx.getCurrency(),
                 tx.getGateway(), tx.getGatewayOrderId(), null,
-                checkoutUrl, accessKey
+                checkoutUrl, accessKey, payMode
         );
     }
 
