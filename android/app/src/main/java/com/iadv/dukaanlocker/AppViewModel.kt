@@ -618,7 +618,8 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
             regNumber = doc.documentNumber ?: "",
             expiryDate = doc.expiryDate ?: "",
             issueDate = doc.issueDate ?: "",
-            fileUrl = doc.fileUrl
+            fileUrl = doc.fileUrl,
+            kindOfBusiness = doc.kindOfBusiness
         )
     }
 

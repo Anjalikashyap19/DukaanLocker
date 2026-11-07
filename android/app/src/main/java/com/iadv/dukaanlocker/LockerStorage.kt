@@ -82,7 +82,8 @@ data class DocumentItem(
     val regNumber: String = "",
     val expiryDate: String = "",
     val issueDate: String = "",
-    val fileUrl: String? = null
+    val fileUrl: String? = null,
+    val kindOfBusiness: String? = null
 )
 
 // ─── Storage ──────────────────────────────────────────────────────────────────

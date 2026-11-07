@@ -62,7 +62,12 @@ fun RenewalPaymentScreen(
     val error = vm.paymentError
     val result = vm.paymentCreateResult
     val paymentSuccess = vm.renewalPaymentSuccess
-    val kobText = vm.renewalKobText
+    val kobText = vm.renewalKobText ?: doc.kindOfBusiness
+
+    // Automatically fetch renewal quote when screen opens or document changes
+    LaunchedEffect(doc.id) {
+        vm.createRenewalPayment(doc, durationYears)
+    }
 
     // Consume the Easebuzz payment return deep-link once when screen appears / result changes
     LaunchedEffect(result) {
@@ -161,7 +166,12 @@ fun RenewalPaymentScreen(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clickable { durationYears = years }
+                        .clickable(enabled = !isLoading) {
+                            if (durationYears != years) {
+                                durationYears = years
+                                vm.createRenewalPayment(doc, years)
+                            }
+                        }
                         .background(
                             if (selected) colors.primary else Color.Transparent,
                             shape = RoundedCornerShape(8.dp)
@@ -203,8 +213,20 @@ fun RenewalPaymentScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     if (isLoading) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                            CircularProgressIndicator()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                color = colors.primary,
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text("Calculating cost...", fontSize = 13.sp, color = colors.textSecondary)
                         }
                     } else if (breakdown != null) {
                         moneyRow("Subtotal", breakdown.subtotal ?: 0.0, colors.textSecondary, false)
@@ -231,7 +253,38 @@ fun RenewalPaymentScreen(
             )
         }
 
-        // Create payment - shown when no payment exists yet (explicit action, no auto-create)
+        // Loading state button
+        if (isLoading && !paymentSuccess) {
+            Button(
+                onClick = {},
+                enabled = false,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    disabledContainerColor = colors.primary.copy(alpha = 0.6f),
+                    disabledContentColor = Color.White
+                )
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Updating Quote...",
+                        fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White
+                    )
+                }
+            }
+        }
+
+        // Retry button - shown when quote failed or not loaded and not currently loading
         if (result == null && !isLoading && !paymentSuccess) {
             Button(
                 onClick = { vm.createRenewalPayment(doc, durationYears) },
@@ -247,7 +300,7 @@ fun RenewalPaymentScreen(
                     Icon(Icons.Default.Payment, contentDescription = null, tint = Color(0xFFFFFFFF), modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        "Create Payment",
+                        "Calculate Quote",
                         fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFFFFF)
                     )
                 }

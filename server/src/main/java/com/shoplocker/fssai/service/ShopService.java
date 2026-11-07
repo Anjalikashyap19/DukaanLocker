@@ -447,6 +447,7 @@ public class ShopService {
                 doc.getFileName(),
                 exposedUrl,
                 doc.getDocumentNumber(),
+                doc.getKindOfBusiness(),
                 doc.getIssueDate(),
                 doc.getExpiryDate(),
                 doc.getStatus(),

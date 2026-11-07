@@ -62,7 +62,6 @@ import java.util.Optional;
  * <p>Total = (govCharge × years) + (serviceCharge × years) + 18% × (serviceCharge × years)
  *   (+ penalty, applied only after expiry — reserved column, default 0).</p>
  */
-@Slf4j
 @Service
 public class PaymentService {
 
@@ -342,7 +341,7 @@ public class PaymentService {
                     pt.setStatus(PaymentTransaction.STATUS_FAILED);
                     paymentTransactionRepository.save(pt);
                 } else {
-                    return toResponse(pt, breakdownFromEntity(pt));
+                    return toResponse(pt, breakdownFromEntity(pt), kob);
                 }
             }
 
@@ -506,16 +505,17 @@ public class PaymentService {
                     if (body == null || body.isBlank()) return null;
                     try {
                         JsonNode root = objectMapper.readTree(body);
-                        JsonNode license = root.path("license");
-                        JsonNode target;
-                        if (license.isMissingNode() || license.isNull() || license.size() == 0) {
-                            JsonNode details = root.path("details");
-                            if (details.isMissingNode() || details.isNull()) return null;
-                            target = details;
-                        } else {
-                            target = license;
+                        String kob = text(root.path("details"), "kobname");
+                        if (kob == null || kob.isBlank()) {
+                            kob = text(root.path("license"), "kobname");
                         }
-                        return text(target, "kobname");
+                        if (kob == null || kob.isBlank()) {
+                            kob = text(root, "kobname");
+                        }
+                        if (kob == null || kob.isBlank()) {
+                            kob = text(root.path("details"), "kindOfBusiness");
+                        }
+                        return kob;
                     } catch (Exception e) {
                         log.warn("Could not parse FSSAI KOB API response for {}", licenseNumber, e);
                         return null;
@@ -562,11 +562,11 @@ public class PaymentService {
         String surl = callbackBase + "/api/payments/" + txId + "/callback";
         String furl = callbackBase + "/api/payments/" + txId + "/callback";
 
-        String udf1 = String.valueOf(txId);
-        String udf2 = shop.getShopName() != null ? shop.getShopName() : "";
-        String udf3 = String.valueOf(shop.getId());
+        String udf1 = String.valueOf(txId).trim();
+        String udf2 = shop.getShopName() != null ? shop.getShopName().trim() : "";
+        String udf3 = String.valueOf(shop.getId()).trim();
         String udf4 = "";
-        String udf5 = firstname;
+        String udf5 = firstname.trim();
         String udf6 = "";
         String udf7 = "";
         String udf8 = "";
@@ -660,17 +660,17 @@ public class PaymentService {
 
         var user = tx.getUser();
         var shop = tx.getShop();
-        String name = user != null && user.getUserName() != null ? user.getUserName() : "";
-        String email = user != null && user.getEmailId() != null ? user.getEmailId()
-                : (user != null && user.getMobileNumber() != null ? user.getMobileNumber() + "@dukaanlocker.com" : "");
-        String phone = user != null && user.getMobileNumber() != null ? user.getMobileNumber() : "";
-        String productInfo = "FSSAI Renewal";
+        String name = user != null && user.getUserName() != null ? user.getUserName().trim() : "";
+        String email = user != null && user.getEmailId() != null ? user.getEmailId().trim()
+                : (user != null && user.getMobileNumber() != null ? user.getMobileNumber().trim() + "@dukaanlocker.com" : "");
+        String phone = user != null && user.getMobileNumber() != null ? user.getMobileNumber().trim() : "";
+        String productInfo = "FSSAI Renewal Payment";
         String amountStr = tx.getTotalAmount() != null
                 ? tx.getTotalAmount().setScale(2, RoundingMode.HALF_UP).toPlainString() : "0.00";
-        String orderId = tx.getGatewayOrderId() != null ? tx.getGatewayOrderId() : "";
-        String txIdStr = String.valueOf(tx.getId());
-        String shopName = shop != null && shop.getShopName() != null ? shop.getShopName() : "";
-        String shopIdStr = String.valueOf(shop != null ? shop.getId() : 0);
+        String orderId = tx.getGatewayOrderId() != null ? tx.getGatewayOrderId().trim() : "";
+        String txIdStr = String.valueOf(tx.getId()).trim();
+        String shopName = shop != null && shop.getShopName() != null ? shop.getShopName().trim() : "";
+        String shopIdStr = String.valueOf(shop != null ? shop.getId() : 0).trim();
 
         // 1. Easebuzz PG reverse hash formula:
         // sha512(salt|status|udf10|udf9|udf8|udf7|udf6|udf5|udf4|udf3|udf2|udf1|email|firstname|productinfo|amount|txnid|key)
@@ -707,7 +707,7 @@ public class PaymentService {
         }
     }
 
-    private PaymentCreateResponse toResponse(PaymentTransaction tx, PaymentBreakdown breakdown) {
+    private PaymentCreateResponse toResponse(PaymentTransaction tx, PaymentBreakdown breakdown, String kob) {
         String checkoutUrl = tx.getGatewayCheckoutUrl();
         String accessKey = checkoutUrl;
         if (checkoutUrl != null && checkoutUrl.contains("/")) {
@@ -717,7 +717,7 @@ public class PaymentService {
                 ("live".equalsIgnoreCase(easbuzzEnvironment) ? "production" : "test");
         return new PaymentCreateResponse(
                 tx.getId(), breakdown, tx.getStatus(), tx.getCurrency(),
-                tx.getGateway(), tx.getGatewayOrderId(), null,
+                tx.getGateway(), tx.getGatewayOrderId(), kob,
                 checkoutUrl, accessKey, payMode
         );
     }

@@ -17,6 +17,7 @@ public class DocumentResponse {
     private String fileName;
     private String fileUrl;
     private String documentNumber;
+    private String kindOfBusiness;
     private LocalDateTime issueDate;
     private LocalDateTime expiryDate;
     private DocumentStatus status;
@@ -31,12 +32,23 @@ public class DocumentResponse {
                             LocalDateTime issueDate, LocalDateTime expiryDate,
                             DocumentStatus status, int version,
                             LocalDateTime uploadedAt, LocalDateTime updatedAt) {
+        this(id, shopId, documentType, fileName, fileUrl, documentNumber, null,
+                issueDate, expiryDate, status, version, uploadedAt, updatedAt);
+    }
+
+    public DocumentResponse(Long id, Long shopId, DocumentType documentType,
+                            String fileName, String fileUrl, String documentNumber,
+                            String kindOfBusiness,
+                            LocalDateTime issueDate, LocalDateTime expiryDate,
+                            DocumentStatus status, int version,
+                            LocalDateTime uploadedAt, LocalDateTime updatedAt) {
         this.id = id;
         this.shopId = shopId;
         this.documentType = documentType;
         this.fileName = fileName;
         this.fileUrl = fileUrl;
         this.documentNumber = documentNumber;
+        this.kindOfBusiness = kindOfBusiness;
         this.issueDate = issueDate;
         this.expiryDate = expiryDate;
         this.status = status;
@@ -64,6 +76,9 @@ public class DocumentResponse {
 
     public String getDocumentNumber() { return documentNumber; }
     public void setDocumentNumber(String documentNumber) { this.documentNumber = documentNumber; }
+
+    public String getKindOfBusiness() { return kindOfBusiness; }
+    public void setKindOfBusiness(String kindOfBusiness) { this.kindOfBusiness = kindOfBusiness; }
 
     public LocalDateTime getIssueDate() { return issueDate; }
     public void setIssueDate(LocalDateTime issueDate) { this.issueDate = issueDate; }

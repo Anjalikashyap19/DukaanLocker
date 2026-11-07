@@ -87,6 +87,7 @@ data class DocumentResponse(
     @SerializedName("fileName") val fileName: String?,
     @SerializedName("fileUrl") val fileUrl: String?,
     @SerializedName("documentNumber") val documentNumber: String?,
+    @SerializedName("kindOfBusiness") val kindOfBusiness: String? = null,
     @SerializedName("issueDate") val issueDate: String?,
     @SerializedName("expiryDate") val expiryDate: String?,
     @SerializedName("status") val status: String,
