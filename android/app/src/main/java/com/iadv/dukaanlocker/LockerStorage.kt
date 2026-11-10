@@ -461,6 +461,7 @@ fun requiredDocMeta(category: String, scale: String): List<Pair<String, String>>
         "Beverages, Dairy & Packaged Water" -> {
             list.add(Pair("FSSAI", "FSSAI License"))
             list.add(Pair("BIS", "BIS License (Packaged Water)"))
+            list.add(Pair("WaterTesting", "Water Testing Certificate"))
             list.add(Pair("GST", "GST Registration"))
         }
 

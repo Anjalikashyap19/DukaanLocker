@@ -322,6 +322,8 @@ public class DocumentValidationService {
             case AADHAAR:            validateAadhaar(extractedText, originalFileName); break;
             case CUSTOM:             // Custom documents bypass content validation — no standard format to check
                 break;
+            case WATER_TESTING_CERTIFICATE: // Water testing certificates have no standard keyword format — bypass content validation
+                break;
             default: throw new FssaiException("Unknown document type: " + type, FailureCode.INTERNAL_ERROR);
         }
     }
@@ -441,6 +443,7 @@ public class DocumentValidationService {
             case DRUG_LICENSE:       return "Drug License";
             case FSSAI_FOOD_LICENSE: return "FSSAI Food License";
             case AADHAAR:            return "Aadhaar Card";
+            case WATER_TESTING_CERTIFICATE: return "Water Testing Certificate";
             default:                 return type.name();
         }
     }

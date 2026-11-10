@@ -17,5 +17,6 @@ public enum DocumentType {
     DRUG_LICENSE,
     FSSAI_FOOD_LICENSE,
     AADHAAR,
-    CUSTOM
+    CUSTOM,
+    WATER_TESTING_CERTIFICATE
 }

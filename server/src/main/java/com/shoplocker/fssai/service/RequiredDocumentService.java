@@ -91,7 +91,8 @@ public class RequiredDocumentService {
                 DocumentType.TRADE_LICENSE,
                 DocumentType.MSME_CERTIFICATE,
                 DocumentType.FIRE_SAFETY,
-                DocumentType.SHOP_INSURANCE);
+                DocumentType.SHOP_INSURANCE,
+                DocumentType.WATER_TESTING_CERTIFICATE);
         CATEGORY_DOCUMENTS.put("RESTAURANT", restaurant);
 
         // IMPORT_EXPORT — Logistics & agriculture need IEC instead of shop insurance

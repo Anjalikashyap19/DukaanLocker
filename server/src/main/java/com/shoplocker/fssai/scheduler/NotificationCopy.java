@@ -47,6 +47,7 @@ public final class NotificationCopy {
             case SHOP_INSURANCE -> "Shop Insurance";
             case AADHAAR -> "Aadhaar Card";
             case CUSTOM -> "Custom Document";
+            case WATER_TESTING_CERTIFICATE -> "Water Testing Certificate";
         };
     }
 
