@@ -66,12 +66,11 @@
 # cause was the API-DTO keep rule above (R8 was hollowing out toDocumentItems).
 
 # ── Easebuzz Payment SDK ────────────────────────────────────────────────────
-# Keep all Easebuzz SDK classes — they are instantiated reflectively via
-# Class.forName("com.easebuzz.payment.kit.PWECouponsActivity") and launched
-# through Intent. Without these rules R8 strips them in release builds.
--keep class com.easebuzz.payment.kit.** { *; }
--keep class * extends com.easebuzz.payment.kit.** { *; }
--keepclassmembers class com.easebuzz.payment.kit.** {
+# Keep all Easebuzz SDK classes — they are launched via Intent with
+# PWECouponsActivity. Without these rules R8 strips them in release builds.
+-keep class in.easebuzz.sdk.** { *; }
+-keep class * extends in.easebuzz.sdk.** { *; }
+-keepclassmembers class in.easebuzz.sdk.** {
     <init>(...);
     public ** *(...);
 }

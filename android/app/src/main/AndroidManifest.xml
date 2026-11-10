@@ -60,26 +60,22 @@
             </intent-filter>
         </service>
 
-        <!-- Easebuzz SDK activities (bundled via peb-lib-android-x.aar) -->
+        <!-- Easebuzz SDK v2 activities (in.easebuzz:android-v2:1.0.11) -->
         <activity
-            android:name="com.easebuzz.payment.kit.PWECouponsActivity"
-            android:label="Select Coupons"
-            android:launchMode="singleTop"
-            android:screenOrientation="portrait"
-            android:theme="@style/PWENoABar"
-            android:windowSoftInputMode="stateUnchanged"
-            android:exported="false" />
-        <activity
-            android:name="com.easebuzz.payment.kit.PWEBankPageActivity"
+            android:name="com.easebuzz.payment.kit.PWECheckoutActivity"
             android:launchMode="singleTop"
             android:screenOrientation="portrait"
             android:theme="@style/PWENoABar"
             android:exported="false" />
-        <service
-            android:name="com.easebuzz.payment.kit.PWETimerService"
-            android:enabled="true"
-            android:stopWithTask="false"
-            android:exported="false" />
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>
