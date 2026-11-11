@@ -99,10 +99,10 @@ public class PaymentService {
     @Value("${app.payment.easbuzz.environment:test}")
     private String easbuzzEnvironment;
 
-    @Value("${app.payment.easbuzz.create-url-test:https://testdashboard.easebuzz.in/easycollect/v1/create}")
+    @Value("${app.payment.easbuzz.create-url-test:https://testpay.easebuzz.in/payment/initiateLink}")
     private String easbuzzCreateUrlTest;
 
-    @Value("${app.payment.easbuzz.create-url-live:https://dashboard.easebuzz.in/easycollect/v1/create}")
+    @Value("${app.payment.easbuzz.create-url-live:https://pay.easebuzz.in/payment/initiateLink}")
     private String easbuzzCreateUrlLive;
 
     @Value("${app.fssai.license-url:https://iadv.in/tracker/dist/check-details.php?lic_num=}")
@@ -357,18 +357,24 @@ public class PaymentService {
             );
             tx = paymentTransactionRepository.save(tx);
 
-            // Build Easebuzz payment via the official EasyCollect create-link API
+            // Build Easebuzz payment via the official Initiate Payment API (returns an access_key for the mobile SDK)
             String orderId = "DL" + tx.getId() + System.currentTimeMillis();
-            String gatewayCheckoutUrl = createEasyCollectPayment(orderId, breakdown.getTotalAmount(),
+            String accessKey = createInitiatePayment(orderId, breakdown.getTotalAmount(),
                     user, shop, tx.getId());
+            String payBaseUrl = "test".equalsIgnoreCase(easbuzzEnvironment)
+                    ? "https://testpay.easebuzz.in/pay/"
+                    : "https://pay.easebuzz.in/pay/";
+            String gatewayCheckoutUrl = payBaseUrl + accessKey;
 
             tx.setGatewayOrderId(orderId);
             tx.setGatewayCheckoutUrl(gatewayCheckoutUrl);
             paymentTransactionRepository.save(tx);
 
-            log.info("Payment created: tx={} user={} shop={} amount={} orderId={} url={}",
-                    tx.getId(), user.getId(), shopId, breakdown.getTotalAmount(), orderId, gatewayCheckoutUrl);
+            log.info("Payment created: tx={} user={} shop={} amount={} orderId={} accessKey={}",
+                    tx.getId(), user.getId(), shopId, breakdown.getTotalAmount(), orderId,
+                    accessKey != null && !accessKey.isBlank() ? "present" : "absent");
 
+            String payMode = "test".equalsIgnoreCase(easbuzzEnvironment) ? "test" : "production";
             return new PaymentCreateResponse(
                     tx.getId(),
                     breakdown,
@@ -378,7 +384,8 @@ public class PaymentService {
                     orderId,
                     kob,
                     gatewayCheckoutUrl,
-                    gatewayCheckoutUrl
+                    accessKey,
+                    payMode
             );
         } catch (FssaiException e) {
             log.warn("Payment creation failed with FssaiException: {} (code={})", e.getMessage(), e.getFailureCode());
@@ -538,8 +545,17 @@ public class PaymentService {
         return (text == null || text.trim().isEmpty()) ? null : text.trim();
     }
 
-    private String createEasyCollectPayment(String orderId, BigDecimal amount,
-                                            User user, Shop shop, Long txId) throws Exception {
+    /**
+     * Initiate a payment through the official Easebuzz Initiate Payment API and return the
+     * SDK {@code access_key}.
+     *
+     * <p>Hash sequence (official): {@code key|txnid|amount|productinfo|firstname|email|udf1|udf2|
+     * udf3|udf4|udf5|udf6|udf7|udf8|udf9|udf10|salt}. Note that {@code phone}, {@code surl} and
+     * {@code furl} are sent in the form body but are NOT part of the hash, and udf8/udf9/udf10
+     * must be empty (but still present in the hash string).</p>
+     */
+    private String createInitiatePayment(String orderId, BigDecimal amount,
+                                         User user, Shop shop, Long txId) throws Exception {
         if (easbuzzMerchantKey == null || easbuzzMerchantKey.isBlank()
                 || easbuzzMerchantSalt == null || easbuzzMerchantSalt.isBlank()) {
             throw new FssaiException("Easebuzz merchant key/salt not configured",
@@ -564,12 +580,19 @@ public class PaymentService {
         String udf2 = sanitizeHashField(shop.getShopName() != null ? shop.getShopName() : "");
         String udf3 = String.valueOf(shop.getId());
         String udf4 = "";
-        String udf5 = sanitizeHashField(name);
+        String udf5 = "";
+        String udf6 = "";
+        String udf7 = "";
+        String udf8 = "";
+        String udf9 = "";
+        String udf10 = "";
 
-        // Official Easebuzz hash: SHA512(key|txnid|amount|productinfo|firstname|email|phone|udf1|udf2|udf3|udf4|udf5|salt)
+        // Official Initiate Payment hash (no phone, includes all 10 udfs):
+        // SHA512(key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5|udf6|udf7|udf8|udf9|udf10|salt)
         String hashInput = easbuzzMerchantKey + "|" + orderId + "|" + amountStr + "|"
-                + productInfo + "|" + firstname + "|" + email + "|" + phone + "|"
+                + productInfo + "|" + firstname + "|" + email + "|"
                 + udf1 + "|" + udf2 + "|" + udf3 + "|" + udf4 + "|" + udf5 + "|"
+                + udf6 + "|" + udf7 + "|" + udf8 + "|" + udf9 + "|" + udf10 + "|"
                 + easbuzzMerchantSalt;
         String hash = sha512(hashInput);
 
@@ -578,17 +601,14 @@ public class PaymentService {
         params.put("txnid", orderId);
         params.put("amount", amountStr);
         params.put("productinfo", productInfo);
-        params.put("name", name);
         params.put("firstname", firstname);
-        params.put("email", email);
         params.put("phone", phone);
+        params.put("email", email);
         params.put("surl", surl);
         params.put("furl", furl);
         params.put("udf1", udf1);
         params.put("udf2", udf2);
         params.put("udf3", udf3);
-        params.put("udf4", udf4);
-        params.put("udf5", udf5);
         params.put("hash", hash);
 
         StringBuilder body = new StringBuilder();
@@ -599,7 +619,7 @@ public class PaymentService {
                 .append(URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8));
         }
 
-        log.info("Easebuzz EasyCollect request: endpoint={} orderId={} amount={} hashInputWithoutSalt=[{}***] env={}",
+        log.info("Easebuzz initiate request: endpoint={} orderId={} amount={} hashInputWithoutSalt=[{}***] env={}",
                 apiEndpoint, orderId, amountStr,
                 hashInput.contains("|") ? hashInput.substring(0, hashInput.lastIndexOf('|')) : hashInput,
                 easbuzzEnvironment);
@@ -613,40 +633,35 @@ public class PaymentService {
              org.apache.hc.core5.http.ClassicHttpResponse resp = client.execute(post)) {
             int code = resp.getCode();
             String responseBody = EntityUtils.toString(resp.getEntity());
-            log.debug("Easebuzz EasyCollect response: code={} body={}", code, responseBody);
+            log.debug("Easebuzz initiate response: code={} body={}", code, responseBody);
             if (code != 200) {
-                throw new FssaiException("Easebuzz EasyCollect returned HTTP " + code + ": " + responseBody,
+                throw new FssaiException("Easebuzz initiate returned HTTP " + code + ": " + responseBody,
                         FailureCode.INTERNAL_ERROR);
             }
             JsonNode root = objectMapper.readTree(responseBody);
-            String status = root.path("status").asText();
-            if (!"true".equalsIgnoreCase(status) && !"1".equals(status)) {
-                String err = root.path("error").asText();
-                if (err == null || err.isBlank()) {
-                    err = root.path("message").asText();
-                }
-                if (err == null || err.isBlank()) {
-                    err = responseBody;
-                }
-                throw new FssaiException("Easebuzz EasyCollect failed: " + err,
+            String statusText = root.path("status").asText();
+            boolean ok = "true".equalsIgnoreCase(statusText) || "1".equals(statusText) || root.path("status").asInt(0) == 1;
+            if (!ok) {
+                String err = root.path("error_desc").asText();
+                if (err == null || err.isBlank()) err = root.path("error").asText();
+                if (err == null || err.isBlank()) err = root.path("message").asText();
+                if (err == null || err.isBlank()) err = responseBody;
+                throw new FssaiException("Easebuzz initiate failed: " + err,
                         FailureCode.INTERNAL_ERROR);
             }
+            // Initiate Payment API responds with { "status": 1, "data": "<access_key>" }
             JsonNode data = root.path("data");
-            String paymentUrl = data.path("payment_url").asText();
-            if (paymentUrl == null || paymentUrl.isBlank()) {
-                paymentUrl = root.path("payment_url").asText();
-            }
-            String accessKey = data.path("access_key").asText();
+            String accessKey = data.isTextual() ? data.asText() : data.path("access_key").asText();
             if (accessKey == null || accessKey.isBlank()) {
                 accessKey = root.path("access_key").asText();
             }
-            if ((paymentUrl == null || paymentUrl.isBlank()) && (accessKey == null || accessKey.isBlank())) {
-                throw new FssaiException("Easebuzz EasyCollect returned no payment_url or access_key",
+            if (accessKey == null || accessKey.isBlank()) {
+                throw new FssaiException("Easebuzz initiate returned no access_key: " + responseBody,
                         FailureCode.INTERNAL_ERROR);
             }
-            log.info("Easebuzz EasyCollect link created: txId={} orderId={} url={} accessKey={}",
-                    txId, orderId, paymentUrl, accessKey != null ? "present" : "absent");
-            return accessKey != null && !accessKey.isBlank() ? accessKey : paymentUrl;
+            log.info("Easebuzz initiate access_key generated: txId={} orderId={} accessKey={}",
+                    txId, orderId, "present");
+            return accessKey;
         }
     }
 
