@@ -142,6 +142,16 @@ public class PaymentService {
         this.notificationService = notificationService;
     }
 
+    @jakarta.annotation.PostConstruct
+    public void init() {
+        if (easbuzzMerchantKey == null || easbuzzMerchantKey.isBlank()
+                || easbuzzMerchantSalt == null || easbuzzMerchantSalt.isBlank()) {
+            log.warn("Easebuzz merchant key/salt not configured. Payments will fail until EASEBUZZ_MERCHANT_KEY and EASEBUZZ_MERCHANT_SALT are set.");
+        } else {
+            log.info("Easebuzz payment service initialized: environment={}", easbuzzEnvironment);
+        }
+    }
+
     /** Calculate the full cost breakdown for a renewal payment.
      *
      * @param daysExpired Days past expiry (0 if not expired). Used to calculate penalty:
@@ -538,23 +548,23 @@ public class PaymentService {
         String apiEndpoint = "test".equalsIgnoreCase(easbuzzEnvironment)
                 ? easbuzzCreateUrlTest : easbuzzCreateUrlLive;
 
-        String amountStr = amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
-        String name = user.getUserName() != null && !user.getUserName().isBlank() ? user.getUserName().trim() : "Customer";
+        String amountStr = amount.setScale(2, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString();
+        String name = sanitizeHashField(user.getUserName() != null && !user.getUserName().isBlank() ? user.getUserName().trim() : "Customer");
         String firstname = name;
-        String email = user.getEmailId() != null && !user.getEmailId().isBlank() ? user.getEmailId().trim()
-                : (user.getMobileNumber() != null ? user.getMobileNumber() + "@dukaanlocker.com" : "customer@dukaanlocker.com");
+        String email = sanitizeHashField(user.getEmailId() != null && !user.getEmailId().isBlank() ? user.getEmailId().trim()
+                : (user.getMobileNumber() != null ? user.getMobileNumber() + "@dukaanlocker.com" : "customer@dukaanlocker.com"));
         String phone = user.getMobileNumber() != null && !user.getMobileNumber().isBlank() ? user.getMobileNumber().trim() : "9999999999";
-        String productInfo = "FSSAI Renewal Payment";
+        String productInfo = sanitizeHashField("FSSAI Renewal Payment");
 
         String callbackBase = externalUrl.endsWith("/") ? externalUrl : externalUrl + "/";
         String surl = callbackBase + "api/payments/" + txId + "/callback";
         String furl = callbackBase + "api/payments/" + txId + "/callback";
 
         String udf1 = String.valueOf(txId);
-        String udf2 = shop.getShopName() != null ? shop.getShopName() : "";
+        String udf2 = sanitizeHashField(shop.getShopName() != null ? shop.getShopName() : "");
         String udf3 = String.valueOf(shop.getId());
         String udf4 = "";
-        String udf5 = name;
+        String udf5 = sanitizeHashField(name);
 
         // Official Easebuzz hash: SHA512(key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5|salt)
         String hashInput = easbuzzMerchantKey + "|" + orderId + "|" + amountStr + "|"
@@ -589,8 +599,10 @@ public class PaymentService {
                 .append(URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8));
         }
 
-        log.debug("Easebuzz EasyCollect request: endpoint={} orderId={} amount={} hash={} env={}",
-                apiEndpoint, orderId, amountStr, hash, easbuzzEnvironment);
+        log.info("Easebuzz EasyCollect request: endpoint={} orderId={} amount={} hashInputWithoutSalt=[{}***] env={}",
+                apiEndpoint, orderId, amountStr,
+                hashInput.contains("|") ? hashInput.substring(0, hashInput.lastIndexOf('|')) : hashInput,
+                easbuzzEnvironment);
 
         HttpPost post = new HttpPost(apiEndpoint);
         post.setEntity(new StringEntity(body.toString(), ContentType.create("application/x-www-form-urlencoded", StandardCharsets.UTF_8)));
@@ -695,6 +707,12 @@ public class PaymentService {
         } catch (Exception e) {
             throw new RuntimeException("SHA-512 not available", e);
         }
+    }
+
+    /** Removes pipe characters that would break the Easebuzz hash delimiter. */
+    private static String sanitizeHashField(String value) {
+        if (value == null) return "";
+        return value.replace("|", "").trim();
     }
 
     private PaymentCreateResponse toResponse(PaymentTransaction tx, PaymentBreakdown breakdown, String kob) {
