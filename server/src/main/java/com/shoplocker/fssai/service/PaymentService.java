@@ -566,9 +566,9 @@ public class PaymentService {
         String udf4 = "";
         String udf5 = sanitizeHashField(name);
 
-        // Official Easebuzz hash: SHA512(key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5|salt)
+        // Official Easebuzz hash: SHA512(key|txnid|amount|productinfo|firstname|email|phone|udf1|udf2|udf3|udf4|udf5|salt)
         String hashInput = easbuzzMerchantKey + "|" + orderId + "|" + amountStr + "|"
-                + productInfo + "|" + firstname + "|" + email + "|"
+                + productInfo + "|" + firstname + "|" + email + "|" + phone + "|"
                 + udf1 + "|" + udf2 + "|" + udf3 + "|" + udf4 + "|" + udf5 + "|"
                 + easbuzzMerchantSalt;
         String hash = sha512(hashInput);
