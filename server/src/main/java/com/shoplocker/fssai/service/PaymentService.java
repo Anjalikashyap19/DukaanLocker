@@ -589,6 +589,9 @@ public class PaymentService {
                 .append(URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8));
         }
 
+        log.debug("Easebuzz EasyCollect request: endpoint={} orderId={} amount={} hash={} env={}",
+                apiEndpoint, orderId, amountStr, hash, easbuzzEnvironment);
+
         HttpPost post = new HttpPost(apiEndpoint);
         post.setEntity(new StringEntity(body.toString(), ContentType.create("application/x-www-form-urlencoded", StandardCharsets.UTF_8)));
         post.setHeader("User-Agent", "DukaanLocker/1.0");
@@ -598,6 +601,7 @@ public class PaymentService {
              org.apache.hc.core5.http.ClassicHttpResponse resp = client.execute(post)) {
             int code = resp.getCode();
             String responseBody = EntityUtils.toString(resp.getEntity());
+            log.debug("Easebuzz EasyCollect response: code={} body={}", code, responseBody);
             if (code != 200) {
                 throw new FssaiException("Easebuzz EasyCollect returned HTTP " + code + ": " + responseBody,
                         FailureCode.INTERNAL_ERROR);
