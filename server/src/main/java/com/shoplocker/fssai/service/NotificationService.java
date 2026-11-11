@@ -84,6 +84,7 @@ public class NotificationService {
         return switch (type) {
             case "MISSING_DOCUMENT" -> "MISSING_DOC";
             case "EXPIRING_SOON", "EXPIRED" -> "ALERT";
+            case "FSSAI_RETURN_REMINDER", "FSSAI_RETURN_FINE" -> "ALERT";
             default -> "ACTIVITY";
         };
     }

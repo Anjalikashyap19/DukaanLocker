@@ -210,4 +210,12 @@ interface ApiService {
 
     @GET("api/payments/my")
     suspend fun getMyPayments(): Response<List<PaymentStatusResponse>>
+
+    // ── FSSAI Compliance ──────────────────────────────────────────────────
+
+    @GET("api/fssa/compliance")
+    suspend fun getFssaCompliance(): Response<List<FssaComplianceStatus>>
+
+    @POST("api/fssa/{shopId}/mark-filed")
+    suspend fun markFssaReturnFiled(@Path("shopId") shopId: Long): Response<Map<String, String>>
 }

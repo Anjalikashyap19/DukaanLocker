@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import com.fasterxml.jackson.annotation.JsonBackReference;
 @Entity
@@ -121,6 +122,15 @@ public class Shop {
     public String getPincode() { return pincode; }
     public void setPincode(String pincode) { this.pincode = pincode; }
 
+    @Column(name = "is_fssai_applicable", nullable = false)
+    private Boolean isFssaiApplicable = false;
+
+    @Column(name = "fssa_return_filed", nullable = false)
+    private Boolean fssaReturnFiled = false;
+
+    @Column(name = "fssa_return_filed_date")
+    private LocalDate fssaReturnFiledDate;
+
     public Boolean getPrimary() { return primary; }
     public void setPrimary(Boolean primary) { this.primary = primary; }
 
@@ -132,4 +142,13 @@ public class Shop {
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public Boolean getIsFssaiApplicable() { return isFssaiApplicable; }
+    public void setIsFssaiApplicable(Boolean isFssaiApplicable) { this.isFssaiApplicable = isFssaiApplicable; }
+
+    public Boolean getFssaReturnFiled() { return fssaReturnFiled; }
+    public void setFssaReturnFiled(Boolean fssaReturnFiled) { this.fssaReturnFiled = fssaReturnFiled; }
+
+    public LocalDate getFssaReturnFiledDate() { return fssaReturnFiledDate; }
+    public void setFssaReturnFiledDate(LocalDate fssaReturnFiledDate) { this.fssaReturnFiledDate = fssaReturnFiledDate; }
 }

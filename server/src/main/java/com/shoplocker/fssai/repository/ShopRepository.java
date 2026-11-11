@@ -16,4 +16,6 @@ public interface ShopRepository extends JpaRepository<Shop, Long> {
     List<Shop> findByOwnerId(Long ownerId);
 
     Optional<Shop> findByIdAndOwnerId(Long id, Long ownerId);
+
+    List<Shop> findByIsFssaiApplicableTrueAndFssaReturnFiledFalse();
 }

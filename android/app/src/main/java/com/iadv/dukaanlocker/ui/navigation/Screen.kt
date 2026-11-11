@@ -18,6 +18,7 @@ sealed class Screen(val route: String) {
     data object Bin : Screen("bin")
     data object AppSettings : Screen("app_settings")
     data class RenewalPayment(val doc: DocumentItem) : Screen("renewal_payment")
+    data class FssaCompliance(val shopId: Long) : Screen("fssa_compliance")
 }
 
 /**

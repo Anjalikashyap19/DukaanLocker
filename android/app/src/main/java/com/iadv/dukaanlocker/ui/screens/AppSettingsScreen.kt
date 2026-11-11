@@ -745,13 +745,14 @@ private fun isStrongPassword(pw: String): Boolean {
 fun AppSettingsScreen(
     onBack: () -> Unit,
     isDarkTheme: Boolean,
+    isAppLockEnabled: Boolean,
     onAppLockChanged: (Boolean) -> Unit
 ) {
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
     val context = LocalContext.current
 
-    var appLockEnabled by remember { mutableStateOf(true) }
+    var appLockEnabled by remember(isAppLockEnabled) { mutableStateOf(isAppLockEnabled) }
     var showChangePassword by remember { mutableStateOf(false) }
     var showHelpSupport by remember { mutableStateOf(false) }
     var showAboutApp by remember { mutableStateOf(false) }

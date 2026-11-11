@@ -74,6 +74,8 @@ data class AppUiState(
     val binNotifications: List<NotificationItem> = emptyList(),
     val unreadNotificationCount: Long = 0,
     val isLoadingNotifications: Boolean = false,
+    val fssaCompliance: List<FssaComplianceStatus> = emptyList(),
+    val isLoadingFssaCompliance: Boolean = false,
     val showCustomDocDialog: Boolean = false,
     val customDocShopId: Long? = null,
     val selectedBusinessIdForDocs: String? = null,
@@ -260,6 +262,8 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
             "MISSING_DOCUMENT" -> openMissingDocumentRoute(pending.shopId, pending.documentType)
             "EXPIRING_SOON", "EXPIRED", "RENEWAL_REQUESTED", "RENEWAL_COMPLETED" ->
                 if (uiState.value.currentScreen != Screen.Notifications) navigateTo(Screen.Notifications)
+            "FSSAI_RETURN_REMINDER", "FSSAI_RETURN_FINE" ->
+                pending.shopId?.let { navigateTo(Screen.FssaCompliance(it)) }
         }
     }
 
@@ -1578,6 +1582,44 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
                 android.util.Log.e("Notifications", "Failed to load: ${e.message}")
             }
             updateState { it.copy(isLoadingNotifications = false) }
+        }
+    }
+
+    fun loadFssaCompliance() {
+        viewModelScope.launch {
+            updateState { it.copy(isLoadingFssaCompliance = true) }
+            try {
+                val response = api.getFssaCompliance()
+                if (response.isSuccessful) {
+                    val compliance = (response.body() ?: emptyList()).toList()
+                    updateState { it.copy(fssaCompliance = compliance) }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("FSSAI", "Failed to load compliance: ${e.message}")
+            }
+            updateState { it.copy(isLoadingFssaCompliance = false) }
+        }
+    }
+
+    fun markFssaReturnFiled(shopId: Long) {
+        viewModelScope.launch {
+            try {
+                val response = api.markFssaReturnFiled(shopId)
+                if (response.isSuccessful) {
+                    updateState { it.copy(
+                        fssaCompliance = it.fssaCompliance.map {
+                            if (it.shopId == shopId) it.copy(filed = true) else it
+                        }
+                    )}
+                    loadFssaCompliance()
+                    showToast("FSSAI return marked as filed", ToastType.SUCCESS)
+                } else {
+                    showToast("Failed to mark as filed: ${response.parseErrorMessage()}", ToastType.ERROR)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("FSSAI", "Failed to mark as filed: ${e.message}")
+                showToast("Network error: ${e.message}", ToastType.ERROR)
+            }
         }
     }
 

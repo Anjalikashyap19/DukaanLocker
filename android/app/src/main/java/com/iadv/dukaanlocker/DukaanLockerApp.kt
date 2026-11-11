@@ -642,11 +642,31 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                 }
                             }
 
+                        // ── FSSAI Compliance Screen ────────────────────────────────
+                        is Screen.FssaCompliance -> {
+                            val shopId = (state.currentScreen as? Screen.FssaCompliance)?.shopId ?: 0L
+                            val complianceList = state.fssaCompliance.filter { it.shopId == shopId }
+
+                            LaunchedEffect(Unit) {
+                                vm.loadFssaCompliance()
+                            }
+
+                            FssaComplianceScreen(
+                                onBack = { vm.goBack() },
+                                complianceList = complianceList,
+                                isLoading = state.isLoadingFssaCompliance,
+                                onMarkFiled = { id ->
+                                    vm.markFssaReturnFiled(id)
+                                }
+                            )
+                        }
+
                         // ── AppSettings Screen ────────────────────────────────────
                         is Screen.AppSettings -> {
                             AppSettingsScreen(
                                 onBack = { vm.goBack() },
                                 isDarkTheme = state.isDarkTheme,
+                                isAppLockEnabled = state.appLockEnabled,
                                 onAppLockChanged = { enabled ->
                                     vm.setAppLock(enabled)
                                 }

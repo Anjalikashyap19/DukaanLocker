@@ -2,6 +2,7 @@ package com.shoplocker.fssai.config;
 
 import com.shoplocker.fssai.scheduler.DocumentExpiryScheduler;
 import com.shoplocker.fssai.scheduler.DocumentMissingScheduler;
+import com.shoplocker.fssai.scheduler.FssaAnnualReturnScheduler;
 import com.shoplocker.fssai.scheduler.NoBusinessScheduler;
 import com.shoplocker.fssai.scheduler.RandomTimeTrigger;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,6 +16,7 @@ public class SchedulingConfig implements SchedulingConfigurer {
 
     private final DocumentExpiryScheduler documentExpiryScheduler;
     private final DocumentMissingScheduler documentMissingScheduler;
+    private final FssaAnnualReturnScheduler fssaAnnualReturnScheduler;
     private final NoBusinessScheduler noBusinessScheduler;
     private final RandomTimeTrigger randomTimeTrigger;
 
@@ -41,12 +43,17 @@ public class SchedulingConfig implements SchedulingConfigurer {
     @Value("${notification.alert.catchup-cron:0 */30 * * * *}")
     private String catchupCron;
 
+    @Value("${notification.fssa.cron:0 9 * * *}")
+    private String fssaCron;
+
     public SchedulingConfig(DocumentExpiryScheduler documentExpiryScheduler,
                             DocumentMissingScheduler documentMissingScheduler,
+                            FssaAnnualReturnScheduler fssaAnnualReturnScheduler,
                             NoBusinessScheduler noBusinessScheduler,
                             RandomTimeTrigger randomTimeTrigger) {
         this.documentExpiryScheduler = documentExpiryScheduler;
         this.documentMissingScheduler = documentMissingScheduler;
+        this.fssaAnnualReturnScheduler = fssaAnnualReturnScheduler;
         this.noBusinessScheduler = noBusinessScheduler;
         this.randomTimeTrigger = randomTimeTrigger;
     }
@@ -59,6 +66,8 @@ public class SchedulingConfig implements SchedulingConfigurer {
                 new CronTrigger(catchupCron));
         registrar.addTriggerTask(documentMissingScheduler::checkMissingDocuments,
                 new CronTrigger(missingDocCron));
+        registrar.addTriggerTask(() -> fssaAnnualReturnScheduler.checkFssaAnnualReturn(),
+                new CronTrigger(fssaCron));
         registrar.addTriggerTask(noBusinessScheduler::checkUsersWithoutBusiness, randomTimeTrigger);
     }
 }

@@ -462,6 +462,22 @@ data class UnreadCountResponse(
     @SerializedName("count") val count: Long
 )
 
+// ── FSSAI Compliance ───────────────────────────────────────────────────────
+
+data class FssaComplianceStatus(
+    @SerializedName("shopId") val shopId: Long,
+    @SerializedName("shopName") val shopName: String,
+    @SerializedName("branchName") val branchName: String?,
+    @SerializedName("filed") val filed: Boolean,
+    @SerializedName("filedDate") val filedDate: String?,
+    @SerializedName("overdueDays") val overdueDays: Long,
+    @SerializedName("fine") val fine: Int,
+    @SerializedName("serviceCharge") val serviceCharge: Int,
+    @SerializedName("totalPayable") val totalPayable: Int,
+    @SerializedName("status") val status: String,
+    @SerializedName("deadline") val deadline: String?
+)
+
 data class RenewalOrderItem(
     @SerializedName("id") val id: Long,
     @SerializedName("shopId") val shopId: Long,
