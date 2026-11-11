@@ -212,9 +212,10 @@ fun DukaanLockerApp(
                     Box(modifier = Modifier.fillMaxWidth().statusBarsPadding().background(statusBarBg))
 
                     Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        BackHandler(enabled = state.viewDocumentId != null && vm.renewalPaymentDoc == null) {
-                            vm.closeDocumentViewer()
-                        }
+                        if (state.isAppUnlocked) {
+                            BackHandler(enabled = state.viewDocumentId != null && vm.renewalPaymentDoc == null) {
+                                vm.closeDocumentViewer()
+                            }
 BackHandler(
     enabled = state.currentScreen != Screen.Onboarding && state.currentScreen != Screen.Login && state.viewDocumentId == null && vm.renewalPaymentDoc == null
             && !(state.navigationHistory.isEmpty() && (state.currentScreen is Screen.OwnerHome || state.currentScreen is Screen.ManagerHome) && state.selectedBottomTab == BottomTab.Home)
@@ -771,10 +772,12 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                             CertificateViewerDialog(doc = viewDoc, business = vm.findBusinessFor(viewDoc) ?: BusinessProfile(name = state.currentUserName), onDismiss = { vm.dismissCertDialog() })
                         }
 
+                        } // close if (state.isAppUnlocked)
+
                         // ── App Unlock Failed Dialog ──
                         if (state.showAppUnlockFailedDialog) {
                             AlertDialog(
-                                onDismissRequest = { vm.updateState { it.copy(showAppUnlockFailedDialog = false) } },
+                                onDismissRequest = { vm.updateState { it.copy(showAppUnlockFailedDialog = false, showAppUnlockPrompt = true) } },
                                 containerColor = if (state.isDarkTheme) Color(0xFF1E293B) else Color.White,
                                 shape = RoundedCornerShape(20.dp),
                                 title = {
@@ -812,7 +815,7 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                         }
 
                         // ── Renewal Requested Dialog ──
-                        if (state.renewalSuccessOrder != null) {
+                        if (state.isAppUnlocked && state.renewalSuccessOrder != null) {
                             val order = state.renewalSuccessOrder!!
                             AlertDialog(
                                 onDismissRequest = { vm.dismissRenewalSuccess() },
@@ -861,15 +864,17 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                     // ── Toast Overlay (bottom notifications) ──
                     // While the fetch dialog (its own window) is open the toast is rendered
                     // inside that dialog instead, so suppress it here to avoid a dimmed duplicate.
-                    ToastOverlay(
-                        toasts = if (vm.fetchTargetDoc != null) emptyList() else state.toastQueue,
-                        onDismiss = { vm.dismissToast(it) }
-                    )
+                    if (state.isAppUnlocked) {
+                        ToastOverlay(
+                            toasts = if (vm.fetchTargetDoc != null) emptyList() else state.toastQueue,
+                            onDismiss = { vm.dismissToast(it) }
+                        )
+                    }
 
                     // ── Bottom Navigation Bar ──
                     // Hidden while the renewal payment overlay is active so it doesn't
                     // paint on top of the payment screen.
-                    if (state.isLoggedIn && state.viewDocumentId == null && vm.renewalPaymentDoc == null
+                    if (state.isAppUnlocked && state.isLoggedIn && state.viewDocumentId == null && vm.renewalPaymentDoc == null
                             && (state.currentScreen is Screen.OwnerHome || state.currentScreen is Screen.ManagerHome)) {
                         BottomNavBar(
                             currentTab = state.selectedBottomTab,

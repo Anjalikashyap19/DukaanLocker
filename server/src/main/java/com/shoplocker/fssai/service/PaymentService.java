@@ -646,10 +646,10 @@ public class PaymentService {
 
         var user = tx.getUser();
         var shop = tx.getShop();
-        String name = user != null && user.getUserName() != null ? user.getUserName().trim() : "";
+        String name = user != null && user.getUserName() != null ? user.getUserName().trim() : "Customer";
         String email = user != null && user.getEmailId() != null ? user.getEmailId().trim()
-                : (user != null && user.getMobileNumber() != null ? user.getMobileNumber().trim() + "@dukaanlocker.com" : "");
-        String phone = user != null && user.getMobileNumber() != null ? user.getMobileNumber().trim() : "";
+                : (user != null && user.getMobileNumber() != null ? user.getMobileNumber().trim() + "@dukaanlocker.com" : "customer@dukaanlocker.com");
+        String phone = user != null && user.getMobileNumber() != null ? user.getMobileNumber().trim() : "9999999999";
         String productInfo = "FSSAI Renewal Payment";
         String amountStr = tx.getTotalAmount() != null
                 ? tx.getTotalAmount().setScale(2, RoundingMode.HALF_UP).toPlainString() : "0.00";
