@@ -283,6 +283,43 @@ public class FssaiVerificationService {
     }
 
     /**
+     * Looks up <b>only</b> the Kind of Business (KOB) for a license number.
+     *
+     * <p>Used when a document is uploaded without the app supplying a trusted
+     * KOB: the backend re-fetches it from the licence lookup API. Like
+     * {@link #fetchExpiryDateOnly(String)} this is deliberately narrow - it
+     * generates no certificate, writes nothing to storage and never throws; a
+     * failed lookup simply means the shop falls back to its category when
+     * deciding annual-return applicability.</p>
+     *
+     * @return the KOB string (for example {@code "Trade/Retail - Retailer"}),
+     *         or {@code null} when it cannot be determined
+     */
+    public String fetchKindOfBusiness(String licenseNumber) {
+        if (licenseNumber == null || licenseNumber.isBlank()) {
+            return null;
+        }
+        String normalized = licenseNumber.trim();
+        try {
+            String licenseBody = callLicenseApi(normalized);
+            if (licenseBody == null || licenseBody.isBlank()) {
+                log.info("No KOB data returned for FSSAI license {}", normalized);
+                return null;
+            }
+            JsonNode root = objectMapper.readTree(licenseBody);
+            String kob = text(root.path("details"), "kobname");
+            if (isBlank(kob)) kob = text(root.path("license"), "kobname");
+            if (isBlank(kob)) kob = text(root, "kobname");
+            if (isBlank(kob)) kob = text(root.path("details"), "kindOfBusiness");
+            log.info("FSSAI KOB lookup for license {} -> {}", normalized, kob);
+            return kob;
+        } catch (Exception e) {
+            log.warn("FSSAI KOB lookup failed for license {}: {}", normalized, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
      * Pulls the expiry date out of a raw supplementary-API ({@code check-details.php})
      * payload. Package-private so it can be unit tested against real captured
      * payloads without any network access.

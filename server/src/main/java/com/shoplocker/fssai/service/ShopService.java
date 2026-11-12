@@ -14,6 +14,7 @@ import com.shoplocker.fssai.exception.FssaiException;
 import com.shoplocker.fssai.repository.DocumentRepository;
 import com.shoplocker.fssai.repository.ShopRepository;
 import com.shoplocker.fssai.repository.UserRepository;
+import com.shoplocker.fssai.util.FssaReturnEligibility;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -367,6 +368,18 @@ public class ShopService {
                                                       java.time.LocalDateTime issueDate,
                                                       java.time.LocalDateTime expiryDate,
                                                       String contentHash) {
+        return uploadOrReuploadDocument(shopId, documentType, fileName, fileUrl, documentNumber,
+                issueDate, expiryDate, contentHash, null);
+    }
+
+    @Transactional
+    public DocumentResponse uploadOrReuploadDocument(Long shopId, DocumentType documentType,
+                                                      String fileName, String fileUrl,
+                                                      String documentNumber,
+                                                      java.time.LocalDateTime issueDate,
+                                                      java.time.LocalDateTime expiryDate,
+                                                      String contentHash,
+                                                      String kindOfBusiness) {
         Shop shop = getShopById(shopId);
 
         Optional<Document> existing = documentRepository.findByShopIdAndDocumentType(shopId, documentType);
@@ -386,6 +399,9 @@ public class ShopService {
         doc.setFileUrl(fileUrl);
         doc.setDocumentNumber(documentNumber);
         doc.setContentHash(contentHash);
+        if (kindOfBusiness != null && !kindOfBusiness.isBlank()) {
+            doc.setKindOfBusiness(kindOfBusiness.trim());
+        }
         doc.setIssueDate(issueDate);
         doc.setExpiryDate(expiryDate);
         doc.setStatus(statusForUploadedDoc(expiryDate));
@@ -396,6 +412,16 @@ public class ShopService {
         doc.setUpdatedAt(java.time.LocalDateTime.now());
 
         Document saved = documentRepository.save(doc);
+
+        // An FSSAI document determines whether the shop must file the annual
+        // return. Re-derive it on every upload/re-upload from the KOB, falling
+        // back to the shop category when the KOB is unknown.
+        if (documentType == DocumentType.FSSAI_FOOD_LICENSE) {
+            shop.setFssaReturnApplicable(
+                    FssaReturnEligibility.isApplicable(saved.getKindOfBusiness(), shop.getCategory()));
+            shopRepository.save(shop);
+        }
+
         return toDocumentResponse(saved);
     }
 

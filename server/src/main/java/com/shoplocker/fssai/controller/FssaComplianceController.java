@@ -49,7 +49,7 @@ public class FssaComplianceController {
 
         List<ComplianceStatus> result = new ArrayList<>();
         for (Shop shop : shops) {
-            if (!Boolean.TRUE.equals(shop.getIsFssaiApplicable())) continue;
+            if (!Boolean.TRUE.equals(shop.getFssaReturnApplicable())) continue;
 
             boolean filed = Boolean.TRUE.equals(shop.getFssaReturnFiled());
             long overdueDays = 0;
@@ -99,9 +99,9 @@ public class FssaComplianceController {
         Shop shop = shopRepository.findByIdAndOwnerId(shopId, user.getId())
                 .orElseThrow(() -> new RuntimeException("Shop not found"));
 
-        if (!Boolean.TRUE.equals(shop.getIsFssaiApplicable())) {
+        if (!Boolean.TRUE.equals(shop.getFssaReturnApplicable())) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", "FSSAI is not applicable for this shop"));
+                    .body(Map.of("error", "FSSAI annual return is not applicable for this shop"));
         }
 
         shop.setFssaReturnFiled(true);

@@ -610,7 +610,6 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
         financialYear: String?,
         annualTurnover: Double,
         employeeCount: Int?,
-        kindOfBusiness: String?,
         foodCategory: String?,
         notes: String?
     ) {
@@ -625,7 +624,7 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
                         financialYear = financialYear,
                         annualTurnover = annualTurnover,
                         employeeCount = employeeCount,
-                        kindOfBusiness = kindOfBusiness,
+                        kindOfBusiness = null,
                         foodCategory = foodCategory,
                         notes = notes
                     )

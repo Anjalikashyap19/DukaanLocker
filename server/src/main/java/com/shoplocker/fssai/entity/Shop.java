@@ -131,6 +131,15 @@ public class Shop {
     @Column(name = "fssa_return_filed_date")
     private LocalDate fssaReturnFiledDate;
 
+    /**
+     * True only for FSSAI KOBs that must file the annual return (Form D-1):
+     * Manufacturer (incl. Repacker/Relabeller), Importer and
+     * Manufacturer-Exporter. Maintained whenever the FSSAI document / KOB is
+     * created or refreshed; never set by the client.
+     */
+    @Column(name = "fssa_return_applicable", nullable = false)
+    private Boolean fssaReturnApplicable = false;
+
     public Boolean getPrimary() { return primary; }
     public void setPrimary(Boolean primary) { this.primary = primary; }
 
@@ -151,4 +160,7 @@ public class Shop {
 
     public LocalDate getFssaReturnFiledDate() { return fssaReturnFiledDate; }
     public void setFssaReturnFiledDate(LocalDate fssaReturnFiledDate) { this.fssaReturnFiledDate = fssaReturnFiledDate; }
+
+    public Boolean getFssaReturnApplicable() { return fssaReturnApplicable; }
+    public void setFssaReturnApplicable(Boolean fssaReturnApplicable) { this.fssaReturnApplicable = fssaReturnApplicable; }
 }

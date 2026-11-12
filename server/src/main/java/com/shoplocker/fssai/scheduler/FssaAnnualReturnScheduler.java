@@ -38,7 +38,7 @@ public class FssaAnnualReturnScheduler {
         LocalDate today = LocalDate.now(IST);
         LocalDate filingDeadline = LocalDate.of(today.getYear(), 5, 31);
 
-        List<Shop> shops = shopRepository.findByIsFssaiApplicableTrueAndFssaReturnFiledFalse();
+        List<Shop> shops = shopRepository.findByFssaReturnApplicableTrueAndFssaReturnFiledFalse();
         int notificationsSent = 0;
 
         for (Shop shop : shops) {
@@ -65,7 +65,7 @@ public class FssaAnnualReturnScheduler {
 
             int daysLeft = (int) ChronoUnit.DAYS.between(today, filingDeadline) + 1;
             String title = "FSSAI Annual Return Filing Reminder";
-            String body = String.format("Your FSSAI annual return for %s is due in %d days. Filing window closes on 31st May.",
+            String body = String.format("Your FSSAI manufacturing licence annual return for %s is due in %d days. Filing window closes on 31st May.",
                     shop.getShopName(), daysLeft);
 
             return notificationService.sendPushAndCreateNotification(
@@ -83,7 +83,7 @@ public class FssaAnnualReturnScheduler {
             String dedupeKey = "fssa_fine:" + shop.getId() + ":" + today.toString();
 
             String title = "FSSAI Annual Return - Fine Started";
-            String body = String.format("FSSAI annual return for %s is %d day(s) overdue. Fine: ₹%d/day = ₹%d + Service charge ₹2,000 = Total ₹%d.",
+            String body = String.format("FSSAI annual return for the manufacturing licence of %s is %d day(s) overdue. Fine: ₹%d/day = ₹%d + Service charge ₹2,000 = Total ₹%d.",
                     shop.getShopName(), overdueDays, FINE_PER_DAY, fine, totalPayable);
 
             return notificationService.sendPushAndCreateNotification(

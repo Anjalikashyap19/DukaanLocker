@@ -223,12 +223,19 @@ public class ShopController {
         // so OCR legitimately finds nothing. Without a date the whole alert
         // ladder never starts for a licence that really does expire, so fall
         // back to the upstream lookup keyed by the licence number on the file.
-        if (expiryDate == null && docType == DocumentType.FSSAI_FOOD_LICENSE) {
-            String licenseNumber = resolveLicenseNumber(documentNumber, ocrText);
-            if (licenseNumber != null) {
-                expiryDate = fssaiVerificationService.fetchExpiryDateOnly(licenseNumber).orElse(null);
+        String kindOfBusiness = null;
+        String fssaiLicenseNumber = null;
+        if (docType == DocumentType.FSSAI_FOOD_LICENSE) {
+            fssaiLicenseNumber = resolveLicenseNumber(documentNumber, ocrText);
+            if (fssaiLicenseNumber != null) {
+                if (expiryDate == null) {
+                    expiryDate = fssaiVerificationService.fetchExpiryDateOnly(fssaiLicenseNumber).orElse(null);
+                }
+                // Re-fetch the KOB from the licence API rather than trusting a
+                // client-supplied value; it decides annual-return applicability.
+                kindOfBusiness = fssaiVerificationService.fetchKindOfBusiness(fssaiLicenseNumber);
             } else {
-                log.info("No FSSAI licence number found for shop {} upload; expiry lookup skipped", shopId);
+                log.info("No FSSAI licence number found for shop {} upload; FSSAI lookups skipped", shopId);
             }
         }
 
@@ -236,7 +243,7 @@ public class ShopController {
                 shopId, docType,
                 file.getOriginalFilename(), fileUrl,
                 documentNumber, issueDate, expiryDate,
-                contentHash);
+                contentHash, kindOfBusiness);
 
         return ResponseEntity.ok(response);
     }

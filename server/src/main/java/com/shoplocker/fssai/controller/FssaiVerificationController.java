@@ -93,7 +93,8 @@ public class FssaiVerificationController {
                 verification.getLicenseNumber(),
                 null,
                 expiryDate,
-                null
+                null,
+                verification.getKindOfBusiness()
         );
 
         return ResponseEntity.ok(verification);

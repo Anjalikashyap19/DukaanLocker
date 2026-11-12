@@ -37,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.shoplocker.fssai.util.FssaReturnEligibility;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -324,6 +325,12 @@ public class PaymentService {
             // Determine license tier from stored category / document type
             String licenseCategory = doc.getDocumentType() != null ? doc.getDocumentType().name() : "FSSAI_FOOD_LICENSE";
 
+            // A verified KOB decides whether this shop files the annual return.
+            // Refresh the flag in case the KOB was only just recovered above.
+            shop.setFssaReturnApplicable(
+                    FssaReturnEligibility.isApplicable(kob, shop.getCategory()));
+            shopRepository.save(shop);
+
             // Calculate days expired for penalty calculation
             long daysExpired = 0;
             if (doc.getExpiryDate() != null && doc.getExpiryDate().toLocalDate().isBefore(LocalDate.now())) {
@@ -418,8 +425,19 @@ public class PaymentService {
             Shop shop = shopRepository.findById(shopId)
                     .orElseThrow(() -> new FssaiException("Shop not found", FailureCode.SHOP_NOT_FOUND));
 
-            if (!Boolean.TRUE.equals(shop.getIsFssaiApplicable())) {
-                throw new FssaiException("FSSAI is not applicable for this shop",
+            Optional<Document> fssaiDoc = documentRepository
+                    .findByShopIdAndDocumentType(shopId, DocumentType.FSSAI_FOOD_LICENSE);
+            String kob = fssaiDoc.map(Document::getKindOfBusiness).orElse(null);
+
+            // Re-derive applicability from the stored KOB (falling back to the
+            // shop category) so a stale flag can never let a non-manufacturing
+            // shop pay for an annual return.
+            shop.setFssaReturnApplicable(
+                    FssaReturnEligibility.isApplicable(kob, shop.getCategory()));
+            shopRepository.save(shop);
+
+            if (!Boolean.TRUE.equals(shop.getFssaReturnApplicable())) {
+                throw new FssaiException("FSSAI annual return is not applicable for this shop",
                         FailureCode.INVALID_REQUEST);
             }
             if (Boolean.TRUE.equals(shop.getFssaReturnFiled())) {
@@ -440,10 +458,7 @@ public class PaymentService {
             BigDecimal serviceCharge = FSSAI_RETURN_SERVICE_CHARGE;
             BigDecimal total = fine.add(serviceCharge);
 
-            Long documentId = documentRepository
-                    .findByShopIdAndDocumentType(shopId, DocumentType.FSSAI_FOOD_LICENSE)
-                    .map(Document::getId)
-                    .orElse(null);
+            Long documentId = fssaiDoc.map(Document::getId).orElse(null);
 
             PaymentTransaction tx = new PaymentTransaction(
                     user, shop, DocumentType.FSSAI_FOOD_LICENSE, documentId,
@@ -451,7 +466,7 @@ public class PaymentService {
                     BigDecimal.ZERO, BigDecimal.ZERO, total, "INR"
             );
             tx.setPurpose(PaymentTransaction.PURPOSE_FSSAI_RETURN_FILING);
-            tx.setFilingDetails(buildFilingDetails(request, financialYear));
+            tx.setFilingDetails(buildFilingDetails(request, financialYear, kob));
             tx = paymentTransactionRepository.save(tx);
 
             String orderId = "DLAR" + tx.getId() + System.currentTimeMillis();
@@ -883,15 +898,20 @@ public class PaymentService {
     }
 
     /** Compact, human-readable summary of the details the team needs to file. */
-    private static String buildFilingDetails(FssaReturnFilingRequest request, String financialYear) {
+    private static String buildFilingDetails(FssaReturnFilingRequest request, String financialYear,
+                                             String storedKindOfBusiness) {
         StringBuilder sb = new StringBuilder("FY: ").append(financialYear);
         sb.append("; Turnover: ₹").append(request.getAnnualTurnover() != null
                 ? request.getAnnualTurnover().stripTrailingZeros().toPlainString() : "—");
         if (request.getEmployeeCount() != null) {
             sb.append("; Employees: ").append(request.getEmployeeCount());
         }
-        if (request.getKindOfBusiness() != null && !request.getKindOfBusiness().isBlank()) {
-            sb.append("; KOB: ").append(sanitizeHashField(request.getKindOfBusiness()));
+        // KOB comes from the verified FSSAI document, not the form.
+        String kob = storedKindOfBusiness != null && !storedKindOfBusiness.isBlank()
+                ? storedKindOfBusiness
+                : request.getKindOfBusiness();
+        if (kob != null && !kob.isBlank()) {
+            sb.append("; KOB: ").append(sanitizeHashField(kob));
         }
         if (request.getFoodCategory() != null && !request.getFoodCategory().isBlank()) {
             sb.append("; Category: ").append(sanitizeHashField(request.getFoodCategory()));

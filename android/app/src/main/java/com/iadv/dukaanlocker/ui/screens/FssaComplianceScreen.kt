@@ -175,11 +175,11 @@ fun FssaComplianceScreen(
         FilingDetailsDialog(
             shopName = shopName,
             onDismiss = { showFilingForm = false },
-            onSubmit = { fy, turnover, employees, kob, category, notes ->
+            onSubmit = { fy, turnover, employees, category, notes ->
                 val shopId = filingShopId
                 showFilingForm = false
                 if (shopId != null) {
-                    vm.createFssaReturnPayment(shopId, fy, turnover, employees, kob, category, notes)
+                    vm.createFssaReturnPayment(shopId, fy, turnover, employees, category, notes)
                 }
             }
         )
@@ -196,13 +196,12 @@ private fun defaultFinancialYear(): String {
 private fun FilingDetailsDialog(
     shopName: String,
     onDismiss: () -> Unit,
-    onSubmit: (String, Double, Int?, String?, String?, String?) -> Unit
+    onSubmit: (String, Double, Int?, String?, String?) -> Unit
 ) {
     val colors = LocalAppColors.current
     var financialYear by remember { mutableStateOf(defaultFinancialYear()) }
     var turnover by remember { mutableStateOf("") }
     var employees by remember { mutableStateOf("") }
-    var kindOfBusiness by remember { mutableStateOf("") }
     var foodCategory by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -247,13 +246,6 @@ private fun FilingDetailsDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
-                    value = kindOfBusiness,
-                    onValueChange = { kindOfBusiness = it },
-                    label = { Text("Kind of business") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
                     value = foodCategory,
                     onValueChange = { foodCategory = it },
                     label = { Text("Food category") },
@@ -283,7 +275,6 @@ private fun FilingDetailsDialog(
                     financialYear.ifBlank { defaultFinancialYear() },
                     amount,
                     employees.toIntOrNull(),
-                    kindOfBusiness.ifBlank { null },
                     foodCategory.ifBlank { null },
                     notes.ifBlank { null }
                 )
