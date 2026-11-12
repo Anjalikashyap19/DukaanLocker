@@ -1,11 +1,14 @@
 package com.shoplocker.fssai.controller;
 
+import com.shoplocker.fssai.dto.FssaReturnFilingRequest;
 import com.shoplocker.fssai.dto.PaymentBreakdown;
 import com.shoplocker.fssai.dto.PaymentCreateRequest;
 import com.shoplocker.fssai.dto.PaymentCreateResponse;
 import com.shoplocker.fssai.dto.PaymentStatusResponse;
 import com.shoplocker.fssai.entity.PaymentTransaction;
 import com.shoplocker.fssai.entity.User;
+import com.shoplocker.fssai.exception.FailureCode;
+import com.shoplocker.fssai.exception.FssaiException;
 import com.shoplocker.fssai.service.PaymentService;
 import com.shoplocker.fssai.service.ShopAccessService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -49,6 +52,30 @@ public class PaymentController {
         PaymentCreateResponse response = paymentService.createPayment(
                 user, request.getShopId(), request.getDocumentType(), request.getDurationYears(), request.getKob());
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Create a payment for DukaanLocker to file the FSSAI annual return for a
+     * shop. Amount = late fee (₹100/day after 31 May) + ₹2,000 service charge.
+     * The filing details (turnover etc.) are captured with the payment.
+     */
+    @Operation(summary = "Create FSSAI annual return filing payment",
+            description = "Returns an Easebuzz access key for the calculated late fee + service charge; " +
+                          "the DukaanLocker team files the return manually after payment.")
+    @PostMapping("/fssa-return")
+    public ResponseEntity<PaymentCreateResponse> fssaReturn(
+            @RequestBody FssaReturnFilingRequest request,
+            Authentication authentication) {
+        if (request == null || request.getShopId() == null) {
+            throw new FssaiException("shopId is required", FailureCode.INVALID_REQUEST);
+        }
+        if (request.getAnnualTurnover() == null
+                || request.getAnnualTurnover().signum() < 0) {
+            throw new FssaiException("annualTurnover is required and must be zero or more",
+                    FailureCode.INVALID_REQUEST);
+        }
+        User user = shopAccessService.getAuthenticatedUser(authentication);
+        return ResponseEntity.ok(paymentService.createFssaReturnFilingPayment(user, request));
     }
 
     /**

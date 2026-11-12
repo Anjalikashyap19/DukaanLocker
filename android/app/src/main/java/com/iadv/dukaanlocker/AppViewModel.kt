@@ -114,6 +114,14 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
     private var _renewalPaymentSuccess = mutableStateOf(false)
     val renewalPaymentSuccess: Boolean by _renewalPaymentSuccess
 
+    // FSSAI annual-return filing payment state (separate from document renewal)
+    private var _fssaReturnPaymentResult = mutableStateOf<PaymentCreateResponse?>(null)
+    val fssaReturnPaymentResult: PaymentCreateResponse? by _fssaReturnPaymentResult
+    private var _fssaReturnPaymentLoading = mutableStateOf(false)
+    val fssaReturnPaymentLoading: Boolean by _fssaReturnPaymentLoading
+    private var _fssaReturnPaymentError = mutableStateOf<String?>(null)
+    val fssaReturnPaymentError: String? by _fssaReturnPaymentError
+
     /** KOB resolved by the backend for the current pending renewal payment (display only). */
     val renewalKobText: String?
         get() = paymentCreateResult?.kob
@@ -594,6 +602,73 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
     fun resetRenewalPayment() {
         _paymentCreateResult.value = null
         _paymentError.value = null
+    }
+
+    /** Start an FSSAI annual-return filing payment (late fee + service charge). */
+    fun createFssaReturnPayment(
+        shopId: Long,
+        financialYear: String?,
+        annualTurnover: Double,
+        employeeCount: Int?,
+        kindOfBusiness: String?,
+        foodCategory: String?,
+        notes: String?
+    ) {
+        viewModelScope.launch {
+            _fssaReturnPaymentLoading.value = true
+            _fssaReturnPaymentError.value = null
+            _fssaReturnPaymentResult.value = null
+            try {
+                val response = api.createFssaReturnPayment(
+                    FssaReturnPaymentRequest(
+                        shopId = shopId,
+                        financialYear = financialYear,
+                        annualTurnover = annualTurnover,
+                        employeeCount = employeeCount,
+                        kindOfBusiness = kindOfBusiness,
+                        foodCategory = foodCategory,
+                        notes = notes
+                    )
+                )
+                val result = response.body()
+                if (response.isSuccessful && result != null) {
+                    _fssaReturnPaymentResult.value = result
+                } else if (response.isSuccessful) {
+                    _fssaReturnPaymentError.value = "Failed to create payment"
+                } else {
+                    _fssaReturnPaymentError.value = response.parseErrorMessage()
+                }
+            } catch (e: Exception) {
+                _fssaReturnPaymentError.value = "Network error: ${e.message}"
+            }
+            _fssaReturnPaymentLoading.value = false
+        }
+    }
+
+    /** Verify an FSSAI annual-return payment with the backend (never trust the SDK alone). */
+    fun verifyFssaReturnPayment(paymentId: Long) {
+        viewModelScope.launch {
+            try {
+                val response = api.getPayment(paymentId)
+                val status = response.body()?.status
+                if (response.isSuccessful && status == "COMPLETED") {
+                    _fssaReturnPaymentResult.value = null
+                    _fssaReturnPaymentError.value = null
+                    loadFssaCompliance()
+                    showToast("Payment received. Our team will file your FSSAI return.", ToastType.SUCCESS)
+                } else {
+                    _fssaReturnPaymentError.value =
+                        "Payment not completed yet: ${status ?: response.parseErrorMessage()}"
+                }
+            } catch (e: Exception) {
+                _fssaReturnPaymentError.value = "Network error verifying payment: ${e.message}"
+            }
+        }
+    }
+
+    fun resetFssaReturnPayment() {
+        _fssaReturnPaymentResult.value = null
+        _fssaReturnPaymentError.value = null
     }
 
     fun findBusinessFor(doc: DocumentItem): BusinessProfile? {

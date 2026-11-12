@@ -19,6 +19,11 @@ public class PaymentTransaction {
     public static final String STATUS_COMPLETED = "COMPLETED";
     public static final String STATUS_FAILED = "FAILED";
 
+    /** Payment for renewing a document (default, legacy behaviour). */
+    public static final String PURPOSE_RENEWAL = "RENEWAL";
+    /** Payment for DukaanLocker to file the FSSAI annual return on the user's behalf. */
+    public static final String PURPOSE_FSSAI_RETURN_FILING = "FSSAI_RETURN_FILING";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -85,6 +90,14 @@ public class PaymentTransaction {
     @Column(name = "renewal_order_id")
     private Long renewalOrderId;
 
+    /** RENEWAL (document renewal) or FSSAI_RETURN_FILING (annual return service). */
+    @Column(nullable = false, length = 40)
+    private String purpose = PURPOSE_RENEWAL;
+
+    /** Human-readable filing details captured for an annual-return filing. */
+    @Column(name = "filing_details", columnDefinition = "TEXT")
+    private String filingDetails;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -123,6 +136,7 @@ public class PaymentTransaction {
         if (currency == null) currency = "INR";
         if (gateway == null) gateway = "easbuzz";
         if (penalty == null) penalty = BigDecimal.ZERO;
+        if (purpose == null || purpose.isBlank()) purpose = PURPOSE_RENEWAL;
     }
 
     @PreUpdate
@@ -189,6 +203,12 @@ public class PaymentTransaction {
 
     public Long getRenewalOrderId() { return renewalOrderId; }
     public void setRenewalOrderId(Long renewalOrderId) { this.renewalOrderId = renewalOrderId; }
+
+    public String getPurpose() { return purpose; }
+    public void setPurpose(String purpose) { this.purpose = purpose; }
+
+    public String getFilingDetails() { return filingDetails; }
+    public void setFilingDetails(String filingDetails) { this.filingDetails = filingDetails; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

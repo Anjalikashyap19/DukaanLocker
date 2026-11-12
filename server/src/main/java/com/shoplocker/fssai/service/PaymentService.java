@@ -42,6 +42,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
@@ -68,6 +69,10 @@ public class PaymentService {
     private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
 
     private static final BigDecimal GST_RATE = new BigDecimal("0.18");
+
+    /** FSSAI annual return late fee and DukaanLocker filing service charge. */
+    private static final int FSSAI_RETURN_FINE_PER_DAY = 100;
+    private static final BigDecimal FSSAI_RETURN_SERVICE_CHARGE = new BigDecimal("2000");
 
     /** Basic-tier service charge by duration (1-5 years). */
     private static final Map<Integer, BigDecimal> BASIC_SERVICE_CHARGE = Map.of(
@@ -398,6 +403,90 @@ public class PaymentService {
     }
 
     /**
+     * Create a payment for DukaanLocker to file the FSSAI annual return on the
+     * user's behalf. The amount is the late fee (₹100/day after 31 May) plus the
+     * ₹2,000 filing service charge. Returns an Easebuzz SDK access key.
+     *
+     * <p>On payment completion the team gets a renewal-order work item (see
+     * {@link #completePayment}) and files the return manually.</p>
+     */
+    @Transactional
+    public PaymentCreateResponse createFssaReturnFilingPayment(User user, FssaReturnFilingRequest request) {
+        Long shopId = request.getShopId();
+        try {
+            shopAccessService.validateShopAccess(user, shopId);
+            Shop shop = shopRepository.findById(shopId)
+                    .orElseThrow(() -> new FssaiException("Shop not found", FailureCode.SHOP_NOT_FOUND));
+
+            if (!Boolean.TRUE.equals(shop.getIsFssaiApplicable())) {
+                throw new FssaiException("FSSAI is not applicable for this shop",
+                        FailureCode.INVALID_REQUEST);
+            }
+            if (Boolean.TRUE.equals(shop.getFssaReturnFiled())) {
+                throw new FssaiException("FSSAI annual return is already marked as filed",
+                        FailureCode.INVALID_REQUEST);
+            }
+
+            LocalDate today = LocalDate.now(ZoneId.of("Asia/Kolkata"));
+            LocalDate deadline = LocalDate.of(today.getYear(), 5, 31);
+            long overdueDays = today.isAfter(deadline)
+                    ? ChronoUnit.DAYS.between(deadline, today) : 0;
+            String financialYear = request.getFinancialYear() != null
+                    && !request.getFinancialYear().isBlank()
+                    ? request.getFinancialYear().trim()
+                    : defaultFinancialYear(today);
+
+            BigDecimal fine = BigDecimal.valueOf(overdueDays * FSSAI_RETURN_FINE_PER_DAY);
+            BigDecimal serviceCharge = FSSAI_RETURN_SERVICE_CHARGE;
+            BigDecimal total = fine.add(serviceCharge);
+
+            Long documentId = documentRepository
+                    .findByShopIdAndDocumentType(shopId, DocumentType.FSSAI_FOOD_LICENSE)
+                    .map(Document::getId)
+                    .orElse(null);
+
+            PaymentTransaction tx = new PaymentTransaction(
+                    user, shop, DocumentType.FSSAI_FOOD_LICENSE, documentId,
+                    1, fine, BigDecimal.ZERO, serviceCharge,
+                    BigDecimal.ZERO, BigDecimal.ZERO, total, "INR"
+            );
+            tx.setPurpose(PaymentTransaction.PURPOSE_FSSAI_RETURN_FILING);
+            tx.setFilingDetails(buildFilingDetails(request, financialYear));
+            tx = paymentTransactionRepository.save(tx);
+
+            String orderId = "DLAR" + tx.getId() + System.currentTimeMillis();
+            String accessKey = createInitiatePayment(orderId, total, user, shop, tx.getId());
+            String payBaseUrl = "test".equalsIgnoreCase(easbuzzEnvironment)
+                    ? "https://testpay.easebuzz.in/pay/"
+                    : "https://pay.easebuzz.in/pay/";
+            String gatewayCheckoutUrl = payBaseUrl + accessKey;
+
+            tx.setGatewayOrderId(orderId);
+            tx.setGatewayCheckoutUrl(gatewayCheckoutUrl);
+            paymentTransactionRepository.save(tx);
+
+            log.info("FSSAI return filing payment created: tx={} user={} shop={} overdueDays={} fine={} total={}",
+                    tx.getId(), user.getId(), shopId, overdueDays, fine, total);
+
+            PaymentBreakdown breakdown = new PaymentBreakdown(
+                    fine, BigDecimal.ZERO, serviceCharge, BigDecimal.ZERO,
+                    BigDecimal.ZERO, total, 0);
+            String payMode = "test".equalsIgnoreCase(easbuzzEnvironment) ? "test" : "production";
+            return new PaymentCreateResponse(
+                    tx.getId(), breakdown, tx.getStatus(), tx.getCurrency(),
+                    tx.getGateway(), orderId, null, gatewayCheckoutUrl, accessKey, payMode
+            );
+        } catch (FssaiException e) {
+            log.warn("FSSAI return filing payment failed: {} (code={})", e.getMessage(), e.getFailureCode());
+            throw e;
+        } catch (Exception e) {
+            log.error("Unexpected error creating FSSAI return filing payment for user={}, shopId={}: {}",
+                    user.getId(), shopId, e.getMessage(), e);
+            throw new FssaiException("Unexpected error: " + e.getMessage(), FailureCode.INTERNAL_ERROR, e);
+        }
+    }
+
+    /**
      * Verify an Easebuzz webhook callback and mark the transaction COMPLETED.
      * Creates/links a RenewalOrder and notifies the user.
      */
@@ -423,6 +512,10 @@ public class PaymentService {
         tx.setGatewayPaymentId(gatewayPaymentId);
         tx.setGatewaySignature(gatewaySignature);
         tx = paymentTransactionRepository.save(tx);
+
+        if (PaymentTransaction.PURPOSE_FSSAI_RETURN_FILING.equals(tx.getPurpose())) {
+            return completeFssaReturnFiling(tx);
+        }
 
         // Create / link a renewal order
         RenewalOrder renewalOrder = new RenewalOrder(
@@ -459,6 +552,59 @@ public class PaymentService {
         );
 
         log.info("Payment completed: tx={} renewalOrder={}", tx.getId(), renewalOrder.getId());
+        return toStatusResponse(tx);
+    }
+
+    /**
+     * FSSAI annual return filing payments are not certificate renewals. Record a
+     * work item in the ops renewal queue (with a clear note) and tell the owner
+     * the team will file manually.
+     */
+    private PaymentStatusResponse completeFssaReturnFiling(PaymentTransaction tx) {
+        String financialYear = defaultFinancialYear(LocalDate.now(ZoneId.of("Asia/Kolkata")));
+        if (tx.getFilingDetails() != null) {
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("FY:\\s*([^;]+)").matcher(tx.getFilingDetails());
+            if (m.find()) financialYear = m.group(1).trim();
+        }
+
+        RenewalOrder order = new RenewalOrder(
+                tx.getUser(), tx.getShop(), tx.getDocumentType(), tx.getDocumentId(),
+                ensureDlId(tx.getUser())
+        );
+        order.setPaymentId(String.valueOf(tx.getId()));
+        order.setPaymentStatus(PaymentTransaction.STATUS_COMPLETED);
+        order.setDurationYears(tx.getDurationYears());
+        String note = "FSSAI Annual Return filing (" + financialYear + ") paid via Easebuzz "
+                + "(payment id " + tx.getId() + "). Our team will file it on FoSCoS.";
+        if (tx.getFilingDetails() != null && !tx.getFilingDetails().isBlank()) {
+            note += " Filing details: " + tx.getFilingDetails();
+        }
+        order.setNotes(note);
+        order = renewalOrderRepository.save(order);
+
+        tx.setRenewalOrderId(order.getId());
+        paymentTransactionRepository.save(tx);
+
+        notificationService.sendPushAndCreateNotification(
+                tx.getUser().getId(),
+                "Payment received — FSSAI annual return filing",
+                String.format("We received ₹%s for the %s annual return of %s. " +
+                                "Our team will file it and update you here.",
+                        tx.getTotalAmount(), financialYear, tx.getShop().getShopName()),
+                "RENEWAL_REQUESTED",
+                tx.getShop().getId(),
+                Map.of(
+                        "shopId", String.valueOf(tx.getShop().getId()),
+                        "renewalId", String.valueOf(order.getId()),
+                        "paymentId", String.valueOf(tx.getId()),
+                        "route", "fssa_return"
+                ),
+                "fssa_return:payment:" + tx.getId() + ":completed"
+        );
+
+        log.info("FSSAI return filing payment completed: tx={} renewalOrder={}",
+                tx.getId(), order.getId());
         return toStatusResponse(tx);
     }
 
@@ -728,6 +874,32 @@ public class PaymentService {
     private static String sanitizeHashField(String value) {
         if (value == null) return "";
         return value.replace("|", "").trim();
+    }
+
+    /** FSSAI returns are filed for the financial year that ended on 31 March (Apr–Mar). */
+    private static String defaultFinancialYear(LocalDate today) {
+        int start = today.getMonthValue() >= 4 ? today.getYear() - 1 : today.getYear() - 2;
+        return start + "-" + String.format("%02d", (start + 1) % 100);
+    }
+
+    /** Compact, human-readable summary of the details the team needs to file. */
+    private static String buildFilingDetails(FssaReturnFilingRequest request, String financialYear) {
+        StringBuilder sb = new StringBuilder("FY: ").append(financialYear);
+        sb.append("; Turnover: ₹").append(request.getAnnualTurnover() != null
+                ? request.getAnnualTurnover().stripTrailingZeros().toPlainString() : "—");
+        if (request.getEmployeeCount() != null) {
+            sb.append("; Employees: ").append(request.getEmployeeCount());
+        }
+        if (request.getKindOfBusiness() != null && !request.getKindOfBusiness().isBlank()) {
+            sb.append("; KOB: ").append(sanitizeHashField(request.getKindOfBusiness()));
+        }
+        if (request.getFoodCategory() != null && !request.getFoodCategory().isBlank()) {
+            sb.append("; Category: ").append(sanitizeHashField(request.getFoodCategory()));
+        }
+        if (request.getNotes() != null && !request.getNotes().isBlank()) {
+            sb.append("; Notes: ").append(request.getNotes().trim());
+        }
+        return sb.toString();
     }
 
     private PaymentCreateResponse toResponse(PaymentTransaction tx, PaymentBreakdown breakdown, String kob) {

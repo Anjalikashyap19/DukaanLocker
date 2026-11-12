@@ -657,7 +657,8 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                 isLoading = state.isLoadingFssaCompliance,
                                 onMarkFiled = { id ->
                                     vm.markFssaReturnFiled(id)
-                                }
+                                },
+                                vm = vm
                             )
                         }
 

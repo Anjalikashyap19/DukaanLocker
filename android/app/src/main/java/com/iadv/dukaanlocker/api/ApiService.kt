@@ -202,6 +202,9 @@ interface ApiService {
     @POST("api/payments/renew")
     suspend fun createRenewalPayment(@Body request: PaymentCreateRequest): Response<PaymentCreateResponse>
 
+    @POST("api/payments/fssa-return")
+    suspend fun createFssaReturnPayment(@Body request: FssaReturnPaymentRequest): Response<PaymentCreateResponse>
+
     @GET("api/payments/{id}")
     suspend fun getPayment(@Path("id") id: Long): Response<PaymentStatusResponse>
 

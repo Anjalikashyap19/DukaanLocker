@@ -505,6 +505,16 @@ data class PaymentCreateRequest(
     @SerializedName("kob") val kob: String? = null
 )
 
+data class FssaReturnPaymentRequest(
+    @SerializedName("shopId") val shopId: Long,
+    @SerializedName("financialYear") val financialYear: String? = null,
+    @SerializedName("annualTurnover") val annualTurnover: Double? = null,
+    @SerializedName("employeeCount") val employeeCount: Int? = null,
+    @SerializedName("kindOfBusiness") val kindOfBusiness: String? = null,
+    @SerializedName("foodCategory") val foodCategory: String? = null,
+    @SerializedName("notes") val notes: String? = null
+)
+
 data class PaymentBreakdown(
     @SerializedName("subtotal") val subtotal: Double? = null,
     @SerializedName("govCharge") val govCharge: Double? = null,
