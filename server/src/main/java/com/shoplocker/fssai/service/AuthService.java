@@ -464,6 +464,12 @@ public class AuthService {
         loginAttemptService.reset(codeKey);
         loginAttemptService.reset(ipKey);
 
+        // Update last active time so the session doesn't immediately expire
+        // on the next authenticated request (JwtAuthenticationFilter enforces
+        // a 15-day inactivity window).
+        user.setLastActiveAt(LocalDateTime.now());
+        userRepository.save(user);
+
         String token = jwtService.generateToken(user);
         createLoginNotifications(user);
         log.info("Manager logged in via code: userId={}", user.getId());

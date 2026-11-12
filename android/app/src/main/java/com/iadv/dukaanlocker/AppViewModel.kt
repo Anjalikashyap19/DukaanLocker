@@ -728,7 +728,11 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
         viewModelScope.launch {
             updateState { it.copy(isLoadingShops = true) }
             try {
-                val response = if (_uiState.value.currentUserRole == "MANAGER") {
+                val role = _uiState.value.currentUserRole.trim().uppercase()
+                val token = ApiClient.getToken(context)
+                android.util.Log.d("AppViewModel", "loadShops: role=$role, token present: ${token != null}, token prefix: ${token?.substring(0, Math.min(20, token.length)) ?: "null"}...")
+                android.util.Log.d("AppViewModel", "loadShops: calling ${if (role == "MANAGER") "getMyAssignedShops" else "getMyShops"}")
+                val response = if (role == "MANAGER") {
                     api.getMyAssignedShops()
                 } else {
                     api.getMyShops()
@@ -736,14 +740,20 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
                 if (response.isSuccessful) {
                     val shopList = (response.body() ?: emptyList()).toList()
                     updateState { it.copy(shops = shopList) }
+                    android.util.Log.d("AppViewModel", "loadShops: loaded ${shopList.size} shops")
                     supervisorScope {
                         shopList.forEach { shop ->
                             async { loadDocuments(shop.id) }
                         }
                     }
+                } else {
+                    val errorBody = response.errorBody()?.string() ?: "no body"
+                    android.util.Log.e("AppViewModel", "loadShops: HTTP ${response.code()} body=$errorBody")
+                    showToast("Failed to load assigned shops (HTTP ${response.code()})", ToastType.ERROR)
                 }
             } catch (e: Exception) {
-                android.util.Log.e("AppViewModel", "Failed to load shops", e)
+                android.util.Log.e("AppViewModel", "Failed to load shops: ${e.message}", e)
+                showToast("Network error loading shops: ${e.message}", ToastType.ERROR)
             }
             updateState { it.copy(isLoadingShops = false) }
         }

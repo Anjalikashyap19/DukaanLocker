@@ -325,6 +325,7 @@ object ApiClient {
     private fun provideOkHttpClient(context: Context): OkHttpClient {
         val authInterceptor = Interceptor { chain ->
             val token = getToken(context)
+            android.util.Log.d("AuthInterceptor", "Token present: ${token != null}, length: ${token?.length ?: 0}, prefix: ${token?.substring(0, Math.min(20, token.length)) ?: "null"}...")
             val request = if (token != null) {
                 chain.request().newBuilder()
                     .addHeader("Authorization", "Bearer $token")
