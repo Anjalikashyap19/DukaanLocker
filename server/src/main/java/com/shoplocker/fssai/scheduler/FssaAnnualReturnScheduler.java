@@ -5,10 +5,7 @@ import com.shoplocker.fssai.repository.ShopRepository;
 import com.shoplocker.fssai.service.NotificationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -30,17 +27,12 @@ public class FssaAnnualReturnScheduler {
     private final ShopRepository shopRepository;
     private final NotificationService notificationService;
 
-    @Value("${notification.fssa.cron:0 9 * * *}")
-    private String fssaCron;
-
     public FssaAnnualReturnScheduler(ShopRepository shopRepository,
                                      NotificationService notificationService) {
         this.shopRepository = shopRepository;
         this.notificationService = notificationService;
     }
 
-    @Scheduled(cron = "${notification.fssa.cron:0 9 * * *}")
-    @Transactional(readOnly = true)
     public void checkFssaAnnualReturn() {
         log.info("Running FSSAI annual return check scheduler...");
         LocalDate today = LocalDate.now(IST);

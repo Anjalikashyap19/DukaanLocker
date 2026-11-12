@@ -465,7 +465,7 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                     onNotificationClick = { notification ->
                                         // Leave the notifications screen and land on the
                                         // Documents tab with the missing doc section open
-                                        vm.openMissingDocumentNotification(notification)
+                                        vm.openNotificationFromList(notification)
                                     },
                                     onMoveToBin = { notification ->
                                         vm.moveNotificationToBin(notification.id)

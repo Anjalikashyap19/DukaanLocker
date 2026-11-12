@@ -1,6 +1,7 @@
 package com.shoplocker.fssai.repository;
 
 import com.shoplocker.fssai.entity.Shop;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -17,5 +18,6 @@ public interface ShopRepository extends JpaRepository<Shop, Long> {
 
     Optional<Shop> findByIdAndOwnerId(Long id, Long ownerId);
 
+    @EntityGraph(attributePaths = "owner")
     List<Shop> findByIsFssaiApplicableTrueAndFssaReturnFiledFalse();
 }

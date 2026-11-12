@@ -43,7 +43,7 @@ public class SchedulingConfig implements SchedulingConfigurer {
     @Value("${notification.alert.catchup-cron:0 */30 * * * *}")
     private String catchupCron;
 
-    @Value("${notification.fssa.cron:0 9 * * *}")
+    @Value("${notification.fssa.cron:0 0 9 * * *}")
     private String fssaCron;
 
     public SchedulingConfig(DocumentExpiryScheduler documentExpiryScheduler,

@@ -50,13 +50,23 @@ class MainActivity : FragmentActivity() {
             private set
 
         private fun readPendingRoute(intent: android.content.Intent?): PendingNotificationRoute? {
-            val type = intent?.getStringExtra("notification_type") ?: return null
+            if (intent == null) return null
+            // When a notification message is tapped from the system tray while the
+            // app is in the background/killed, FCM launches the activity with the
+            // data payload as raw extras ("type", "route", "shopId", ...). When the
+            // app builds the notification itself (foreground), it uses the
+            // "notification_*" keys. Support both.
+            val type = intent.getStringExtra("notification_type")
+                ?: intent.getStringExtra("type")
+                ?: return null
             return PendingNotificationRoute(
                 type = type,
-                route = intent.getStringExtra("notification_route"),
-                shopId = intent.getStringExtra("notification_shop_id")?.toLongOrNull(),
-                documentType = intent.getStringExtra("notification_document_type"),
-                action = intent.getStringExtra("notification_action")
+                route = intent.getStringExtra("notification_route") ?: intent.getStringExtra("route"),
+                shopId = (intent.getStringExtra("notification_shop_id")
+                    ?: intent.getStringExtra("shopId"))?.toLongOrNull(),
+                documentType = intent.getStringExtra("notification_document_type")
+                    ?: intent.getStringExtra("documentType"),
+                action = intent.getStringExtra("notification_action") ?: intent.getStringExtra("action")
             )
         }
 
@@ -187,7 +197,11 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         capturePendingRoute(intent)
-        // Consume payment deep-link route immediately so the payment screen updates
+        // Consume routes immediately so a tap while the app is already running
+        // navigates right away instead of waiting for a state change.
+        if (pendingNotificationRoute != null) {
+            appViewModel?.consumePendingNotificationRoute()
+        }
         if (pendingPaymentRoute != null) {
             appViewModel?.consumePendingPaymentRoute()
         }

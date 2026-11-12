@@ -232,9 +232,13 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
         updateState { it.copy(targetMissingDocumentType = null) }
     }
 
-    fun openMissingDocumentNotification(notification: NotificationItem) {
-        if (notification.type != "MISSING_DOCUMENT") return
-        openMissingDocumentRoute(notification.referenceId, notification.metadata)
+    fun openNotificationFromList(notification: NotificationItem) {
+        when (notification.type) {
+            "MISSING_DOCUMENT" ->
+                openMissingDocumentRoute(notification.referenceId, notification.metadata)
+            "FSSAI_RETURN_REMINDER", "FSSAI_RETURN_FINE" ->
+                notification.referenceId?.let { navigateTo(Screen.FssaCompliance(it)) }
+        }
     }
 
     private fun openMissingDocumentRoute(shopId: Long?, documentType: String?) {
