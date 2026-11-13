@@ -35,7 +35,7 @@ public class RequiredDocumentService {
         CATEGORY_ALIASES.put("BEVERAGES, DAIRY & PACKAGED WATER", "RESTAURANT");
         CATEGORY_ALIASES.put("MEAT, FISH, POULTRY & LIVESTOCK", "RESTAURANT");
         CATEGORY_ALIASES.put("FRUITS, VEGETABLES & AGRICULTURAL PRODUCE", "GROCERY");
-        CATEGORY_ALIASES.put("FOOD MANUFACTURING & PROCESSING", "MANUFACTURING");
+        CATEGORY_ALIASES.put("FOOD MANUFACTURING & PROCESSING", "FOOD_MANUFACTURING");
         CATEGORY_ALIASES.put("MANUFACTURING, WORKSHOPS & INDUSTRIAL ACTIVITIES", "MANUFACTURING");
         CATEGORY_ALIASES.put("HEALTHCARE, CLINICS & DIAGNOSTICS", "MEDICAL");
         CATEGORY_ALIASES.put("PHARMACY, MEDICINES & MEDICAL EQUIPMENT", "PHARMACY");
@@ -106,6 +106,7 @@ public class RequiredDocumentService {
         CATEGORY_DOCUMENTS.put("IMPORT_EXPORT", importExport);
 
         // MANUFACTURING — Factories & workshops need pollution, fire, IEC
+        // (No FSSAI — that's only for food manufacturing, see FOOD_MANUFACTURING)
         Set<DocumentType> manufacturing = new HashSet<>();
         Collections.addAll(manufacturing,
                 DocumentType.PAN,
@@ -117,6 +118,21 @@ public class RequiredDocumentService {
                 DocumentType.FIRE_SAFETY,
                 DocumentType.SHOP_INSURANCE);
         CATEGORY_DOCUMENTS.put("MANUFACTURING", manufacturing);
+
+        // FOOD MANUFACTURING — Factories making food products need FSSAI license
+        // in addition to standard manufacturing documents
+        Set<DocumentType> foodManufacturing = new HashSet<>();
+        Collections.addAll(foodManufacturing,
+                DocumentType.PAN,
+                DocumentType.GST,
+                DocumentType.TRADE_LICENSE,
+                DocumentType.MSME_CERTIFICATE,
+                DocumentType.IEC,
+                DocumentType.POLLUTION_CONTROL,
+                DocumentType.FIRE_SAFETY,
+                DocumentType.SHOP_INSURANCE,
+                DocumentType.FSSAI_FOOD_LICENSE);
+        CATEGORY_DOCUMENTS.put("FOOD_MANUFACTURING", foodManufacturing);
 
         // MEDICAL / PHARMACY — Healthcare & pharmacy need drug license
         Set<DocumentType> medical = new HashSet<>();
