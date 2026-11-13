@@ -29,6 +29,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.easebuzz.payment.kit.PWECheckoutActivity
 import com.iadv.dukaanlocker.AppViewModel
@@ -206,88 +208,116 @@ private fun FilingDetailsDialog(
     var notes by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        containerColor = colors.cardBg,
-        title = { Text("Filing details", fontWeight = FontWeight.Bold, color = colors.textPrimary) },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding()
+                .padding(16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 640.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = colors.cardBg,
+                shadowElevation = 8.dp
             ) {
-                Text(
-                    "We need these details to file the annual return for $shopName.",
-                    fontSize = 13.sp,
-                    color = colors.textSecondary
-                )
-                OutlinedTextField(
-                    value = financialYear,
-                    onValueChange = { financialYear = it },
-                    label = { Text("Financial year") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = turnover,
-                    onValueChange = { input ->
-                        turnover = input.filter { it.isDigit() || it == '.' }
-                    },
-                    label = { Text("Annual turnover (₹) *") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = employees,
-                    onValueChange = { input -> employees = input.filter { it.isDigit() } },
-                    label = { Text("Number of employees") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = foodCategory,
-                    onValueChange = { foodCategory = it },
-                    label = { Text("Food category") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = notes,
-                    onValueChange = { notes = it },
-                    label = { Text("Anything else we should know") },
-                    minLines = 2,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (error != null) {
-                    Text(error!!, color = colors.error, fontSize = 12.sp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        "Filing details",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp,
+                        color = colors.textPrimary
+                    )
+                    Text(
+                        "We need these details to file the annual return for $shopName.",
+                        fontSize = 13.sp,
+                        color = colors.textSecondary
+                    )
+                    OutlinedTextField(
+                        value = financialYear,
+                        onValueChange = { financialYear = it },
+                        label = { Text("Financial year") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = turnover,
+                        onValueChange = { input ->
+                            turnover = input.filter { it.isDigit() || it == '.' }
+                        },
+                        label = { Text("Annual turnover (₹) *") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = employees,
+                        onValueChange = { input -> employees = input.filter { it.isDigit() } },
+                        label = { Text("Number of employees") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = foodCategory,
+                        onValueChange = { foodCategory = it },
+                        label = { Text("Food category") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = { notes = it },
+                        label = { Text("Anything else we should know") },
+                        minLines = 2,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (error != null) {
+                        Text(error!!, color = colors.error, fontSize = 12.sp)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text("Cancel", color = colors.textSecondary)
+                        }
+                        TextButton(onClick = {
+                            val amount = turnover.toDoubleOrNull()
+                            if (amount == null || amount < 0) {
+                                error = "Please enter the annual turnover"
+                                return@TextButton
+                            }
+                            onSubmit(
+                                financialYear.ifBlank { defaultFinancialYear() },
+                                amount,
+                                employees.toIntOrNull(),
+                                foodCategory.ifBlank { null },
+                                notes.ifBlank { null }
+                            )
+                        }) {
+                            Text("Pay & File", fontWeight = FontWeight.Bold, color = colors.primary)
+                        }
+                    }
                 }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val amount = turnover.toDoubleOrNull()
-                if (amount == null || amount < 0) {
-                    error = "Please enter the annual turnover"
-                    return@TextButton
-                }
-                onSubmit(
-                    financialYear.ifBlank { defaultFinancialYear() },
-                    amount,
-                    employees.toIntOrNull(),
-                    foodCategory.ifBlank { null },
-                    notes.ifBlank { null }
-                )
-            }) {
-                Text("Pay & File", fontWeight = FontWeight.Bold, color = colors.primary)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = colors.textSecondary)
             }
         }
-    )
+    }
 }
 
 @Composable
