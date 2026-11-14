@@ -89,6 +89,7 @@ fun RenewalPaymentScreen(
                     result?.paymentId?.let { vm.verifyPayment(it) }
                 }
                 "payment_failed", "txn_session_timeout", "user_cancelled", "back_pressed", "error_server_error" -> {
+                    result?.paymentId?.let { vm.cancelRenewalPayment(it) }
                     vm.showToast("Payment cancelled or failed: $sdkResult", ToastType.ERROR)
                     vm.resetRenewalPayment()
                 }

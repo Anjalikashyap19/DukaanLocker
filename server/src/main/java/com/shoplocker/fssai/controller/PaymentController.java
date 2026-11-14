@@ -92,6 +92,19 @@ public class PaymentController {
     }
 
     /**
+     * Cancel a pending payment transaction when the user aborts checkout on the
+     * Easebuzz gateway. Marks the transaction FAILED so a new payment can be
+     * created immediately on retry instead of reusing the cancelled access key.
+     */
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<Void> cancel(
+            @PathVariable Long id, Authentication authentication) {
+        User user = shopAccessService.getAuthenticatedUser(authentication);
+        paymentService.cancelPayment(id, user);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
      * Easebuzz webhook callback. Verifies the signature and marks the payment COMPLETED.
      */
     @Operation(summary = "Easebuzz payment callback",

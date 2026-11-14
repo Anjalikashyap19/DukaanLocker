@@ -287,6 +287,7 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
             pending.paymentId?.let { verifyPayment(it) }
                 ?: run { _renewalPaymentSuccess.value = true }
         } else if (pending.type == "PAYMENT_CANCEL") {
+            pending.paymentId?.let { cancelRenewalPayment(it) }
             resetRenewalPayment()
         }
     }
@@ -602,6 +603,24 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
     fun resetRenewalPayment() {
         _paymentCreateResult.value = null
         _paymentError.value = null
+    }
+
+    /**
+     * Cancel a pending payment transaction on the server when the user aborts
+     * checkout on the Easebuzz gateway. Marks the transaction FAILED so the next
+     * {@link #createRenewalPayment} call creates a brand-new transaction with a
+     * fresh access key instead of reusing the cancelled one.
+     */
+    fun cancelRenewalPayment(paymentId: Long?) {
+        paymentId?.let { id ->
+            viewModelScope.launch {
+                try {
+                    api.cancelRenewalPayment(id)
+                } catch (e: Exception) {
+                    // Best-effort cancel; retry will still work after the 15-min server expiry
+                }
+            }
+        }
     }
 
     /** Start an FSSAI annual-return filing payment (late fee + service charge). */

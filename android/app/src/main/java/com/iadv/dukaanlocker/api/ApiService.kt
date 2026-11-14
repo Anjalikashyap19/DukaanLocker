@@ -208,6 +208,9 @@ interface ApiService {
     @GET("api/payments/{id}")
     suspend fun getPayment(@Path("id") id: Long): Response<PaymentStatusResponse>
 
+    @POST("api/payments/{id}/cancel")
+    suspend fun cancelRenewalPayment(@Path("id") id: Long): Response<Void>
+
     @POST("api/payments/{id}/callback")
     suspend fun paymentCallback(@Path("id") id: Long, @Body body: Map<String, String>): Response<PaymentStatusResponse>
 

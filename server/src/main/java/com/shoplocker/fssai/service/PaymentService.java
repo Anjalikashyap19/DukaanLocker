@@ -410,6 +410,28 @@ public class PaymentService {
     }
 
     /**
+     * Cancel a pending payment transaction when the user aborts checkout on the
+     * Easebuzz gateway. Marks the transaction FAILED so that a subsequent
+     * {@link #createPayment} call creates a brand-new transaction with a fresh
+     * access key instead of reusing the cancelled one.
+     */
+    @Transactional
+    public void cancelPayment(Long paymentId, User user) {
+        PaymentTransaction tx = paymentTransactionRepository
+                .findById(paymentId)
+                .orElseThrow(() -> new FssaiException("Payment transaction not found", FailureCode.NOT_FOUND));
+
+        if (!tx.getUser().getId().equals(user.getId())) {
+            throw new FssaiException("Unauthorized access to payment transaction", FailureCode.UNAUTHORIZED);
+        }
+
+        if (PaymentTransaction.STATUS_PENDING.equals(tx.getStatus())) {
+            tx.setStatus(PaymentTransaction.STATUS_FAILED);
+            paymentTransactionRepository.save(tx);
+        }
+    }
+
+    /**
      * Create a payment for DukaanLocker to file the FSSAI annual return on the
      * user's behalf. The amount is the late fee (₹100/day after 31 May) plus the
      * ₹2,000 filing service charge. Returns an Easebuzz SDK access key.
