@@ -114,6 +114,9 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
     private var _renewalPaymentSuccess = mutableStateOf(false)
     val renewalPaymentSuccess: Boolean by _renewalPaymentSuccess
 
+    private var _waterTestingPaymentSuccess = mutableStateOf(false)
+    val waterTestingPaymentSuccess: Boolean by _waterTestingPaymentSuccess
+
     // FSSAI annual-return filing payment state (separate from document renewal)
     private var _fssaReturnPaymentResult = mutableStateOf<PaymentCreateResponse?>(null)
     val fssaReturnPaymentResult: PaymentCreateResponse? by _fssaReturnPaymentResult
@@ -246,6 +249,14 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
                 openMissingDocumentRoute(notification.referenceId, notification.metadata)
             "FSSAI_RETURN_REMINDER", "FSSAI_RETURN_FINE" ->
                 notification.referenceId?.let { navigateTo(Screen.FssaCompliance(it)) }
+            "WATER_TESTING_RENEWAL" ->
+                notification.referenceId?.let { shopId ->
+                    notification.metadata?.let { documentId ->
+                        documentId.toLongOrNull()?.let { docId ->
+                            navigateTo(Screen.WaterTestingPayment(shopId, docId))
+                        }
+                    }
+                }
         }
     }
 
@@ -276,6 +287,14 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
                 if (uiState.value.currentScreen != Screen.Notifications) navigateTo(Screen.Notifications)
             "FSSAI_RETURN_REMINDER", "FSSAI_RETURN_FINE" ->
                 pending.shopId?.let { navigateTo(Screen.FssaCompliance(it)) }
+            "WATER_TESTING_RENEWAL" ->
+                pending.shopId?.let { shopId ->
+                    pending.documentType?.let { documentType ->
+                        documentType.toLongOrNull()?.let { docId ->
+                            navigateTo(Screen.WaterTestingPayment(shopId, docId))
+                        }
+                    }
+                }
         }
     }
 
@@ -301,6 +320,27 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
                     val status = response.body()?.status
                     if (status == "COMPLETED") {
                         _renewalPaymentSuccess.value = true
+                    } else {
+                        _paymentError.value = "Payment not yet completed: $status"
+                    }
+                } else {
+                    _paymentError.value = "Failed to verify payment: ${response.parseErrorMessage()}"
+                }
+            } catch (e: Exception) {
+                _paymentError.value = "Network error verifying payment: ${e.message}"
+            }
+        }
+    }
+
+    /** Verifies a water testing payment with the backend before marking success. Never trusts client-only result. */
+    fun verifyWaterTestingPayment(paymentId: Long) {
+        viewModelScope.launch {
+            try {
+                val response = api.getPayment(paymentId)
+                if (response.isSuccessful) {
+                    val status = response.body()?.status
+                    if (status == "COMPLETED") {
+                        _waterTestingPaymentSuccess.value = true
                     } else {
                         _paymentError.value = "Payment not yet completed: $status"
                     }
@@ -569,6 +609,13 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
         navigateToHome()
     }
 
+    fun onWaterTestingPaymentSuccess() {
+        _paymentCreateResult.value = null
+        _paymentError.value = null
+        showToast("Water testing payment initiated successfully", ToastType.SUCCESS)
+        navigateToHome()
+    }
+
     fun createRenewalPayment(doc: DocumentItem, durationYears: Int, kob: String? = null) {
         val shopId = doc.businessId.toLongOrNull()
         if (shopId == null) {
@@ -620,6 +667,35 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
                     // Best-effort cancel; retry will still work after the 15-min server expiry
                 }
             }
+        }
+    }
+
+    /**
+     * Create a water testing payment via the backend. Returns the Easebuzz
+     * access key and checkout URL for the selected test type.
+     */
+    fun createWaterTestingPayment(shopId: Long, documentId: Long?, testType: String) {
+        viewModelScope.launch {
+            _paymentLoading.value = true
+            _paymentError.value = null
+            try {
+                val response = api.createWaterTestingPayment(
+                    WaterTestingPaymentRequest(shopId = shopId, documentId = documentId, testType = testType)
+                )
+                if (response.isSuccessful) {
+                    val result = response.body()
+                    if (result != null) {
+                        _paymentCreateResult.value = result
+                    } else {
+                        _paymentError.value = "Failed to create payment"
+                    }
+                } else {
+                    _paymentError.value = response.parseErrorMessage()
+                }
+            } catch (e: Exception) {
+                _paymentError.value = "Network error: ${e.message}"
+            }
+            _paymentLoading.value = false
         }
     }
 

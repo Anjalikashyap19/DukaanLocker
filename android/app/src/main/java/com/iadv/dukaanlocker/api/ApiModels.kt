@@ -551,3 +551,11 @@ enum class PaymentStatus {
     PENDING, COMPLETED, FAILED
 }
 
+// ── Water Testing Payment Request ──────────────────────────────────────────
+
+data class WaterTestingPaymentRequest(
+    @SerializedName("shopId") val shopId: Long,
+    @SerializedName("documentId") val documentId: Long? = null,
+    @SerializedName("testType") val testType: String  // BASIC, CHEMICAL, MICROBIOLOGICAL
+)
+

@@ -211,6 +211,9 @@ interface ApiService {
     @POST("api/payments/{id}/cancel")
     suspend fun cancelRenewalPayment(@Path("id") id: Long): Response<Void>
 
+    @POST("api/payments/water-testing")
+    suspend fun createWaterTestingPayment(@Body request: WaterTestingPaymentRequest): Response<PaymentCreateResponse>
+
     @POST("api/payments/{id}/callback")
     suspend fun paymentCallback(@Path("id") id: Long, @Body body: Map<String, String>): Response<PaymentStatusResponse>
 

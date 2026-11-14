@@ -238,4 +238,25 @@ public class RequiredDocumentService {
         log.warn("Unknown category key '{}' — returning default {} docs", key, DEFAULT_DOCUMENTS.size());
         return new HashSet<>(DEFAULT_DOCUMENTS);
     }
+
+    /**
+     * Returns true if the shop's category and scale require a
+     * {@link DocumentType#WATER_TESTING_CERTIFICATE}.
+     * Mirrors the document set used by {@link #getRequiredDocuments}.
+     */
+    public boolean requiresWaterTesting(String category, BusinessScale scale) {
+        if (category == null) {
+            return false;
+        }
+        String key = category.trim().toUpperCase();
+        String alias = CATEGORY_ALIASES.get(key);
+        if (alias != null) {
+            key = alias;
+        }
+        Set<DocumentType> docs = CATEGORY_DOCUMENTS.get(key);
+        if (docs == null) {
+            docs = DEFAULT_DOCUMENTS;
+        }
+        return docs.contains(DocumentType.WATER_TESTING_CERTIFICATE);
+    }
 }

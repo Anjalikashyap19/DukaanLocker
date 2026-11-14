@@ -55,6 +55,23 @@ public class PaymentController {
     }
 
     /**
+     * Create a water testing payment with a fixed price based on the selected
+     * test type (BASIC / CHEMICAL / MICROBIOLOGICAL). Returns the Easebuzz
+     * checkout URL and access key for the mobile SDK.
+     */
+    @PostMapping("/water-testing")
+    public ResponseEntity<PaymentCreateResponse> waterTesting(
+            @RequestParam Long shopId,
+            @RequestParam(required = false) Long documentId,
+            @RequestParam String testType,
+            Authentication authentication) {
+        User user = shopAccessService.getAuthenticatedUser(authentication);
+        PaymentCreateResponse response = paymentService.createWaterTestingPayment(
+                user, shopId, documentId, testType);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * Create a payment for DukaanLocker to file the FSSAI annual return for a
      * shop. Amount = late fee (₹100/day after 31 May) + ₹2,000 service charge.
      * The filing details (turnover etc.) are captured with the payment.

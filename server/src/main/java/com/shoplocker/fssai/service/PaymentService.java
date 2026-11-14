@@ -410,6 +410,118 @@ public class PaymentService {
     }
 
     /**
+     * Create a water testing payment transaction with a fixed price based on the
+     * selected test type, then initiate the Easebuzz checkout and return the
+     * access key for the mobile SDK.
+     *
+     * <p>Prices (INR):
+     * <ul>
+     *   <li>BASIC — ₹1,999</li>
+     *   <li>CHEMICAL — ₹2,999</li>
+     *   <li>MICROBIOLOGICAL — ₹3,999</li>
+     * </ul>
+     */
+    @Transactional
+    public PaymentCreateResponse createWaterTestingPayment(User user, Long shopId, Long documentId,
+                                                           String testType) {
+        try {
+            shopAccessService.validateShopAccess(user, shopId);
+
+            Shop shop = shopRepository.findById(shopId)
+                    .orElseThrow(() -> new FssaiException("Shop not found", FailureCode.SHOP_NOT_FOUND));
+
+            Document doc = null;
+            if (documentId != null) {
+                doc = documentRepository.findById(documentId)
+                        .orElseThrow(() -> new FssaiException("Document not found", FailureCode.DOCUMENT_NOT_FOUND));
+            }
+
+            // Fixed pricing by test type
+            BigDecimal amount;
+            String productInfo;
+            switch (testType != null ? testType.toUpperCase() : "BASIC") {
+                case "CHEMICAL":
+                    amount = new BigDecimal("2999.00");
+                    productInfo = "Chemical Water Testing Report";
+                    break;
+                case "MICROBIOLOGICAL":
+                    amount = new BigDecimal("3999.00");
+                    productInfo = "Microbiological Water Testing Report";
+                    break;
+                case "BASIC":
+                default:
+                    amount = new BigDecimal("1999.00");
+                    productInfo = "Basic Water Testing Report";
+                    break;
+            }
+
+            // Idempotency: return existing PENDING water testing payment for same shop+doc+testType
+            Optional<PaymentTransaction> existing = paymentTransactionRepository
+                    .findTopByUserIdAndShopIdAndDocumentTypeAndDocumentIdAndStatusOrderByCreatedAtDesc(
+                            user.getId(), shopId, DocumentType.WATER_TESTING_CERTIFICATE, documentId,
+                            PaymentTransaction.STATUS_PENDING);
+            if (existing.isPresent()) {
+                PaymentTransaction pt = existing.get();
+                boolean isExpired = pt.getCreatedAt() != null &&
+                        pt.getCreatedAt().isBefore(LocalDateTime.now().minusMinutes(15));
+                if (isExpired) {
+                    pt.setStatus(PaymentTransaction.STATUS_FAILED);
+                    paymentTransactionRepository.save(pt);
+                } else {
+                    return toResponse(pt, breakdownFromEntity(pt), testType);
+                }
+            }
+
+            PaymentTransaction tx = new PaymentTransaction(
+                    user, shop, DocumentType.WATER_TESTING_CERTIFICATE, documentId,
+                    1, // durationYears — not applicable for water testing, set to 1
+                    amount, BigDecimal.ZERO, amount, BigDecimal.ZERO,
+                    BigDecimal.ZERO, amount, "INR"
+            );
+            tx.setPurpose(PaymentTransaction.PURPOSE_WATER_TESTING);
+            tx = paymentTransactionRepository.save(tx);
+
+            // Build Easebuzz payment via the official Initiate Payment API
+            String orderId = "DLWT" + tx.getId() + System.currentTimeMillis();
+            String accessKey = createInitiatePayment(orderId, amount,
+                    user, shop, tx.getId());
+            String payBaseUrl = "test".equalsIgnoreCase(easbuzzEnvironment)
+                    ? "https://testpay.easebuzz.in/pay/"
+                    : "https://pay.easebuzz.in/pay/";
+            String gatewayCheckoutUrl = payBaseUrl + accessKey;
+
+            tx.setGatewayOrderId(orderId);
+            tx.setGatewayCheckoutUrl(gatewayCheckoutUrl);
+            paymentTransactionRepository.save(tx);
+
+            log.info("Water testing payment created: tx={} user={} shop={} testType={} amount={} orderId={} accessKey={}",
+                    tx.getId(), user.getId(), shopId, testType, amount, orderId,
+                    accessKey != null && !accessKey.isBlank() ? "present" : "absent");
+
+            String payMode = "test".equalsIgnoreCase(easbuzzEnvironment) ? "test" : "production";
+            return new PaymentCreateResponse(
+                    tx.getId(),
+                    new PaymentBreakdown(amount, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                            BigDecimal.ZERO, amount, 0),
+                    tx.getStatus(),
+                    tx.getCurrency(),
+                    tx.getGateway(),
+                    orderId,
+                    testType,
+                    gatewayCheckoutUrl,
+                    accessKey,
+                    payMode
+            );
+        } catch (FssaiException e) {
+            log.warn("Water testing payment creation failed: {}", e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            log.error("Unexpected error creating water testing payment for shopId={}: {}", shopId, e.getMessage(), e);
+            throw new FssaiException("Unexpected error: " + e.getMessage(), FailureCode.INTERNAL_ERROR, e);
+        }
+    }
+
+    /**
      * Cancel a pending payment transaction when the user aborts checkout on the
      * Easebuzz gateway. Marks the transaction FAILED so that a subsequent
      * {@link #createPayment} call creates a brand-new transaction with a fresh

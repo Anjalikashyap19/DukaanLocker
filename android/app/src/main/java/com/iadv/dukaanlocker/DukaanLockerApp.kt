@@ -662,6 +662,20 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                             )
                         }
 
+                        // ── Water Testing Payment Screen ────────────────────────
+                        is Screen.WaterTestingPayment -> {
+                            val shopId = (state.currentScreen as? Screen.WaterTestingPayment)?.shopId ?: 0L
+                            val documentId = (state.currentScreen as? Screen.WaterTestingPayment)?.documentId
+
+                            WaterTestingPaymentScreen(
+                                shopId = shopId,
+                                documentId = documentId,
+                                onBack = { vm.goBack() },
+                                onPaySuccess = { vm.onWaterTestingPaymentSuccess() },
+                                vm = vm
+                            )
+                        }
+
                         // ── AppSettings Screen ────────────────────────────────────
                         is Screen.AppSettings -> {
                             AppSettingsScreen(

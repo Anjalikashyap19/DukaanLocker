@@ -23,6 +23,8 @@ public class PaymentTransaction {
     public static final String PURPOSE_RENEWAL = "RENEWAL";
     /** Payment for DukaanLocker to file the FSSAI annual return on the user's behalf. */
     public static final String PURPOSE_FSSAI_RETURN_FILING = "FSSAI_RETURN_FILING";
+    /** Payment for water testing certificate renewal. */
+    public static final String PURPOSE_WATER_TESTING = "WATER_TESTING";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
