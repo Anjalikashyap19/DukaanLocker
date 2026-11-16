@@ -1,230 +1,76 @@
 package com.iadv.dukaanlocker.api
 
-import okhttp3.MultipartBody
-import retrofit2.Response
-import retrofit2.http.*
+import com.iadv.dukaanlocker.model.request.WaterTestingPaymentRequest
+import com.iadv.dukaanlocker.model.response.PaymentCreateResponse
+import com.iadv.dukaanlocker.model.response.PaymentStatusResponse
+import com.iadv.dukaanlocker.model.request.DrugLicensePaymentRequest
+import com.iadv.dukaanlocker.model.response.DrugLicenseFetchResponse
+import kotlinx.coroutines.suspendable
+import retrofit2.http.Body
+import retrofit2.http.GET
+import retrofit2.http.POST
+import retrofit2.http.Path
 
-import java.util.List
+// ── Existing Payment Endpoints ──────────────────────────────────────
 
-interface ApiService {
+@POST("api/payments/renew")
+suspend fun createRenewalPayment(@Body request: PaymentCreateRequest): Response<PaymentCreateResponse>
 
-    // ── Authentication ───────────────────────────────────────────────────────
+@POST("api/payments/fssa-return")
+suspend fun createFssaReturnPayment(@Body request: FssaReturnPaymentRequest): Response<PaymentCreateResponse>
 
-    @POST("api/auth/register")
-    suspend fun register(@Body request: RegisterRequest): Response<AuthResponse>
+@GET("api/payments/{id}")
+suspend fun getPayment(@Path("id") id: Long): Response<PaymentStatusResponse>
 
-    @POST("api/auth/login")
-    suspend fun login(@Body request: LoginRequest): Response<AuthResponse>
+@POST("api/payments/{id}/cancel")
+suspend fun cancelRenewalPayment(@Path("id") id: Long): Response<Void>
 
-    @POST("api/auth/login-by-code")
-    suspend fun loginByCode(@Body request: ManagerCodeLoginRequest): Response<AuthResponse>
+@POST("api/payments/water-testing")
+suspend fun createWaterTestingPayment(@Body request: WaterTestingPaymentRequest): Response<PaymentCreateResponse>
 
-    @POST("api/auth/login-google")
-    suspend fun loginWithGoogle(@Body request: GoogleRegisterRequest): Response<AuthResponse>
+@POST("api/payments/{id}/callback")
+suspend fun paymentCallback(@Path("id") id: Long, @Body body: Map<String, String>): Response<PaymentStatusResponse>
 
-    @POST("api/auth/biometric-login")
-    suspend fun biometricLogin(@Body request: BiometricLoginRequest): Response<AuthResponse>
+@GET("api/payments/my")
+suspend fun getMyPayments(): Response<List<PaymentStatusResponse>>
 
-    @POST("api/auth/forgot-password")
-    suspend fun forgotPassword(@Body request: ForgotPasswordRequest): Response<OtpSendResponse>
+// ── FSSAI Compliance ────────────────────────────────────────────────
 
-    @POST("api/auth/mobile-hint")
-    suspend fun mobileHint(@Body request: MobileHintRequest): Response<MobileHintResponse>
+@GET("api/fssa/compliance")
+suspend fun getFssaCompliance(): Response<List<FssaComplianceStatus>}
 
-    @POST("api/auth/reset-password")
-    suspend fun resetPassword(@Body request: ResetPasswordRequest): Response<MessageResponse>
+@POST("api/fssa/{shopId}/mark-filed")
+suspend fun markFssaReturnFiled(@Path("shopId") shopId: Long): Response<Map<String, String>}
 
-    // ── Shops ────────────────────────────────────────────────────────────────
+// ── DRUG LICENSE ENDPOINTS ─────────────────────────────────────────
 
-    @POST("api/shops")
-    suspend fun createShop(@Body request: CreateShopRequest): Response<ShopResponse>
+/**
+ * Creates a drug license payment via the backend.
+ * Returns the Easebuzz checkout URL and access key for the mobile SDK.
+ */
+@POST("api/drug-license/payment")
+suspend fun createDrugLicensePayment(@Body request: DrugLicensePaymentRequest): Response<PaymentCreateResponse>
 
-    @GET("api/shops/my-shops")
-    suspend fun getMyShops(): Response<List<ShopResponse>>
+@GET("api/drug-license/verify/{licenseNumber}")
+suspend fun verifyDrugLicense(@Path("licenseNumber") licenseNumber: String): Response<DrugLicenseVerificationResponse>
 
-    @GET("api/shops/{shopId}")
-    suspend fun getShop(@Path("shopId") shopId: Long): Response<ShopResponse>
+/**
+ * Fetches and persists a drug license for a shop.
+ * Verifies the license and persists it as the shop's DRUG_LICENSE document.
+ */
+@POST("api/drug-license/fetch")
+suspend fun fetchDrugLicense(@Body request: DrugLicenseFetchRequest): Response<DrugLicenseFetchResponse>
 
-    @PUT("api/shops/{shopId}")
-    suspend fun updateShop(@Path("shopId") shopId: Long, @Body request: UpdateShopRequest): Response<ShopResponse>
+/**
+ * Consumes a pending drug license notification route.
+ */
+@GET("api/drug-license/callback/{paymentId}")
+suspend fun drugLicenseCallback(@Path("paymentId") paymentId: Long): Response<Void>
 
-    // ── Documents ────────────────────────────────────────────────────────────
+// ── Existing Notification/Payment Routes ────────────────────────────
 
-    @GET("api/shops/{shopId}/documents")
-    suspend fun getShopDocuments(@Path("shopId") shopId: Long): Response<List<DocumentResponse>>
+@POST("api/payments/{id}/cancel")
+suspend fun cancelPayment(@Path("id") id: Long): Response<Void>
 
-    @Multipart
-    @PUT("api/shops/{shopId}/documents/{documentType}/reupload")
-    suspend fun uploadDocument(
-        @Path("shopId") shopId: Long,
-        @Path("documentType") documentType: String,
-        @Part file: MultipartBody.Part,
-        @Query("documentNumber") documentNumber: String? = null,
-        @Query("issueDate") issueDate: String? = null,
-        @Query("expiryDate") expiryDate: String? = null
-    ): Response<DocumentResponse>
-
-    // ── Managers ─────────────────────────────────────────────────────────────
-
-    @POST("api/managers")
-    suspend fun createManager(@Body request: CreateManagerRequest): Response<ManagerResponse>
-
-    @GET("api/managers")
-    suspend fun getManagers(): Response<List<ManagerResponse>>
-
-    @POST("api/managers/{managerId}/shops/{shopId}")
-    suspend fun assignShopToManager(
-        @Path("managerId") managerId: Long,
-        @Path("shopId") shopId: Long
-    ): Response<ManagerResponse>
-
-    @GET("api/managers/{managerId}/shops")
-    suspend fun getManagerShops(@Path("managerId") managerId: Long): Response<List<ShopResponse>>
-
-    @GET("api/managers/me/shops")
-    suspend fun getMyAssignedShops(): Response<List<ShopResponse>>
-
-    @PUT("api/managers/{managerId}/shops/{shopId}/deactivate")
-    suspend fun deactivateAssignment(
-        @Path("managerId") managerId: Long,
-        @Path("shopId") shopId: Long
-    ): Response<Unit>
-
-    @PUT("api/managers/{managerId}/disable")
-    suspend fun disableManager(@Path("managerId") managerId: Long): Response<Unit>
-
-    @PUT("api/managers/{managerId}/enable")
-    suspend fun enableManager(@Path("managerId") managerId: Long): Response<Unit>
-
-    // ── Business Profile ─────────────────────────────────────────────────────
-
-    @POST("api/business-profile")
-    suspend fun createOrUpdateProfile(@Body request: BusinessProfileRequest): Response<BusinessProfileResponse>
-
-    @GET("api/business-profile")
-    suspend fun getMyProfile(): Response<BusinessProfileResponse>
-
-    // ── Location Search ──────────────────────────────────────────────────────
-
-    @GET("api/location/search")
-    suspend fun searchLocations(@Query("query") query: String): Response<LocationSearchResponse>
-
-    // ── Udyam (MSME) Verification ──────────────────────────────────────────
-
-    @POST("api/udyam/init")
-    suspend fun initUdyamSession(): Response<UdyamInitResponse>
-
-    @POST("api/udyam/verify")
-    suspend fun verifyUdyam(@Body request: UdyamVerifyRequest): Response<UdyamVerifyResponse>
-
-    @POST("api/udyam/fetch")
-    suspend fun fetchUdyam(@Body request: UdyamFetchRequest): Response<UdyamVerifyResponse>
-
-    // ── MSME Registration ──────────────────────────────────────────────────
-
-    @POST("api/auth/register-msme")
-    suspend fun registerWithMsme(@Body request: RegisterWithMsmeRequest): Response<MsmeAuthResponse>
-
-    // ── MSME (Udyam) number + OTP login ─────────────────────────────────────
-
-    @POST("api/auth/msme-login-request")
-    suspend fun msmeLoginRequest(@Body request: MsmeOtpRequest): Response<MsmeOtpResponse>
-
-    @POST("api/auth/msme-login-verify")
-    suspend fun msmeLoginVerify(@Body request: MsmeOtpVerifyRequest): Response<AuthResponse>
-
-    // ── GST Verification ───────────────────────────────────────────────────
-
-    @GET("api/gst/verify/{gstNumber}")
-    suspend fun verifyGst(@Path("gstNumber") gstNumber: String): Response<GstVerificationResponse>
-
-    @POST("api/gst/fetch")
-    suspend fun fetchGst(@Body request: GstFetchRequest): Response<GstVerificationResponse>
-
-    // ── FSSAI Food License Verification ─────────────────────────────────────
-
-    @POST("api/fssai/fetch")
-    suspend fun fetchFssai(@Body request: FssaiFetchRequest): Response<FssaiVerificationResponse>
-
-    // ── Notifications ───────────────────────────────────────────────────────
-
-    @GET("api/notifications")
-    suspend fun getNotifications(): Response<List<NotificationItem>>
-
-    @GET("api/notifications/bin")
-    suspend fun getBinNotifications(): Response<List<NotificationItem>>
-
-    @GET("api/notifications/unread-count")
-    suspend fun getUnreadNotificationCount(): Response<UnreadCountResponse>
-
-@PUT("api/notifications/mark-read")
-    suspend fun markNotificationsAsRead(): Response<Map<String, String>>
-
-    @PUT("api/notifications/move-to-bin")
-    suspend fun moveToBin(): Response<Map<String, String>>
-
-    @PUT("api/notifications/{id}/move-to-bin")
-    suspend fun moveNotificationToBin(@Path("id") id: Long): Response<Map<String, String>>
-
-    @PUT("api/notifications/{id}/restore")
-    suspend fun restoreFromBin(@Path("id") id: Long): Response<Map<String, String>>
-
-    @PUT("api/notifications/restore-all")
-    suspend fun restoreAllFromBin(): Response<Map<String, String>>
-
-    @DELETE("api/notifications/{id}")
-    suspend fun deleteNotification(@Path("id") id: Long): Response<Map<String, String>>
-
-    @DELETE("api/notifications/permanent-delete")
-    suspend fun permanentDelete(): Response<Map<String, String>>
-
-    @DELETE("api/notifications")
-    suspend fun clearNotifications(): Response<Map<String, String>>
-
-    // ── Renewals ──────────────────────────────────────────────────────
-    @POST("api/renewals")
-    suspend fun requestRenewal(@Body body: CreateRenewalRequest): Response<RenewalOrderItem>
-
-    @GET("api/renewals")
-    suspend fun getRenewals(): Response<List<RenewalOrderItem>>
-
-    @POST("api/device-token")
-    suspend fun registerDeviceToken(@Body body: Map<String, String>): Response<Map<String, String>>
-
-    @HTTP(method = "DELETE", path = "api/device-token", hasBody = true)
-    suspend fun removeDeviceToken(
-        @Header("Authorization") authorization: String,
-        @Body body: Map<String, String>
-    ): Response<Map<String, String>>
-
-    // ── Renewal Payments (Easebuzz) ──────────────────────────────────────
-
-    @POST("api/payments/renew")
-    suspend fun createRenewalPayment(@Body request: PaymentCreateRequest): Response<PaymentCreateResponse>
-
-    @POST("api/payments/fssa-return")
-    suspend fun createFssaReturnPayment(@Body request: FssaReturnPaymentRequest): Response<PaymentCreateResponse>
-
-    @GET("api/payments/{id}")
-    suspend fun getPayment(@Path("id") id: Long): Response<PaymentStatusResponse>
-
-    @POST("api/payments/{id}/cancel")
-    suspend fun cancelRenewalPayment(@Path("id") id: Long): Response<Void>
-
-    @POST("api/payments/water-testing")
-    suspend fun createWaterTestingPayment(@Body request: WaterTestingPaymentRequest): Response<PaymentCreateResponse>
-
-    @POST("api/payments/{id}/callback")
-    suspend fun paymentCallback(@Path("id") id: Long, @Body body: Map<String, String>): Response<PaymentStatusResponse>
-
-    @GET("api/payments/my")
-    suspend fun getMyPayments(): Response<List<PaymentStatusResponse>>
-
-    // ── FSSAI Compliance ──────────────────────────────────────────────────
-
-    @GET("api/fssa/compliance")
-    suspend fun getFssaCompliance(): Response<List<FssaComplianceStatus>>
-
-    @POST("api/fssa/{shopId}/mark-filed")
-    suspend fun markFssaReturnFiled(@Path("shopId") shopId: Long): Response<Map<String, String>>
-}
+@GET("api/payments/my")
+suspend fun getMyPayments(): Response<List<PaymentStatusResponse>>

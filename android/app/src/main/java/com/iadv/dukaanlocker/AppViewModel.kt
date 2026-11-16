@@ -110,12 +110,17 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
     val paymentLoading: Boolean by _paymentLoading
     private var _paymentError = mutableStateOf<String?>(null)
     val paymentError: String? by _paymentError
+    private var _drugLicenseVerificationResult = mutableStateOf<DrugLicenseVerificationResponse?>(null)
+    val drugLicenseVerificationResult: DrugLicenseVerificationResponse? by _drugLicenseVerificationResult
 
     private var _renewalPaymentSuccess = mutableStateOf(false)
     val renewalPaymentSuccess: Boolean by _renewalPaymentSuccess
 
     private var _waterTestingPaymentSuccess = mutableStateOf(false)
     val waterTestingPaymentSuccess: Boolean by _waterTestingPaymentSuccess
+
+    private var _drugLicensePaymentSuccess = mutableStateOf(false)
+    val drugLicensePaymentSuccess: Boolean by _drugLicensePaymentSuccess
 
     // FSSAI annual-return filing payment state (separate from document renewal)
     private var _fssaReturnPaymentResult = mutableStateOf<PaymentCreateResponse?>(null)
@@ -347,13 +352,87 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
                 } else {
                     _paymentError.value = "Failed to verify payment: ${response.parseErrorMessage()}"
                 }
+} catch (e: Exception) {
+            _paymentError.value = "Network error verifying payment: ${e.message}"
+        }
+    }
+
+    /** Verifies a drug license number with the backend. */
+    fun verifyDrugLicense(licenseNumber: String) {
+        viewModelScope.launch {
+            _drugLicenseVerificationResult.value = null
+            _paymentError.value = null
+            try {
+                val response = api.verifyDrugLicense(licenseNumber)
+                if (response.isSuccessful && response.body() != null) {
+                    _drugLicenseVerificationResult.value = response.body()
+                    _paymentError.value = "License verified successfully"
+                } else {
+                    _paymentError.value = response.parseErrorMessage() ?: "Failed to verify license"
+                }
+            } catch (e: Exception) {
+                _paymentError.value = "Network error: ${e.message}"
+            }
+        }
+    }
+
+    /** Creates a drug license payment via the backend. Returns the Easebuzz
+     * access key and checkout URL for the selected license type.
+     */
+    fun createDrugLicensePayment(request: DrugLicensePaymentRequest) {
+        viewModelScope.launch {
+            _drugLicensePaymentLoading.value = true
+            _paymentError.value = null
+            try {
+                val response = api.createDrugLicensePayment(request)
+                if (response.isSuccessful) {
+                    val result = response.body()
+                    if (result != null) {
+                        _paymentCreateResult.value = result
+                    } else {
+                        _paymentError.value = "Failed to create payment"
+                    }
+                } else {
+                    _paymentError.value = response.parseErrorMessage()
+                }
+            } catch (e: Exception) {
+                _paymentError.value = "Network error: ${e.message}"
+            }
+            _drugLicensePaymentLoading.value = false
+        }
+    }
+
+    /** Verifies a drug license payment with the backend before marking success. Never trusts client-only result. */
+    fun verifyDrugLicensePayment(paymentId: Long) {
+        viewModelScope.launch {
+            try {
+                val response = api.getPayment(paymentId)
+                if (response.isSuccessful) {
+                    val status = response.body()?.status
+                    if (status == "COMPLETED") {
+                        _drugLicensePaymentSuccess.value = true
+                    } else {
+                        _paymentError.value = "Payment not yet completed: $status"
+                    }
+                } else {
+                    _paymentError.value = "Failed to verify payment: ${response.parseErrorMessage()}"
+                }
             } catch (e: Exception) {
                 _paymentError.value = "Network error verifying payment: ${e.message}"
             }
         }
     }
 
-    fun goBackTab() {
+    /** Called when drug license payment is successful. */
+    fun onDrugLicensePaymentSuccess() {
+        _paymentCreateResult.value = null
+        _paymentError.value = null
+        _drugLicensePaymentSuccess.value = false
+        showToast("Drug license payment initiated successfully", ToastType.SUCCESS)
+        navigateToHome()
+    }
+
+    // FSSAI annual-return filing payment state (separate from document renewal)
         val history = _uiState.value.bottomTabHistory
         if (history.isNotEmpty()) {
             val previous = history.last()
@@ -1743,6 +1822,44 @@ var renewalPaymentDoc: DocumentItem? by mutableStateOf(null)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("FSSAI_FETCH", "<<< EXCEPTION: ${e.javaClass.simpleName}: ${e.message}", e)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    showToast("Network error: ${e.message}", ToastType.ERROR)
+                    onResult(false, null)
+                }
+            }
+        }
+    }
+
+    fun fetchDrugLicense(shopId: String, licenseNumber: String, onResult: (Boolean,?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                android.util.Log.d("DRUG_LICENSE_FETCH", ">>> REQUEST: shopId=$shopId, licenseNumber=$licenseNumber")
+                val response = withTimeoutOrNull(FETCH_TIMEOUT_MS) {
+                    api.fetchDrugLicense(DrugLicenseFetchRequest(shopId = shopId, licenseNumber = licenseNumber))
+                }
+                if (response == null) {
+                    android.util.Log.w("DRUG_LICENSE_FETCH", "<<< TIMED OUT after ${FETCH_TIMEOUT_MS}ms")
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onResult(false, null)
+                    }
+                    return@launch
+                }
+                android.util.Log.d("DRUG_LICENSE_FETCH", "<<< RESPONSE CODE: ${response.code()}")
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    if (response.isSuccessful) {
+                        val body = response.body()
+                        if (body != null && body.success) {
+                            onResult(true, body)
+                        } else {
+                            onResult(false, body)
+                        }
+                    } else {
+                        showToast("Drug license verification failed: ${response.parseErrorMessage()}", ToastType.ERROR)
+                        onResult(false, null)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("DRUG_LICENSE_FETCH", "<<< EXCEPTION: ${e.javaClass.simpleName}: ${e.message}", e)
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     showToast("Network error: ${e.message}", ToastType.ERROR)
                     onResult(false, null)

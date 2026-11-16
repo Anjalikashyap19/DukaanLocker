@@ -102,7 +102,7 @@ private fun formatLockout(ms: Long): String {
 }
 
 /** Document types that have a working auto-fetch flow. Anything else shows a "Coming Soon" popup. */
-val SUPPORTED_FETCH_TYPES = setOf("GST", "MSME_CERTIFICATE", "FSSAI_FOOD_LICENSE")
+val SUPPORTED_FETCH_TYPES = setOf("GST", "MSME_CERTIFICATE", "FSSAI_FOOD_LICENSE", "DRUG_LICENSE")
 
 @Composable
 fun FetchDocumentDialog(
@@ -115,7 +115,8 @@ fun FetchDocumentDialog(
     onFetchGst: ((shopId: String, gstin: String, (Boolean, GstVerificationResponse?) -> Unit) -> Unit)? = null,
     onInitMsmeCaptcha: (((String, String) -> Unit) -> Unit)? = null,
     onFetchMsme: ((shopId: String, udyamNumber: String, sessionId: String, captchaText: String, (Boolean, UdyamVerifyResponse?) -> Unit) -> Unit)? = null,
-    onFetchFssai: ((shopId: String, licenseNumber: String, (Boolean, FssaiVerificationResponse?) -> Unit) -> Unit)? = null
+    onFetchFssai: ((shopId: String, licenseNumber: String, (Boolean, FssaiVerificationResponse?) -> Unit) -> Unit)? = null,
+    onFetchDrugLicense: ((shopId: String, licenseNumber: String, (Boolean,?) -> Unit) -> Unit)? = null)
 ) {
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
@@ -167,10 +168,12 @@ fun FetchDocumentDialog(
     var pendingGstResult by remember { mutableStateOf<Pair<Boolean, GstVerificationResponse?>?>(null) }
     var pendingMsmeResult by remember { mutableStateOf<Pair<Boolean, UdyamVerifyResponse?>?>(null) }
     var pendingFssaiResult by remember { mutableStateOf<Pair<Boolean, FssaiVerificationResponse?>?>(null) }
+    var pendingDrugLicenseResult by remember { mutableStateOf<Pair<Boolean,?>?>(null) }
 
     val labelText = docFetchLabel(doc.type)
     val isGst = doc.type == "GST"
     val isFssai = doc.type == "FSSAI_FOOD_LICENSE"
+    val isDrugLicense = doc.type == "DRUG_LICENSE"
 
     // Ordered progress ticks used to animate the ring while the fetch is running.
     val fetchTicks: List<Float> = listOf(0.2f, 0.5f, 0.8f, 1.0f)
@@ -261,6 +264,26 @@ fun FetchDocumentDialog(
         }
     }
 
+    // Handle Drug License pending result
+    LaunchedEffect(pendingDrugLicenseResult) {
+        pendingDrugLicenseResult?.let { (success, response) ->
+            pendingDrugLicenseResult = null
+            if (timedOut) return@let
+            isFetching = false
+            if (success && response != null) {
+                onSuccess(
+                    response.licenseNumber ?: regInput.trim(),
+                    "Issue Date: " + SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()),
+                    "Expiry Date: " + SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date().add(Calendar.YEAR, 6).time)
+                )
+                onFetchSuccess()
+            } else {
+                fetchError = response?.errorMessage ?: "Verification failed. Please check the drug license number and try again."
+                onFetchFailure()
+            }
+        }
+    }
+
     // 1-minute countdown — expires while still fetching -> "Unable to fetch. Please retry."
     LaunchedEffect(isFetching) {
         if (isFetching) {
@@ -303,6 +326,11 @@ fun FetchDocumentDialog(
                 runTicks()
                 onFetchFssai(doc.businessId, regInput.trim()) { success, response ->
                     pendingFssaiResult = success to response
+                }
+            } else if (isDrugLicense && onFetchDrugLicense != null) {
+                runTicks()
+                onFetchDrugLicense(doc.businessId, regInput.trim()) { success, response ->
+                    pendingDrugLicenseResult = success to response
                 }
             } else if (isMsme && onFetchMsme != null && msmeSessionId.isNotBlank() && captchaInput.isNotBlank()) {
                 runTicks()

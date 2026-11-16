@@ -733,7 +733,7 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                         val fetchDoc = vm.fetchTargetDoc
                         if (fetchDoc != null) {
                             val shop = state.shops.find { it.id.toString() == fetchDoc.businessId }
-                            if (fetchDoc.type in SUPPORTED_FETCH_TYPES) {
+                            if (fetchDoc.type in SUPPORTED_FETCH_TYPES || fetchDoc.type == "DRUG_LICENSE") {
                                 FetchDocumentDialog(
                                     doc = fetchDoc,
                                     shopName = shop?.shopName ?: "Business",
@@ -761,6 +761,11 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                     },
                                     onFetchFssai = { shopId, licenseNumber, result ->
                                         vm.fetchFssai(shopId, licenseNumber) { success, response ->
+                                            result(success, response)
+                                        }
+                                    },
+                                    onFetchDrugLicense = { shopId, licenseNumber, result ->
+                                        vm.fetchDrugLicense(shopId, licenseNumber) { success, response ->
                                             result(success, response)
                                         }
                                     }
