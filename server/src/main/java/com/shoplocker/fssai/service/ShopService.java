@@ -403,8 +403,12 @@ public class ShopService {
             doc.setKindOfBusiness(kindOfBusiness.trim());
         }
         doc.setIssueDate(issueDate);
-        doc.setExpiryDate(expiryDate);
-        doc.setStatus(statusForUploadedDoc(expiryDate));
+        if (documentType == DocumentType.WATER_TESTING_CERTIFICATE && expiryDate == null) {
+            doc.setExpiryDate(issueDate.plusMonths(6));
+        } else {
+            doc.setExpiryDate(expiryDate);
+        }
+        doc.setStatus(statusForUploadedDoc(doc.getExpiryDate()));
 
         if (isNew) {
             doc.setUploadedAt(java.time.LocalDateTime.now());
