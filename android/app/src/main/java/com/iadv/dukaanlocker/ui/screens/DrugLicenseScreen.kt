@@ -16,7 +16,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ImageSpinner
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -33,6 +33,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.easebuzz.payment.kit.PWECheckoutActivity
 import com.iadv.dukaanlocker.*
 import com.iadv.dukaanlocker.ToastType
+import com.iadv.dukaanlocker.api.DrugLicensePaymentRequest
 import com.iadv.dukaanlocker.api.DrugLicenseVerificationResponse
 import com.iadv.dukaanlocker.api.DrugLicenseFetchRequest
 import com.iadv.dukaanlocker.ui.strings.AppStrings
@@ -95,8 +96,9 @@ fun DrugLicenseScreen(
 
     // Consume the verification result
     LaunchedEffect(verificationResult) {
-        if (verificationResult != null && verificationResult.isSuccess) {
-            verificationResult = verificationResult.copy(
+        val result = verificationResult
+        if (result != null && result.isSuccess) {
+            verificationResult = result.copy(
                 pdfUrl = "https://example.com/drug-license-cert.pdf",
                 certificateHtml = "<h1>Drug License Certificate</h1>"
             )
@@ -182,12 +184,11 @@ fun DrugLicenseScreen(
             OutlinedTextField(
                 value = licenseNumberFilter,
                 onValueChange = { licenseNumberFilter = it },
-                placeholder = "Enter drug license number",
+                placeholder = { Text("Enter drug license number") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 8.dp),
-                singleLine = true,
-                editable = !isLoading
+                enabled = !isLoading
             )
             if (isLoading) {
                 Text("Verifying...", fontSize = 12.sp, color = colors.textSecondary, modifier = Modifier.fillMaxWidth())
@@ -250,7 +251,7 @@ fun DrugLicenseScreen(
 
         // Info text
         Text(
-            text: "Select your drug license type:",
+            text = "Select your drug license type:",
             fontSize = 14.sp,
             color = colors.textSecondary,
             modifier = Modifier.fillMaxWidth()

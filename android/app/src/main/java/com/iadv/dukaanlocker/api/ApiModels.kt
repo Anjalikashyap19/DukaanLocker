@@ -158,24 +158,6 @@ data class BusinessProfileResponse(
     @SerializedName("updatedAt") val updatedAt: String?
 )
 
-// ── Location Search (proxied by backend, matches server LocationSearchResponse) ──
-
-data class LocationSearchResponse(
-    @SerializedName("query") val query: String?,
-    @SerializedName("suggestions") val suggestions: List<LocationSuggestion>?
-)
-
-data class LocationSuggestion(
-    @SerializedName("displayName") val displayName: String?,
-    @SerializedName("fullAddress") val fullAddress: String?,
-    @SerializedName("latitude") val latitude: Double?,
-    @SerializedName("longitude") val longitude: Double?,
-    @SerializedName("city") val city: String?,
-    @SerializedName("state") val state: String?,
-    @SerializedName("country") val country: String?,
-    @SerializedName("pincode") val pincode: String?
-)
-
 // ── Error Response (matches backend FssaiErrorResponse) ──────────────────────
 
 data class ErrorResponse(
@@ -557,5 +539,59 @@ data class WaterTestingPaymentRequest(
     @SerializedName("shopId") val shopId: Long,
     @SerializedName("documentId") val documentId: Long? = null,
     @SerializedName("testType") val testType: String  // BASIC, CHEMICAL, MICROBIOLOGICAL
+)
+
+// ── Drug License Models ──────────────────────────────────────────
+
+data class DrugLicensePaymentRequest(
+    @SerializedName("shopId") val shopId: Long,
+    @SerializedName("documentId") val documentId: Long? = null,
+    @SerializedName("licenseNumber") val licenseNumber: String,
+    @SerializedName("licenseType") val licenseType: String
+)
+
+data class DrugLicenseVerificationResponse(
+    @SerializedName("licenseNumber") val licenseNumber: String?,
+    @SerializedName("licenseHolderName") val licenseHolderName: String?,
+    @SerializedName("kindOfBusiness") val kindOfBusiness: String?,
+    @SerializedName("issueDate") val issueDate: String?,
+    @SerializedName("expiryDate") val expiryDate: String?,
+    @SerializedName("state") val state: String?,
+    @SerializedName("pdfUrl") val pdfUrl: String? = null,
+    @SerializedName("certificateHtml") val certificateHtml: String? = null,
+    @SerializedName("isSuccess") val isSuccess: Boolean = false
+)
+
+data class DrugLicenseFetchRequest(
+    @SerializedName("shopId") val shopId: Long,
+    @SerializedName("licenseNumber") val licenseNumber: String
+)
+
+data class DrugLicenseFetchResponse(
+    @SerializedName("success") val success: Boolean = false,
+    @SerializedName("response") val response: String? = null
+)
+
+// ── Location Search ──────────────────────────────────────────
+
+data class LocationSearchResponse(
+    @SerializedName("query") val query: String?,
+    @SerializedName("suggestions") val suggestions: List<LocationSuggestion> = emptyList()
+)
+
+data class LocationSuggestion(
+    @SerializedName("display_name") val displayName: String?,
+    @SerializedName("full_address") val fullAddress: String?,
+    @SerializedName("city") val city: String?,
+    @SerializedName("state") val state: String?,
+    @SerializedName("lat") val lat: Double? = null,
+    @SerializedName("lon") val lon: Double? = null
+)
+
+// ── Location Search (proxied by backend) ───────────────────────
+
+data class LocationSearchResponseProxy(
+    @SerializedName("query") val query: String?,
+    @SerializedName("suggestions") val suggestions: List<LocationSuggestion> = emptyList()
 )
 

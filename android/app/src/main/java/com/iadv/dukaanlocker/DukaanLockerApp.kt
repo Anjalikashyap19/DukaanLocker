@@ -690,6 +690,17 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                         is Screen.RenewalPayment -> {
                             // Handled via overlay below
                         }
+                        is Screen.DrugLicense -> {
+                            val shopId = (state.currentScreen as? Screen.DrugLicense)?.shopId ?: 0L
+                            val documentId = (state.currentScreen as? Screen.DrugLicense)?.documentId
+                            DrugLicenseScreen(
+                                shopId = shopId,
+                                documentId = documentId,
+                                onBack = { vm.goBack() },
+                                onPaySuccess = { vm.navigateToHome() },
+                                vm = vm
+                            )
+                        }
                     }
 
                     // ── Document Viewer overlay ──

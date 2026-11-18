@@ -116,8 +116,8 @@ fun FetchDocumentDialog(
     onInitMsmeCaptcha: (((String, String) -> Unit) -> Unit)? = null,
     onFetchMsme: ((shopId: String, udyamNumber: String, sessionId: String, captchaText: String, (Boolean, UdyamVerifyResponse?) -> Unit) -> Unit)? = null,
     onFetchFssai: ((shopId: String, licenseNumber: String, (Boolean, FssaiVerificationResponse?) -> Unit) -> Unit)? = null,
-    onFetchDrugLicense: ((shopId: String, licenseNumber: String, (Boolean,?) -> Unit) -> Unit)? = null)
-) {
+    onFetchDrugLicense: ((shopId: String, licenseNumber: String, (Boolean, Any?) -> Unit) -> Unit)? = null)
+{
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
     var regInput by remember { mutableStateOf("") }
@@ -168,7 +168,7 @@ fun FetchDocumentDialog(
     var pendingGstResult by remember { mutableStateOf<Pair<Boolean, GstVerificationResponse?>?>(null) }
     var pendingMsmeResult by remember { mutableStateOf<Pair<Boolean, UdyamVerifyResponse?>?>(null) }
     var pendingFssaiResult by remember { mutableStateOf<Pair<Boolean, FssaiVerificationResponse?>?>(null) }
-    var pendingDrugLicenseResult by remember { mutableStateOf<Pair<Boolean,?>?>(null) }
+    var pendingDrugLicenseResult by remember { mutableStateOf<Pair<Boolean, Any?>?>(null) }
 
     val labelText = docFetchLabel(doc.type)
     val isGst = doc.type == "GST"
@@ -272,13 +272,13 @@ fun FetchDocumentDialog(
             isFetching = false
             if (success && response != null) {
                 onSuccess(
-                    response.licenseNumber ?: regInput.trim(),
+                    regInput.trim(),
                     "Issue Date: " + SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()),
-                    "Expiry Date: " + SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date().add(Calendar.YEAR, 6).time)
+                    "Expiry Date: " + SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(System.currentTimeMillis() + 6L * 365 * 24 * 60 * 60 * 1000))
                 )
                 onFetchSuccess()
             } else {
-                fetchError = response?.errorMessage ?: "Verification failed. Please check the drug license number and try again."
+                fetchError = "Verification failed. Please check the drug license number and try again."
                 onFetchFailure()
             }
         }
