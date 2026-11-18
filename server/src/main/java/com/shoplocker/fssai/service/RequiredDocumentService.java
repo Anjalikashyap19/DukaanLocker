@@ -188,14 +188,13 @@ public class RequiredDocumentService {
                 DocumentType.SHOP_INSURANCE);
         CATEGORY_DOCUMENTS.put("HARDWARE", hardware);
 
-        // BEAUTY — Salons & personal care need professional tax
+        // BEAUTY — Salons & personal care
         Set<DocumentType> beauty = new HashSet<>();
         Collections.addAll(beauty,
                 DocumentType.PAN,
                 DocumentType.GST,
                 DocumentType.TRADE_LICENSE,
                 DocumentType.MSME_CERTIFICATE,
-                DocumentType.PROFESSIONAL_TAX,
                 DocumentType.SHOP_INSURANCE);
         CATEGORY_DOCUMENTS.put("BEAUTY", beauty);
 

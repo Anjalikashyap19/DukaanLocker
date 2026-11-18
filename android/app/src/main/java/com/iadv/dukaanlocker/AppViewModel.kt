@@ -735,13 +735,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _drugLicenseVerificationResult.value = null
             try {
+                android.util.Log.d("DRUG_LICENSE_VERIFY", ">>> REQUEST: licenseNumber=$licenseNumber")
                 val response = api.verifyDrugLicense(licenseNumber)
+                android.util.Log.d("DRUG_LICENSE_VERIFY", "<<< HTTP ${response.code()} body=${response.body()}")
                 if (response.isSuccessful && response.body() != null) {
                     _drugLicenseVerificationResult.value = response.body()
                 } else {
+                    val errorBody = response.errorBody()?.string() ?: "no body"
+                    android.util.Log.e("DRUG_LICENSE_VERIFY", "<<< ERROR: HTTP ${response.code()} body=$errorBody")
                     _paymentError.value = response.parseErrorMessage() ?: "Failed to verify license"
                 }
             } catch (e: Exception) {
+                android.util.Log.e("DRUG_LICENSE_VERIFY", "<<< EXCEPTION: ${e.message}", e)
                 _paymentError.value = "Network error: ${e.message}"
             }
         }
@@ -1862,10 +1867,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     if (response.isSuccessful) {
                         val body = response.body()
-                        if (body != null && body.success) {
-                            onResult(true, body.response)
+                        if (body != null && body.isSuccess) {
+                            onResult(true, body.pdfUrl)
                         } else {
-                            onResult(false, body?.response)
+                            onResult(false, body?.errorMessage)
                         }
                     } else {
                         showToast("Drug license verification failed: ${response.parseErrorMessage()}", ToastType.ERROR)

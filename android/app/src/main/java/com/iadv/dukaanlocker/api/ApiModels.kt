@@ -559,7 +559,7 @@ data class DrugLicenseVerificationResponse(
     @SerializedName("state") val state: String?,
     @SerializedName("pdfUrl") val pdfUrl: String? = null,
     @SerializedName("certificateHtml") val certificateHtml: String? = null,
-    @SerializedName("isSuccess") val isSuccess: Boolean = false
+    @SerializedName("success") val isSuccess: Boolean = false
 )
 
 data class DrugLicenseFetchRequest(

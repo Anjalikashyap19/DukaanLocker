@@ -55,7 +55,7 @@ interface ApiService {
     suspend fun verifyDrugLicense(@Path("licenseNumber") licenseNumber: String): Response<DrugLicenseVerificationResponse>
 
     @POST("api/drug-license/fetch")
-    suspend fun fetchDrugLicense(@Body request: DrugLicenseFetchRequest): Response<DrugLicenseFetchResponse>
+    suspend fun fetchDrugLicense(@Body request: DrugLicenseFetchRequest): Response<DrugLicenseVerificationResponse>
 
     @GET("api/drug-license/callback/{paymentId}")
     suspend fun drugLicenseCallback(@Path("paymentId") paymentId: Long): Response<Unit>
