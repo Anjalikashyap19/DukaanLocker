@@ -64,7 +64,8 @@ public class DrugLicenseVerificationController {
     public ResponseEntity<DrugLicenseVerificationResponse> fetchAndPersist(
             @RequestBody Map<String, Object> request,
             Authentication authentication) {
-        Long shopId = (Long) request.get("shopId");
+        Object shopIdValue = request.get("shopId");
+        Long shopId = shopIdValue instanceof Number number ? number.longValue() : null;
         String licenseNumber = (String) request.get("licenseNumber");
 
         if (shopId == null || licenseNumber == null || licenseNumber.isBlank()) {
