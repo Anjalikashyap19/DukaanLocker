@@ -48,17 +48,8 @@ interface ApiService {
 
     // ── Drug License Endpoints ─────────────────────────────────
 
-    @POST("api/drug-license/payment")
-    suspend fun createDrugLicensePayment(@Body request: DrugLicensePaymentRequest): Response<PaymentCreateResponse>
-
-    @GET("api/drug-license/verify/{licenseNumber}")
-    suspend fun verifyDrugLicense(@Path("licenseNumber") licenseNumber: String): Response<DrugLicenseVerificationResponse>
-
     @POST("api/drug-license/fetch")
     suspend fun fetchDrugLicense(@Body request: DrugLicenseFetchRequest): Response<DrugLicenseVerificationResponse>
-
-    @GET("api/drug-license/callback/{paymentId}")
-    suspend fun drugLicenseCallback(@Path("paymentId") paymentId: Long): Response<Unit>
 
     // ── Shop Endpoints ─────────────────────────────────────────
 

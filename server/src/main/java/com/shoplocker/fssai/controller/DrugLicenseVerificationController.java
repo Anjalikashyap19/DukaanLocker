@@ -105,6 +105,8 @@ public class DrugLicenseVerificationController {
         LocalDateTime expiryDate = parseExpiryDate(verification.getExpiryDate());
         LocalDateTime issueDate = parseExpiryDate(verification.getIssueDate());
 
+        shopService.assertDocumentNotReused(shopId, verification.getContentHash());
+
         shopService.uploadOrReuploadDocument(
                 shopId,
                 DocumentType.DRUG_LICENSE,
@@ -113,7 +115,7 @@ public class DrugLicenseVerificationController {
                 verification.getLicenseNumber(),
                 issueDate,
                 expiryDate,
-                null,
+                verification.getContentHash(),
                 verification.getKindOfBusiness()
         );
 

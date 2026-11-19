@@ -1,7 +1,10 @@
 package com.shoplocker.fssai.service;
 
 import java.io.ByteArrayOutputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -85,31 +88,43 @@ public class DrugLicenseVerificationService {
                     "Seems like this certificate doesn't belong to your business.");
         }
 
-        // Step 4: generate PDF and upload to the document storage path
-        if (parsed.isSuccess()) {
-            try {
-                byte[] pdfBytes = renderCertificate(parsed, normalized);
+        // Step 4: only the fetch path generates and stores a PDF. A read-only
+        // verification has no user/shop to file it under.
+        if (userId == null || shopId == null) {
+            parsed.setCertificateHtml(certificateHtml(parsed, false));
+            return parsed;
+        }
 
-                String fileKey = "drug-license/verify/" + normalized.toLowerCase() + "/drug_license.pdf";
-                Long effectiveUserId = userId != null ? userId : 0L;
-                Long effectiveShopId = shopId != null ? shopId : 0L;
-                String pdfUrl = localFileStorageService.uploadFile(pdfBytes,
-                        ContentType.APPLICATION_PDF.getMimeType(),
-                        effectiveUserId, effectiveShopId, fileKey);
+        try {
+            byte[] pdfBytes = renderCertificate(parsed, normalized);
+            String fileKey = "drug-license/verify/" + normalized.toLowerCase() + "/drug_license.pdf";
+            String pdfUrl = localFileStorageService.uploadFile(pdfBytes,
+                    ContentType.APPLICATION_PDF.getMimeType(),
+                    userId, shopId, fileKey);
 
-                parsed.setPdfUrl(pdfUrl);
+            parsed.setPdfUrl(pdfUrl);
+            parsed.setContentHash(sha256Hex(pdfBytes));
 
-                log.info("Drug license certificate PDF generated and uploaded for license: {}, size: {} bytes",
-                        normalized, pdfBytes.length);
-
-            } catch (Exception e) {
-                log.error("Drug license {} was verified but PDF generation/storage upload failed. " +
-                        "Continuing without the certificate PDF.", normalized, e);
-                // Graceful degradation — verification succeeded, just no PDF
-            }
+            log.info("Drug license certificate PDF generated and uploaded for license: {}, size: {} bytes",
+                    normalized, pdfBytes.length);
+        } catch (FssaiException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Drug license {} was verified but PDF generation/storage upload failed", normalized, e);
+            throw new FssaiException(
+                    "The license was verified but we couldn't generate or store the certificate PDF. Please try again.",
+                    com.shoplocker.fssai.exception.FailureCode.PDF_PROCESSING_ERROR, e);
         }
 
         return parsed;
+    }
+
+    private static String sha256Hex(byte[] bytes) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is not available", e);
+        }
     }
 
     /**

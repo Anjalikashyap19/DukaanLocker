@@ -543,13 +543,6 @@ data class WaterTestingPaymentRequest(
 
 // ── Drug License Models ──────────────────────────────────────────
 
-data class DrugLicensePaymentRequest(
-    @SerializedName("shopId") val shopId: Long,
-    @SerializedName("documentId") val documentId: Long? = null,
-    @SerializedName("licenseNumber") val licenseNumber: String,
-    @SerializedName("licenseType") val licenseType: String
-)
-
 data class DrugLicenseVerificationResponse(
     @SerializedName("licenseNumber") val licenseNumber: String?,
     @SerializedName("licenseHolderName") val licenseHolderName: String?,
@@ -559,17 +552,13 @@ data class DrugLicenseVerificationResponse(
     @SerializedName("state") val state: String?,
     @SerializedName("pdfUrl") val pdfUrl: String? = null,
     @SerializedName("certificateHtml") val certificateHtml: String? = null,
+    @SerializedName("errorMessage") val errorMessage: String? = null,
     @SerializedName("success") val isSuccess: Boolean = false
 )
 
 data class DrugLicenseFetchRequest(
-    @SerializedName("shopId") val shopId: Long,
+    @SerializedName("shopId") val shopId: String,
     @SerializedName("licenseNumber") val licenseNumber: String
-)
-
-data class DrugLicenseFetchResponse(
-    @SerializedName("success") val success: Boolean = false,
-    @SerializedName("response") val response: String? = null
 )
 
 // ── Location Search ──────────────────────────────────────────

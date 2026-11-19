@@ -21,6 +21,7 @@ public class DrugLicenseVerificationResponse {
     private String contactPerson;
     private String registrationNumber;
     private String pdfUrl;
+    private String contentHash;
     private String certificateHtml;
     private String errorMessage;
 
@@ -96,6 +97,9 @@ public class DrugLicenseVerificationResponse {
 
     public String getPdfUrl() { return pdfUrl; }
     public void setPdfUrl(String pdfUrl) { this.pdfUrl = pdfUrl; }
+
+    public String getContentHash() { return contentHash; }
+    public void setContentHash(String contentHash) { this.contentHash = contentHash; }
 
     public String getCertificateHtml() { return certificateHtml; }
     public void setCertificateHtml(String certificateHtml) { this.certificateHtml = certificateHtml; }
