@@ -82,14 +82,13 @@ public class UdyamVerificationService {
 
     private static final Logger log = LoggerFactory.getLogger(UdyamVerificationService.class);
 
-    private static final String BASE_URL = "https://www.udyamregistration.gov.in";
+    private static final String BASE_URL = "https://udyamregistration.gov.in";
     private static final String VERIFY_PAGE = BASE_URL + "/Udyam_Verify.aspx";
     private static final String CAPTCHA_URL_PREFIX = BASE_URL + "/Captcha/CaptchaControl.aspx?id=";
-    // The certificate print page lives under /Udyam_User/ and REQUIRES the Udyam
-    // number as a "udyam" query parameter. Requesting it without the parameter
-    // returns an empty print-form shell, which is why certificates came back
-    // with blank fields (labels present, no values).
-    private static final String PRINT_PAGE = BASE_URL + "/Udyam_User/Udyam_PrintApplication.aspx";
+    // The certificate print page requires the Udyam number as a "udyam" query
+    // parameter. Requesting it without the parameter returns an empty print-form
+    // shell, which is why certificates came back with blank fields.
+    private static final String PRINT_PAGE = BASE_URL + "/PrintUdyamApplication.aspx";
     private static final long SESSION_TTL_MS = 5 * 60 * 1000; // 5 minutes
     private static final int MAX_SESSIONS = 1000; // prevent memory exhaustion
 
