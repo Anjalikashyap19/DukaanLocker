@@ -38,6 +38,7 @@ import com.iadv.dukaanlocker.ToastType
 import com.iadv.dukaanlocker.api.FssaComplianceStatus
 import com.iadv.dukaanlocker.ui.components.EmptyStateView
 import com.iadv.dukaanlocker.ui.theme.LocalAppColors
+import com.iadv.dukaanlocker.ui.theme.topBarShadow
 
 @Composable
 fun FssaComplianceScreen(
@@ -107,7 +108,7 @@ fun FssaComplianceScreen(
 
     Column(modifier = Modifier.fillMaxSize().background(colors.background)) {
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().topBarShadow(),
             color = colors.background,
             shadowElevation = 2.dp
         ) {

@@ -10,6 +10,8 @@ import com.iadv.dukaanlocker.DocumentItem
 sealed class Screen(val route: String) {
     data object Onboarding : Screen("onboarding")
     data object Login : Screen("login")
+    data object Register : Screen("register")
+    data object MsmeLogin : Screen("msme_login")
     data object Wizard : Screen("wizard")
     data object AddBusiness : Screen("add_business")
     data object OwnerHome : Screen("owner_home")

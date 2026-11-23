@@ -76,7 +76,7 @@ fun DocsScreen(
 
     Column(modifier = Modifier.fillMaxSize().background(colors.background)) {
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().topBarShadow(),
             color = colors.background,
             shadowElevation = 4.dp
         ) {
@@ -132,26 +132,27 @@ fun DocsScreen(
                 contentPadding = PaddingValues(vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-items(orderedTypes) { type ->
-                        val docs = grouped[type] ?: emptyList()
-                        val isTargetMissing = targetMissingDocumentType != null && type == targetMissingDocumentType
-                         DocTypeSection(
-                             title = docs.first().name,
-                             count = docs.size,
-                             docs = docs,
-                             shopNameById = shopNameById,
-                             lang = lang,
-                             onFetchDoc = onFetchDoc,
-                             onUploadDoc = onUploadDoc,
-                             onViewDoc = onViewDoc,
-                             onDeleteDoc = onDeleteDoc,
-                             onRenewDoc = onRenewDoc,
-                             onApplyNewLicence = onApplyNewLicence,
-                             isExpanded = expandedType == type,
-                             onExpandChange = { expandedType = if (expandedType == type) null else type },
-                             isTargetMissing = isTargetMissing
-                         )
-                    }
+                items(orderedTypes) { type ->
+                    val docs = grouped[type] ?: emptyList()
+                    val isTargetMissing = targetMissingDocumentType != null && type == targetMissingDocumentType
+                    DocTypeSection(
+                        modifier = Modifier.animateItem(),
+                        title = docs.first().name,
+                        count = docs.size,
+                        docs = docs,
+                        shopNameById = shopNameById,
+                        lang = lang,
+                        onFetchDoc = onFetchDoc,
+                        onUploadDoc = onUploadDoc,
+                        onViewDoc = onViewDoc,
+                        onDeleteDoc = onDeleteDoc,
+                        onRenewDoc = onRenewDoc,
+                        onApplyNewLicence = onApplyNewLicence,
+                        isExpanded = expandedType == type,
+                        onExpandChange = { expandedType = if (expandedType == type) null else type },
+                        isTargetMissing = isTargetMissing
+                    )
+                }
                 if (businesses.isNotEmpty()) {
                     item {
                         OutlinedButton(
@@ -174,6 +175,7 @@ items(orderedTypes) { type ->
 
 @Composable
 fun DocTypeSection(
+    modifier: Modifier = Modifier,
     title: String,
     count: Int,
     docs: List<DocumentItem>,
@@ -192,7 +194,7 @@ fun DocTypeSection(
     val colors = LocalAppColors.current
 
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .border(
                 if (isTargetMissing) BorderStroke(2.dp, colors.error) else BorderStroke(1.dp, colors.border)

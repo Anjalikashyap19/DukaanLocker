@@ -65,7 +65,7 @@ fun ManageManagersScreen(
     ) {
         // Header
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().topBarShadow(),
             color = colors.background,
             shadowElevation = 4.dp
         ) {
@@ -124,6 +124,7 @@ fun ManageManagersScreen(
             ) {
                 items(managers) { manager ->
                     ManagerCard(
+                        modifier = Modifier.animateItem(),
                         manager = manager,
                         businesses = businesses,
                         assignedBusinessIds = manager.assignedBusinessIds,
@@ -163,6 +164,7 @@ fun ManageManagersScreen(
 
 @Composable
 private fun ManagerCard(
+    modifier: Modifier = Modifier,
     manager: ManagerAccess,
     businesses: List<BusinessProfile>,
     assignedBusinessIds: List<String>,
@@ -183,7 +185,7 @@ private fun ManagerCard(
     val unassignedBusinesses = businesses.filter { it.id !in allAssignedIds }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = colors.cardBg),
         border = BorderStroke(1.dp, if (manager.enabled) colors.border else colors.error.copy(alpha = 0.3f)),
         shape = RoundedCornerShape(14.dp)

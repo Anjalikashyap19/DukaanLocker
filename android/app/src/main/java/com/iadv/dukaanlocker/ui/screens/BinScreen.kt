@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import com.iadv.dukaanlocker.api.NotificationItem
 import com.iadv.dukaanlocker.ui.components.EmptyStateView
 import com.iadv.dukaanlocker.ui.theme.LocalAppColors
+import com.iadv.dukaanlocker.ui.theme.topBarShadow
 
 @Composable
 fun BinScreen(
@@ -49,7 +50,7 @@ fun BinScreen(
     Scaffold(
         topBar = {
             Surface(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().topBarShadow(),
                 color = colors.background,
                 shadowElevation = 4.dp
             ) {
@@ -123,6 +124,7 @@ fun BinScreen(
             ) {
                 items(notifications) { notification ->
                     BinNotificationCard(
+                        modifier = Modifier.animateItem(),
                         notification = notification,
                         colors = colors,
                         onRestore = { onRestore(notification) },
@@ -185,6 +187,7 @@ fun BinScreen(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BinNotificationCard(
+    modifier: Modifier = Modifier,
     notification: NotificationItem,
     colors: com.iadv.dukaanlocker.ui.theme.AppColors,
     onRestore: () -> Unit,
@@ -211,7 +214,7 @@ private fun BinNotificationCard(
     val bgAlpha = if (notification.isRead) 0.3f else 0.6f
 
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(8.dp)
             .combinedClickable(

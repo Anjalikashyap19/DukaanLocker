@@ -9,49 +9,49 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 
 private val DukaanDarkColorScheme = darkColorScheme(
-    primary = PrimaryBlue,
-    onPrimary = Color.White,
-    primaryContainer = PrimaryBlue.copy(alpha = 0.15f),
-    onPrimaryContainer = PrimaryBlue,
-    secondary = SecondaryTeal,
-    onSecondary = Color.White,
-    secondaryContainer = SecondaryTeal.copy(alpha = 0.15f),
-    onSecondaryContainer = SecondaryTeal,
-    tertiary = EmeraldColor,
-    onTertiary = Color.White,
-    background = DarkBg,
-    onBackground = Color.White,
-    surface = CardBg,
-    onSurface = Color.White,
-    surfaceVariant = CardBg.copy(alpha = 0.8f),
-    onSurfaceVariant = GrayText,
-    outline = BorderColor,
-    outlineVariant = BorderColor.copy(alpha = 0.5f),
-    error = Color(0xFFEF4444),
-    onError = Color.White
+    primary = BrandDark,
+    onPrimary = TextOnBrand,
+    primaryContainer = BrandDark.copy(alpha = 0.15f),
+    onPrimaryContainer = BrandDark,
+    secondary = BrandDark,
+    onSecondary = TextOnBrand,
+    secondaryContainer = BrandDark.copy(alpha = 0.15f),
+    onSecondaryContainer = BrandDark,
+    tertiary = SuccessColor,
+    onTertiary = TextOnBrand,
+    background = BgDark,
+    onBackground = TextPrimaryDark,
+    surface = SurfaceDark,
+    onSurface = TextPrimaryDark,
+    surfaceVariant = SurfaceDark.copy(alpha = 0.8f),
+    onSurfaceVariant = TextSecondaryDark,
+    outline = BorderDark,
+    outlineVariant = BorderDark.copy(alpha = 0.5f),
+    error = ErrorColor,
+    onError = TextOnBrand
 )
 
 private val DukaanLightColorScheme = lightColorScheme(
-    primary = PrimaryBlue,
-    onPrimary = Color.White,
-    primaryContainer = PrimaryBlue.copy(alpha = 0.1f),
-    onPrimaryContainer = PrimaryBlue,
-    secondary = SecondaryTeal,
-    onSecondary = Color.White,
-    secondaryContainer = SecondaryTeal.copy(alpha = 0.1f),
-    onSecondaryContainer = SecondaryTeal,
-    tertiary = EmeraldColor,
-    onTertiary = Color.White,
-    background = Color(0xFFF8FAFC),
-    onBackground = Color(0xFF1E293B),
-    surface = Color.White,
-    onSurface = Color(0xFF1E293B),
+    primary = BrandDark,
+    onPrimary = TextOnBrand,
+    primaryContainer = BrandDark.copy(alpha = 0.1f),
+    onPrimaryContainer = BrandDark,
+    secondary = BrandDark,
+    onSecondary = TextOnBrand,
+    secondaryContainer = BrandDark.copy(alpha = 0.1f),
+    onSecondaryContainer = BrandDark,
+    tertiary = SuccessColor,
+    onTertiary = TextOnBrand,
+    background = BgLight,
+    onBackground = TextPrimaryLight,
+    surface = SurfaceLight,
+    onSurface = TextPrimaryLight,
     surfaceVariant = Color(0xFFF1F5F9),
-    onSurfaceVariant = Color(0xFF64748B),
-    outline = Color(0xFFCBD5E1),
-    outlineVariant = Color(0xFFE2E8F0),
-    error = Color(0xFFEF4444),
-    onError = Color.White
+    onSurfaceVariant = TextSecondaryLight,
+    outline = BorderLight,
+    outlineVariant = BorderLight.copy(alpha = 0.5f),
+    error = ErrorColor,
+    onError = TextOnBrand
 )
 
 @Composable
@@ -62,7 +62,10 @@ fun DukaanLockerTheme(
     val colorScheme = if (darkTheme) DukaanDarkColorScheme else DukaanLightColorScheme
     val appColors = if (darkTheme) DarkAppColors else LightAppColors
 
-    CompositionLocalProvider(LocalAppColors provides appColors) {
+    CompositionLocalProvider(
+        LocalAppColors provides appColors,
+        LocalIsDarkTheme provides darkTheme
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,

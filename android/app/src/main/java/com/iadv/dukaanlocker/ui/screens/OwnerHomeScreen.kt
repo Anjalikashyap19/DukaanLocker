@@ -12,15 +12,13 @@ import com.iadv.dukaanlocker.ui.components.SkeletonBusinessCard
 import com.iadv.dukaanlocker.ui.components.EmptyStateView
 import com.iadv.dukaanlocker.ui.components.ShimmerEffect
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
@@ -62,8 +60,6 @@ fun OwnerHomeScreen(
     onLogout: () -> Unit,
     onBusinessSelected: (String) -> Unit = {},
     onAddCustomDoc: (String) -> Unit = {},
-    isDarkTheme: Boolean = true,
-    onToggleTheme: () -> Unit = {},
     onBiometricLoginToggle: ((Boolean) -> Unit)? = null,
     isBiometricLoginEnabled: Boolean = false,
     isBiometricAvailable: Boolean = false,
@@ -100,64 +96,68 @@ fun OwnerHomeScreen(
             modifier = Modifier
                 .fillMaxSize()
         ) {
-            // Header
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = colors.background,
-                shadowElevation = 4.dp
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(colors.primary.copy(alpha = 0.2f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary, modifier = Modifier.size(24.dp))
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                 Text("${AppStrings.get(lang, "Welcome,")} ${user.name.take(7)}${if (user.name.length > 7) "..." else ""}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                 Text(
-                                     if (businessCount == 1) "1 ${AppStrings.get(lang, "Business")} • ${AppStrings.get(lang, "Owner")}"
-                                     else "$businessCount ${AppStrings.get(lang, "Businesses")} • ${AppStrings.get(lang, "Owner")}",
-                                     fontSize = 12.sp, color = colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis
-                                 )
-                             }
-                        }
-                        Row {
-                            Box {
-                                IconButton(onClick = onNotifications) {
-                                    Icon(Icons.Default.Notifications, contentDescription = "Notifications", tint = colors.textSecondary)
+            // A selected business draws its own top bar (back, name, edit), so the
+            // welcome header belongs to the list only.
+            if (selectedBusinessId == null) {
+                // Header
+                Surface(
+                    modifier = Modifier.fillMaxWidth().topBarShadow(),
+                    color = colors.background,
+                    shadowElevation = 4.dp
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(CircleShape)
+                                        .background(colors.primary.copy(alpha = 0.2f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Store, contentDescription = null, tint = colors.primary, modifier = Modifier.size(24.dp))
                                 }
-                                if (unreadNotificationCount > 0) {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(end = 4.dp, top = 4.dp)
-                                            .size(16.dp)
-                                            .clip(CircleShape)
-                                            .background(Color.Red),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            if (unreadNotificationCount > 9) "9+" else "$unreadNotificationCount",
-                                            fontSize = 9.sp,
-                                            color = Color.White,
-                                            fontWeight = FontWeight.Bold
-                                        )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                     Text("${AppStrings.get(lang, "Welcome,")} ${user.name.take(7)}${if (user.name.length > 7) "..." else ""}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                     Text(
+                                         if (businessCount == 1) "1 ${AppStrings.get(lang, "Business")} • ${AppStrings.get(lang, "Owner")}"
+                                         else "$businessCount ${AppStrings.get(lang, "Businesses")} • ${AppStrings.get(lang, "Owner")}",
+                                         fontSize = 12.sp, color = colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis
+                                     )
+                                 }
+                            }
+                            Row {
+                                Box {
+                                    IconButton(onClick = onNotifications) {
+                                        Icon(Icons.Default.Notifications, contentDescription = "Notifications", tint = colors.textSecondary)
+                                    }
+                                    if (unreadNotificationCount > 0) {
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.TopEnd)
+                                                .padding(end = 4.dp, top = 4.dp)
+                                                .size(16.dp)
+                                                .clip(CircleShape)
+                                                .background(Color.Red),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                if (unreadNotificationCount > 9) "9+" else "$unreadNotificationCount",
+                                                fontSize = 9.sp,
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
                                     }
                                 }
-                            }
-                            IconButton(onClick = { showSettings = true }) {
-                                 Icon(Icons.Default.Settings, contentDescription = AppStrings.get(lang, "Settings"), tint = colors.textSecondary)
+                                IconButton(onClick = { showSettings = true }) {
+                                     Icon(Icons.Default.Settings, contentDescription = AppStrings.get(lang, "Settings"), tint = colors.textSecondary)
+                                }
                             }
                         }
                     }
@@ -272,23 +272,6 @@ fun OwnerHomeScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         HorizontalDivider(color = colors.border)
 
-                        // Theme Toggle
-                        TextButton(onClick = {
-                            showSettings = false
-                            onToggleTheme()
-                        }) {
-                            Icon(
-                                if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
-                                 contentDescription = AppStrings.get(lang, "Toggle theme"), modifier = Modifier.size(18.dp),
-                                tint = colors.primary
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                 if (isDarkTheme) AppStrings.get(lang, "Switch to Light Theme") else AppStrings.get(lang, "Switch to Dark Theme"),
-                                color = colors.primary, fontWeight = FontWeight.Bold
-                            )
-                        }
-
                         // Biometric Login Toggle (only if biometric is available)
                         if (isBiometricAvailable && onBiometricLoginToggle != null) {
                             Row(
@@ -347,7 +330,7 @@ fun OwnerHomeScreen(
                             showSettings = false
                             showLogoutDialog = true
                         }) {
-                            Icon(Icons.Default.Logout, contentDescription = null, tint = Color.Red, modifier = Modifier.size(18.dp))
+                            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = Color.Red, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                              Text(AppStrings.get(lang, "Logout & Clear Session"), color = Color.Red, fontWeight = FontWeight.Bold)
                         }
@@ -499,7 +482,7 @@ private fun BusinessCard(
                         Text(business.scale, fontSize = 11.sp, color = colors.textSecondary)
                     }
                 }
-                IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
+                IconButton(onClick = onEdit, modifier = Modifier.size(48.dp)) {
                     Icon(Icons.Default.Edit, contentDescription = AppStrings.get(lang, "Edit"), tint = colors.textSecondary, modifier = Modifier.size(16.dp))
                 }
             }
@@ -629,7 +612,7 @@ private fun BusinessDetailView(
     Column(modifier = Modifier.fillMaxSize()) {
         // Business Detail Header
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().topBarShadow(),
             color = colors.background,
             shadowElevation = 4.dp
         ) {
@@ -639,7 +622,7 @@ private fun BusinessDetailView(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = AppStrings.get(lang, "Back"), tint = colors.textPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = AppStrings.get(lang, "Back"), tint = colors.textPrimary)
                     }
                     Spacer(modifier = Modifier.width(4.dp))
                     Column(modifier = Modifier.weight(1f)) {

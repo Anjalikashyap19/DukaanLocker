@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.Color
 // ── Theme-aware color container ──
 // Provides correct colors for dark/light modes so screens don't need
 // to hardcode color values.
+// ──────────────────────────────────────────────────────────────────────────
 
 data class AppColors(
     val background: Color,
@@ -22,34 +23,41 @@ data class AppColors(
     val error: Color,
 )
 
+// Dark mode interactive elements use the bright action blue: BrandDark (#173B70)
+// on BgDark (#0F172A) is only ~1.7:1, which makes cursors, focused borders and
+// primary button labels invisible. BrandAction gives ~4.3:1 on the same surface.
 val DarkAppColors = AppColors(
-    background = Color(0xFF1A1A1A),
-    cardBg = Color(0xFF2D2D2D),
-    primary = Color(0xFF2563EB),
-    accent = Color(0xFF06B6D4),
-    textSecondary = Color(0xFF94A3B8),
-    border = Color(0xFF404040),
-    secondary = Color(0xFF0F766E),
-    success = Color(0xFF22C55E),
-    warning = Color(0xFFF59E0B),
-    textPrimary = Color.White,
-    textOnPrimary = Color.White,
-    error = Color(0xFFEF4444),
+    background = BgDark,
+    cardBg = SurfaceDark,
+    primary = BrandAction,
+    accent = BrandAction,
+    textSecondary = TextSecondaryDark,
+    border = BorderDark,
+    secondary = BrandAction,
+    success = SuccessColor,
+    warning = WarningColor,
+    textPrimary = TextPrimaryDark,
+    textOnPrimary = TextOnBrand,
+    error = ErrorColor,
 )
 
 val LightAppColors = AppColors(
-    background = Color(0xFFF8FAFC),
-    cardBg = Color.White,
-    primary = Color(0xFF2563EB),
-    accent = Color(0xFF06B6D4),
-    textSecondary = Color(0xFF64748B),
-    border = Color(0xFFCBD5E1),
-    secondary = Color(0xFF0F766E),
-    success = Color(0xFF22C55E),
-    warning = Color(0xFFF59E0B),
-    textPrimary = Color(0xFF1E293B),
-    textOnPrimary = Color.White,
-    error = Color(0xFFEF4444),
+    background = BgLight,
+    cardBg = SurfaceLight,
+    primary = BrandDark,
+    accent = BrandAction,
+    textSecondary = TextSecondaryLight,
+    border = BorderLight,
+    secondary = BrandDark,
+    success = SuccessColor,
+    warning = WarningColor,
+    textPrimary = TextPrimaryLight,
+    textOnPrimary = TextOnBrand,
+    error = ErrorColor,
 )
 
-val LocalAppColors = staticCompositionLocalOf { DarkAppColors }
+val LocalAppColors = staticCompositionLocalOf { LightAppColors }
+
+// Whether the app is currently in dark mode. Screens rarely need this, but a
+// few depth cues (app-bar separation) only make sense in dark mode.
+val LocalIsDarkTheme = staticCompositionLocalOf { true }

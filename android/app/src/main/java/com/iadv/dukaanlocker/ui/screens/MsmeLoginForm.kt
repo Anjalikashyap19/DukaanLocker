@@ -8,7 +8,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Refresh
@@ -25,6 +25,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.iadv.dukaanlocker.api.RateLimitInfo
+import com.iadv.dukaanlocker.ui.components.FieldErrorText
 import com.iadv.dukaanlocker.ui.strings.AppStrings
 import com.iadv.dukaanlocker.ui.theme.AppColors
 import kotlinx.coroutines.delay
@@ -35,7 +36,11 @@ fun MsmeLoginForm(
     lang: String,
     onMsmeLoginRequest: (msmeNumber: String, onResult: (Boolean, String?, RateLimitInfo?) -> Unit) -> Unit,
     onMsmeLoginVerify: (msmeNumber: String, otp: String, onResult: (Boolean, String?) -> Unit) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    scrollable: Boolean = true,
+    // Embedded inside LoginScreen the root screen already draws the back arrow, so the
+    // form skips its own. Standalone (Screen.MsmeLogin) it keeps it.
+    showBack: Boolean = true
 ) {
     var step by remember { mutableStateOf("number") }
     var msmeNumber by remember { mutableStateOf("") }
@@ -84,35 +89,39 @@ fun MsmeLoginForm(
         remainingSends = -1
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-        border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.6f)),
-        shape = RoundedCornerShape(20.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(22.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = colors.textSecondary, modifier = Modifier.size(20.dp))
+                if (showBack) {
+                    IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = AppStrings.get(lang, "Back"),
+                            tint = colors.textSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                 }
-                Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text(
                         AppStrings.get(lang, "MSME Login"),
-                        fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary
+                        fontSize = 22.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary
                     )
                     Text(
                         AppStrings.get(lang, if (step == "number") "Enter your Udyam number" else "Enter the OTP sent to your mobile"),
-                        fontSize = 12.sp, color = colors.textSecondary
+                        fontSize = 12.sp, color = colors.textSecondary,
+                        modifier = Modifier.padding(top = 4.dp)
                     )
                 }
             }
@@ -127,7 +136,7 @@ fun MsmeLoginForm(
                     leadingIcon = { Icon(Icons.Default.Business, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
                     isError = numberError,
                     supportingText = if (numberError) {{
-                        Text(AppStrings.get(lang, "Enter a valid Udyam number (e.g. UDYAM-UP-09-0001234)"), color = colors.error)
+                        FieldErrorText(AppStrings.get(lang, "Enter a valid Udyam number (e.g. UDYAM-UP-09-0001234)"), colors)
                     }} else null,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Text,
@@ -141,7 +150,8 @@ fun MsmeLoginForm(
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
-                        focusedLabelColor = colors.primary, cursorColor = colors.primary
+                        focusedLabelColor = colors.primary, cursorColor = colors.primary,
+                        focusedTextColor = colors.textPrimary, unfocusedTextColor = colors.textPrimary
                     ),
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -154,7 +164,7 @@ fun MsmeLoginForm(
                     leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
                     isError = otpError,
                     supportingText = if (otpError) {{
-                        Text(AppStrings.get(lang, "Enter the 6-digit OTP"), color = colors.error)
+                        FieldErrorText(AppStrings.get(lang, "Enter the 6-digit OTP"), colors)
                     }} else null,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Number,
@@ -180,7 +190,8 @@ fun MsmeLoginForm(
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
-                        focusedLabelColor = colors.primary, cursorColor = colors.primary
+                        focusedLabelColor = colors.primary, cursorColor = colors.primary,
+                        focusedTextColor = colors.textPrimary, unfocusedTextColor = colors.textPrimary
                     ),
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -374,7 +385,7 @@ enabled = !isChecking && !isWaiting,
                     Text(AppStrings.get(lang, "Change Udyam number"), fontSize = 12.sp, color = colors.textSecondary)
                 }
             }
-        }
+            Spacer(modifier = Modifier.height(8.dp))
     }
 }
 

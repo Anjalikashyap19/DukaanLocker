@@ -227,7 +227,7 @@ fun AddBusinessScreen(
     ) {
         // Header
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().topBarShadow(),
             color = colors.background,
             shadowElevation = 4.dp
         ) {

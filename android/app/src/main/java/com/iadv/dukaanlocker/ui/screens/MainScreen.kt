@@ -82,8 +82,6 @@ private val docTypes = listOf(
 @Composable
 fun MainScreen(
     onGetStarted: () -> Unit,
-    isDarkTheme: Boolean,
-    onToggleTheme: () -> Unit,
     onLanguageChanged: (String) -> Unit = {}
 ) {
     val colors = LocalAppColors.current
@@ -161,16 +159,7 @@ fun MainScreen(
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                // Right: search icon + language switcher
-                IconButton(onClick = {}, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    Icons.Default.Search,
-                    contentDescription = AppStrings.get(lang, "Search"),
-                    tint = colors.textOnPrimary,
-                    modifier = Modifier.size(24.dp)
-                )
-                }
-
+                // Right: language switcher
                 Box {
                     ExposedDropdownMenuBox(
                         expanded = langExpanded,

@@ -5,7 +5,16 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -18,7 +27,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -36,7 +47,6 @@ import com.iadv.dukaanlocker.ui.components.ToastOverlay
 
 @Composable
 fun DukaanLockerApp(
-    onThemeChange: (Boolean) -> Unit = {},
     onLanguageChanged: (String) -> Unit = {},
     onGoogleSignIn: () -> Unit = {},
     registerGoogleAuthHandlers: ((onSuccess: (token: String, userId: Long, userName: String, email: String, mobileNumber: String, role: String, dlId: String?) -> Unit, onError: (Exception) -> Unit) -> Unit)? = null,
@@ -184,30 +194,35 @@ fun DukaanLockerApp(
         }
     }
 
-    val onToggleTheme: () -> Unit = {
-        val newTheme = !state.isDarkTheme
-        vm.setTheme(newTheme)
-        onThemeChange(newTheme)
+    // Resolved active theme: while the preference is System Default the app
+    // follows the device setting and reacts to device theme changes live.
+    val systemDark = isSystemInDarkTheme()
+    val isDarkTheme = when (state.themeMode) {
+        ThemeMode.SYSTEM -> systemDark
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
     }
 
-    val statusBarBg = when {
-        state.currentScreen == Screen.Onboarding -> Color(0xFF2563EB)
-        state.isDarkTheme -> DarkBg
-        else -> Color(0xFFF8FAFC)
-    }
+    // Status bar strip only (time / battery / network area): pure white in light
+    // mode, the existing dark-blue theme background in dark mode. Toolbar,
+    // screen backgrounds and the navigation bar keep their own colors.
+    val statusBarBg = if (isDarkTheme) BgDark else SurfaceLight
+
+    // Root window background behind the edge-to-edge insets (unchanged behavior).
+    val windowBg = if (isDarkTheme) BgDark else Color(0xFFF8FAFC)
 
     val activity = context as? Activity
-    LaunchedEffect(state.isDarkTheme) {
+    LaunchedEffect(isDarkTheme) {
         activity?.let { act ->
             val controller = WindowCompat.getInsetsController(act.window, act.window.decorView)
-            controller.isAppearanceLightStatusBars = !state.isDarkTheme
-            controller.isAppearanceLightNavigationBars = !state.isDarkTheme
+            controller.isAppearanceLightStatusBars = !isDarkTheme
+            controller.isAppearanceLightNavigationBars = !isDarkTheme
         }
     }
 
     CompositionLocalProvider(LocalAppLanguage provides state.language) {
-        DukaanLockerTheme(darkTheme = state.isDarkTheme) {
-            Surface(modifier = Modifier.fillMaxSize(), color = statusBarBg) {
+        DukaanLockerTheme(darkTheme = isDarkTheme) {
+            Surface(modifier = Modifier.fillMaxSize(), color = windowBg) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     Box(modifier = Modifier.fillMaxWidth().statusBarsPadding().background(statusBarBg))
 
@@ -273,8 +288,8 @@ BackHandler(
 
                         val settingsTabContent: @Composable () -> Unit = {
                             SettingsScreen(
-                                isDarkTheme = state.isDarkTheme,
-                                onToggleTheme = onToggleTheme,
+                                themeMode = state.themeMode,
+                                onThemeModeChange = { mode -> vm.setThemeMode(mode) },
                                         user = UserAccount(mobile = ApiClient.getUserMobile(context), name = state.currentUserName, email = state.currentUserEmail, role = state.currentUserRole, dlId = state.currentDlId),
                                 onLogout = handleLogout,
                                 businesses = if (state.currentUserRole == "MANAGER") state.shops else emptyList(),
@@ -301,396 +316,443 @@ BackHandler(
                             )
                         }
 
-                        when (state.currentScreen) {
-                            is Screen.Onboarding -> {
-                                MainScreen(
-                                    isDarkTheme = state.isDarkTheme,
-                                    onToggleTheme = onToggleTheme,
-                                    onGetStarted = { vm.navigateTo(Screen.Login) },
-                                    onLanguageChanged = { code -> vm.setLanguage(code); onLanguageChanged(code) }
+                        AnimatedContent(
+                            // History depth travels with the screen so the host can
+                            // tell a push (deeper) from a back step (shallower).
+                            targetState = state.currentScreen to state.navigationHistory.size,
+                            modifier = Modifier.fillMaxSize(),
+                            transitionSpec = {
+                                val forward = targetState.second >= initialState.second
+                                val enter = slideInHorizontally(
+                                    animationSpec = tween(220, easing = FastOutSlowInEasing)
+                                ) { width -> if (forward) width / 14 else -width / 14 } + fadeIn(
+                                    animationSpec = tween(220, easing = FastOutSlowInEasing)
                                 )
-                            }
-
-                            is Screen.Login -> {
-                                LoginScreen(
-                                    isDarkTheme = state.isDarkTheme,
-                                    onToggleTheme = onToggleTheme,
-                                    onBackToMain = { vm.setScreen(Screen.Onboarding) },
-                                    isBiometricLoginEnabled = state.isBiometricLoginEnabled && BiometricCredentialManager.hasStoredCredentials(context),
-                                    onBiometricLogin = { if (!state.biometricLoginFailed) vm.updateState { it.copy(showBiometricLoginPrompt = true) } },
-                                    onGoogleSignIn = onGoogleSignIn,
-                                    onOwnerLogin = { email, password, onDone -> vm.login(email, password, onDone) },
-                                    onRegister = { name, email, password, mobile, onDone -> vm.register(name, email, password, mobile, onDone) },
-                                    onInitMsmeCaptcha = { onResult -> vm.initUdyamCaptcha(onResult) },
-                                    onRegisterWithMsme = { msmeNumber, mobile, sessionId, captchaText, onDone -> vm.registerWithMsme(msmeNumber, mobile, sessionId, captchaText, onDone) },
-                                    onMsmeLoginRequest = { msmeNumber, onResult -> vm.msmeLoginRequest(msmeNumber, onResult) },
-                                    onMsmeLoginVerify = { msmeNumber, otp, onResult -> vm.msmeLoginVerify(msmeNumber, otp, onResult) },
-                                    onForgotPasswordRequest = { mobile, onResult -> vm.forgotPasswordRequest(mobile, onResult) },
-                                    onForgotPasswordReset = { mobile, otp, password, onResult -> vm.resetPassword(mobile, otp, password, onResult) },
-                                    onMobileHint = { email, onResult -> vm.mobileHint(email, onResult) },
-                                    onManagerLogin = { code, onDone -> vm.loginByCode(code, onDone) }
+                                val exit = fadeOut(
+                                    animationSpec = tween(120, easing = FastOutLinearInEasing)
                                 )
-                            }
+                                enter togetherWith exit
+                            },
+                            label = "screenTransition"
+                        ) { (screen, _) ->
+                            when (screen) {
+                                is Screen.Onboarding -> {
+                                    MainScreen(
+                                        onGetStarted = { vm.navigateTo(Screen.Login) },
+                                        onLanguageChanged = { code -> vm.setLanguage(code); onLanguageChanged(code) }
+                                    )
+                                }
 
-                            is Screen.Wizard -> {
-                                WizardScreen(
-                                    onComplete = { wizard -> vm.saveWizardProfile(wizard) },
-                                    onSkip = { vm.skipWizard() },
-                                    onBackToLogin = { vm.skipWizardAndLogout() }
-                                )
-                            }
-
-                            is Screen.AddBusiness -> {
-                                val currentShopId = state.editShopTarget?.id?.toString()
-                                val currentManagerId = if (currentShopId != null) {
-                                    state.managerShopAssignments.entries.find { currentShopId in it.value }?.key?.toString()
-                                } else null
-                                var pendingManagerId by remember { mutableStateOf<String?>(currentManagerId) }
-
-                                AddBusinessScreen(
-                                    initial = state.editShopTarget?.let { vm.shopToBusiness(it) },
-                                    managers = state.managers.map { mgr ->
-ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(), managerName = mgr.userName, assignedBusinessIds = state.managerShopAssignments[mgr.id] ?: emptyList(), enabled = mgr.enabled)
-                                    },
-                                    assignedManagerId = currentManagerId,
-                                    defaultOwnerName = state.currentUserName,
-                                    isLoading = state.isLoading,
-                                    onManagerSelected = { managerId -> pendingManagerId = managerId },
-                                    onSave = { biz ->
-                                        if (state.editShopTarget != null) {
-                                            vm.updateShop(state.editShopTarget!!.id, biz, pendingManagerId) {}
-                                        } else {
-                                            vm.createShop(biz, pendingManagerId) {}
-                                        }
-                                    },
-                                    onCancel = { vm.cancelAddBusiness() }
-                                )
-                            }
-
-                            is Screen.OwnerHome -> {
-                                if (state.selectedBottomTab == BottomTab.Docs) {
-                                    docsTabContent()
-                                } else if (state.selectedBottomTab == BottomTab.Settings) {
-                                    settingsTabContent()
-                                } else if (state.selectedBottomTab == BottomTab.Team) {
-                                    manageManagersContent()
-                                } else {
-                                    val allBusinesses = state.shops.map { vm.shopToBusiness(it) }
-                                    // New profiles flag their first shop as primary and Home shows only
-                                    // that one; legacy accounts have no flag → every shop, as before.
-                                    val homeBusinesses =
-                                        if (state.shops.any { it.isPrimary }) allBusinesses.filter { it.isPrimary }
-                                        else allBusinesses
-                                    OwnerHomeScreen(
-                                        isDarkTheme = state.isDarkTheme,
-                                        onToggleTheme = onToggleTheme,
+                                is Screen.Login -> {
+                                    LoginScreen(
+                                        onBackToMain = { vm.backToOnboarding() },
                                         isBiometricLoginEnabled = state.isBiometricLoginEnabled && BiometricCredentialManager.hasStoredCredentials(context),
-                                        isBiometricAvailable = onBiometricLogin != null,
-                                        onAuthenticateForBiometric = {
-                                            onAuthenticateForEnable?.invoke(
-                                                { cryptoObject ->
-                                                    val cipher = cryptoObject.cipher
-                                                    if (cipher != null) {
-                                                        vm.enableBiometricLogin(cipher, state.authToken ?: "", state.currentUserId, state.currentUserName, state.currentUserEmail, state.currentUserRole)
-                                                    } else {
-                                                        vm.showToast("Biometric authentication failed. Cipher is null.", ToastType.ERROR)
-                                                    }
-                                                },
-                                                { errorMessage -> vm.showToast("Authentication failed: $errorMessage", ToastType.ERROR) }
-                                            )
+                                        onBiometricLogin = { if (!state.biometricLoginFailed) vm.updateState { it.copy(showBiometricLoginPrompt = true) } },
+                                        onGoogleSignIn = onGoogleSignIn,
+                                        onOwnerLogin = { email, password, onDone -> vm.login(email, password, onDone) },
+                                        onRegister = { vm.navigateTo(Screen.Register) },
+                                        onInitMsmeCaptcha = { onResult -> vm.initUdyamCaptcha(onResult) },
+                                        onMsmeLoginRequest = { msmeNumber, onResult -> vm.msmeLoginRequest(msmeNumber, onResult) },
+                                        onMsmeLoginVerify = { msmeNumber, otp, onResult -> vm.msmeLoginVerify(msmeNumber, otp, onResult) },
+                                        onForgotPasswordRequest = { mobile, onResult -> vm.forgotPasswordRequest(mobile, onResult) },
+                                        onForgotPasswordReset = { mobile, otp, password, onResult -> vm.resetPassword(mobile, otp, password, onResult) },
+                                        onMobileHint = { email, onResult -> vm.mobileHint(email, onResult) },
+                                        onManagerLogin = { code, onDone -> vm.loginByCode(code, onDone) }
+                                    )
+                                }
+
+                                is Screen.Register -> {
+                                    RegisterForm(
+                                        colors = LocalAppColors.current,
+                                        lang = LocalAppLanguage.current,
+                                        onBack = { vm.navigateTo(Screen.Login) },
+                                        onRegister = { name, email, password, mobile, onDone ->
+                                            vm.register(name, email, password, mobile, onDone)
                                         },
-                                        onBiometricLoginToggle = { enabled -> if (!enabled) vm.disableBiometricLogin() },
-                                        showAddBusiness = state.currentUserRole == "ADMIN",
-                                        showManageManagers = state.currentUserRole == "ADMIN",
-                                user = UserAccount(mobile = ApiClient.getUserMobile(context), name = state.currentUserName, email = state.currentUserEmail, role = state.currentUserRole, dlId = state.currentDlId),
-                                        businesses = if (state.selectedBottomTab == BottomTab.Business) allBusinesses else homeBusinesses,
-                                        businessCount = state.shops.size,
-                                        onBusinessSelected = { bizId -> vm.loadDocuments(bizId.toLongOrNull() ?: return@OwnerHomeScreen) },
-                                        documents = vm.toDocumentItems(state.shopDocuments),
-                                        managers = state.managers.map { mgr -> ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(), managerName = mgr.userName, assignedBusinessIds = state.managerShopAssignments[mgr.id] ?: emptyList()) },
-                                        onAddBusiness = { vm.addBusiness() },
-                                        onEditBusiness = { biz -> vm.editBusiness(biz) },
-                                        onManageManagers = { vm.setBottomTab(BottomTab.Team) },
-                                        onFetchDoc = { doc -> vm.showFetchDialog(doc) },
-                                        onUploadDoc = { doc -> vm.setPendingUpload(doc) },
-                                        onViewDoc = { doc -> vm.openDocument(doc) },
-                                        onDeleteDoc = { doc -> vm.showToast("${doc.name} - delete via API", ToastType.INFO) },
-                                        onRenewDoc = { doc -> vm.startRenewalPayment(doc) },
-                                        onApplyNew = { doc -> vm.startApplyNewLicence(doc) },
-                                        onAddCustomDoc = { shopId -> vm.showCustomDocDialog(shopId.toLongOrNull() ?: return@OwnerHomeScreen) },
-                                        isLoadingShops = state.isLoadingShops,
-                                        isLoadingDocuments = state.isLoadingDocuments,
-                                        unreadNotificationCount = state.unreadNotificationCount,
-                                        onLogout = { vm.logout() },
-                                        onNotifications = { vm.navigateTo(Screen.Notifications) }
+                                        onGoogleSignIn = onGoogleSignIn,
+                                        onInitMsmeCaptcha = { onResult -> vm.initUdyamCaptcha(onResult) },
+                                        onMsmeLoginRequest = { msmeNumber, onResult -> vm.msmeLoginRequest(msmeNumber, onResult) },
                                     )
                                 }
-                            }
 
-                            is Screen.ManagerHome -> {
-                                if (state.selectedBottomTab == BottomTab.Docs) {
-                                    docsTabContent()
-                                } else if (state.selectedBottomTab == BottomTab.Settings) {
-                                    settingsTabContent()
-                                } else if (state.selectedBottomTab == BottomTab.Team) {
-                                    manageManagersContent()
-                                } else {
-                                    ManagerHomeScreen(
-                                        isDarkTheme = state.isDarkTheme,
-                                        onToggleTheme = onToggleTheme,
-                                        user = UserAccount(mobile = ApiClient.getUserMobile(context), name = state.currentUserName, email = state.currentUserEmail, role = state.currentUserRole, managerCode = state.currentUserManagerCode, dlId = state.currentDlId),
-                                        managerAccess = ManagerAccess(id = state.currentUserId.toString(), code = state.currentUserManagerCode, managerName = state.currentUserName, assignedBusinessIds = state.shops.map { it.id.toString() }),
-                                        businesses = state.shops.map { vm.shopToBusiness(it) },
-                                        documents = vm.toDocumentItems(state.shopDocuments),
-                                        onFetchDoc = { doc -> vm.showFetchDialog(doc) },
-                                        onUploadDoc = { doc -> vm.setPendingUpload(doc) },
-                                        onViewDoc = { doc -> vm.openDocument(doc) },
-                                        onDeleteDoc = { },
-                                        onRenewDoc = { doc -> vm.startRenewalPayment(doc) },
-                                        onApplyNew = { doc -> vm.startApplyNewLicence(doc) },
-                                        onLogout = { vm.logoutManager() },
-                                        isLoadingShops = state.isLoadingShops
+                                is Screen.MsmeLogin -> {
+                                    MsmeLoginForm(
+                                        colors = LocalAppColors.current,
+                                        lang = LocalAppLanguage.current,
+                                        onMsmeLoginRequest = { msmeNumber, onResult -> vm.msmeLoginRequest(msmeNumber, onResult) },
+                                        onMsmeLoginVerify = { msmeNumber, otp, onResult -> vm.msmeLoginVerify(msmeNumber, otp, onResult) },
+                                        onBack = { vm.navigateTo(Screen.Login) }
                                     )
                                 }
-                            }
 
-                            is Screen.Notifications -> {
-                                var binConfirm by remember { mutableStateOf(false) }
-                                LaunchedEffect(Unit) { vm.loadNotifications() }
-                                NotificationScreen(
-                                    notifications = state.notifications,
-                                    onBack = { vm.goBack() },
-                                    onClearAll = { binConfirm = true },
-                                    onOpenBin = { vm.navigateTo(Screen.Bin) },
-                                    onNotificationClick = { notification ->
-                                        // Leave the notifications screen and land on the
-                                        // Documents tab with the missing doc section open
-                                        vm.openNotificationFromList(notification)
-                                    },
-                                    onMoveToBin = { notification ->
-                                        vm.moveNotificationToBin(notification.id)
-                                    },
-                                    onMarkAllRead = { vm.markNotificationsRead() },
-                                    onRenew = { notification ->
-                                        vm.requestRenewal(notification)
+                                is Screen.Wizard -> {
+                                    WizardScreen(
+                                        onComplete = { wizard -> vm.saveWizardProfile(wizard) },
+                                        onSkip = { vm.skipWizard() },
+                                        onBackToLogin = { vm.skipWizardAndLogout() }
+                                    )
+                                }
+
+                                is Screen.AddBusiness -> {
+                                    val currentShopId = state.editShopTarget?.id?.toString()
+                                    val currentManagerId = if (currentShopId != null) {
+                                        state.managerShopAssignments.entries.find { currentShopId in it.value }?.key?.toString()
+                                    } else null
+                                    var pendingManagerId by remember { mutableStateOf<String?>(currentManagerId) }
+
+                                    AddBusinessScreen(
+                                        initial = state.editShopTarget?.let { vm.shopToBusiness(it) },
+                                        managers = state.managers.map { mgr ->
+    ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(), managerName = mgr.userName, assignedBusinessIds = state.managerShopAssignments[mgr.id] ?: emptyList(), enabled = mgr.enabled)
+                                        },
+                                        assignedManagerId = currentManagerId,
+                                        defaultOwnerName = state.currentUserName,
+                                        isLoading = state.isLoading,
+                                        onManagerSelected = { managerId -> pendingManagerId = managerId },
+                                        onSave = { biz ->
+                                            if (state.editShopTarget != null) {
+                                                vm.updateShop(state.editShopTarget!!.id, biz, pendingManagerId) {}
+                                            } else {
+                                                vm.createShop(biz, pendingManagerId) {}
+                                            }
+                                        },
+                                        onCancel = { vm.cancelAddBusiness() }
+                                    )
+                                }
+
+                                is Screen.OwnerHome -> {
+                                    val ownerHome: @Composable (BottomTab) -> Unit = { tab ->
+                                        val allBusinesses = state.shops.map { vm.shopToBusiness(it) }
+                                        // New profiles flag their first shop as primary and Home shows only
+                                        // that one; legacy accounts have no flag → every shop, as before.
+                                        val homeBusinesses =
+                                            if (state.shops.any { it.isPrimary }) allBusinesses.filter { it.isPrimary }
+                                            else allBusinesses
+                                        OwnerHomeScreen(
+                                            isBiometricLoginEnabled = state.isBiometricLoginEnabled && BiometricCredentialManager.hasStoredCredentials(context),
+                                            isBiometricAvailable = onBiometricLogin != null,
+                                            onAuthenticateForBiometric = {
+                                                onAuthenticateForEnable?.invoke(
+                                                    { cryptoObject ->
+                                                        val cipher = cryptoObject.cipher
+                                                        if (cipher != null) {
+                                                            vm.enableBiometricLogin(cipher, state.authToken ?: "", state.currentUserId, state.currentUserName, state.currentUserEmail, state.currentUserRole)
+                                                        } else {
+                                                            vm.showToast("Biometric authentication failed. Cipher is null.", ToastType.ERROR)
+                                                        }
+                                                    },
+                                                    { errorMessage -> vm.showToast("Authentication failed: $errorMessage", ToastType.ERROR) }
+                                                )
+                                            },
+                                            onBiometricLoginToggle = { enabled -> if (!enabled) vm.disableBiometricLogin() },
+                                            showAddBusiness = state.currentUserRole == "ADMIN",
+                                            showManageManagers = state.currentUserRole == "ADMIN",
+                                    user = UserAccount(mobile = ApiClient.getUserMobile(context), name = state.currentUserName, email = state.currentUserEmail, role = state.currentUserRole, dlId = state.currentDlId),
+                                            businesses = if (tab == BottomTab.Business) allBusinesses else homeBusinesses,
+                                            businessCount = state.shops.size,
+                                            onBusinessSelected = { bizId -> vm.loadDocuments(bizId.toLongOrNull() ?: return@OwnerHomeScreen) },
+                                            documents = vm.toDocumentItems(state.shopDocuments),
+                                            managers = state.managers.map { mgr -> ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(), managerName = mgr.userName, assignedBusinessIds = state.managerShopAssignments[mgr.id] ?: emptyList()) },
+                                            onAddBusiness = { vm.addBusiness() },
+                                            onEditBusiness = { biz -> vm.editBusiness(biz) },
+                                            onManageManagers = { vm.setBottomTab(BottomTab.Team) },
+                                            onFetchDoc = { doc -> vm.showFetchDialog(doc) },
+                                            onUploadDoc = { doc -> vm.setPendingUpload(doc) },
+                                            onViewDoc = { doc -> vm.openDocument(doc) },
+                                            onDeleteDoc = { doc -> vm.showToast("${doc.name} - delete via API", ToastType.INFO) },
+                                            onRenewDoc = { doc -> vm.startRenewalPayment(doc) },
+                                            onApplyNew = { doc -> vm.startApplyNewLicence(doc) },
+                                            onAddCustomDoc = { shopId -> vm.showCustomDocDialog(shopId.toLongOrNull() ?: return@OwnerHomeScreen) },
+                                            isLoadingShops = state.isLoadingShops,
+                                            isLoadingDocuments = state.isLoadingDocuments,
+                                            unreadNotificationCount = state.unreadNotificationCount,
+                                            onLogout = { vm.logout() },
+                                            onNotifications = { vm.navigateTo(Screen.Notifications) }
+                                        )
                                     }
-                                )
-                                // Bin confirmation dialog
-                                if (binConfirm) {
-                                    AlertDialog(
-                                        onDismissRequest = { binConfirm = false },
-                                        shape = RoundedCornerShape(20.dp),
-                                        icon = {
-                                            Icon(
-                                                Icons.Default.Warning,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.error,
-                                                modifier = Modifier.size(48.dp)
-                                            )
+
+                                    TabContentHost(state.selectedBottomTab) { tab ->
+                                        when (tab) {
+                                            BottomTab.Docs -> docsTabContent()
+                                            BottomTab.Settings -> settingsTabContent()
+                                            BottomTab.Team -> manageManagersContent()
+                                            else -> ownerHome(tab)
+                                        }
+                                    }
+                                }
+
+                                is Screen.ManagerHome -> {
+                                    val managerHome: @Composable () -> Unit = {
+                                        ManagerHomeScreen(
+                                            user = UserAccount(mobile = ApiClient.getUserMobile(context), name = state.currentUserName, email = state.currentUserEmail, role = state.currentUserRole, managerCode = state.currentUserManagerCode, dlId = state.currentDlId),
+                                            managerAccess = ManagerAccess(id = state.currentUserId.toString(), code = state.currentUserManagerCode, managerName = state.currentUserName, assignedBusinessIds = state.shops.map { it.id.toString() }),
+                                            businesses = state.shops.map { vm.shopToBusiness(it) },
+                                            documents = vm.toDocumentItems(state.shopDocuments),
+                                            onFetchDoc = { doc -> vm.showFetchDialog(doc) },
+                                            onUploadDoc = { doc -> vm.setPendingUpload(doc) },
+                                            onViewDoc = { doc -> vm.openDocument(doc) },
+                                            onDeleteDoc = { },
+                                            onRenewDoc = { doc -> vm.startRenewalPayment(doc) },
+                                            onApplyNew = { doc -> vm.startApplyNewLicence(doc) },
+                                            onLogout = { vm.logoutManager() },
+                                            isLoadingShops = state.isLoadingShops
+                                        )
+                                    }
+
+                                    TabContentHost(state.selectedBottomTab) { tab ->
+                                        when (tab) {
+                                            BottomTab.Docs -> docsTabContent()
+                                            BottomTab.Settings -> settingsTabContent()
+                                            BottomTab.Team -> manageManagersContent()
+                                            else -> managerHome()
+                                        }
+                                    }
+                                }
+
+                                is Screen.Notifications -> {
+                                    var binConfirm by remember { mutableStateOf(false) }
+                                    NotificationScreen(
+                                        notifications = state.notifications,
+                                        onBack = { vm.goBack() },
+                                        onClearAll = { binConfirm = true },
+                                        onOpenBin = { vm.navigateTo(Screen.Bin) },
+                                        onNotificationClick = { notification ->
+                                            // Leave the notifications screen and land on the
+                                            // Documents tab with the missing doc section open
+                                            vm.openNotificationFromList(notification)
                                         },
-                                        title = {
-                                            Text(
-                                                "Move to bin?",
-                                                fontWeight = FontWeight.Bold,
-                                                textAlign = TextAlign.Center,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
+                                        onMoveToBin = { notification ->
+                                            vm.moveNotificationToBin(notification.id)
                                         },
-                                        text = {
-                                            Text(
-                                                "All notifications will be moved to the bin. You can restore them later from Bin.",
-                                                textAlign = TextAlign.Center
-                                            )
-                                        },
-                                        confirmButton = {
-                                            Button(
-                                                onClick = {
-                                                    binConfirm = false
-                                                    vm.moveToBin()
-                                                },
-                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                                            ) {
-                                                Text("OK", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onError)
-                                            }
-                                        },
-                                        dismissButton = {
-                                            Button(
-                                                onClick = { binConfirm = false },
-                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
-                                            ) {
-                                                Text("Cancel", fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
-                                            }
+                                        onMarkAllRead = { vm.markNotificationsRead() },
+                                        onRenew = { notification ->
+                                            vm.requestRenewal(notification)
                                         }
                                     )
-                                }
-                            }
-
-                            is Screen.Bin -> {
-                                var deleteConfirm by remember { mutableStateOf(false) }
-                                var restoreConfirm by remember { mutableStateOf(false) }
-                                LaunchedEffect(Unit) { vm.loadBinNotifications() }
-                                BinScreen(
-                                    onBack = { vm.goBack() },
-                                    notifications = state.binNotifications,
-                                    onDeletePermanent = {
-                                        deleteConfirm = true
-                                    },
-                                    onRestore = { notification ->
-                                        vm.restoreNotification(notification.id)
-                                    },
-                                    onRestoreAll = {
-                                        restoreConfirm = true
-                                    },
-                                    onDeleteNotification = { notification ->
-                                        vm.deleteNotification(notification.id)
-                                    }
-                                )
-                                // Restore all confirmation
-                                if (restoreConfirm) {
-                                    AlertDialog(
-                                        onDismissRequest = { restoreConfirm = false },
-                                        shape = RoundedCornerShape(20.dp),
-                                        icon = {
-                                            Icon(
-                                                Icons.Default.Info,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(48.dp)
-                                            )
-                                        },
-                                        title = {
-                                            Text(
-                                                "Restore all notifications?",
-                                                fontWeight = FontWeight.Bold,
-                                                textAlign = TextAlign.Center,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
-                                        },
-                                        text = {
-                                            Text(
-                                                "Are you sure you want to restore all your notifications from the bin?",
-                                                textAlign = TextAlign.Center
-                                            )
-                                        },
-                                        confirmButton = {
-                                            Button(
-                                                onClick = {
-                                                    restoreConfirm = false
-                                                    vm.restoreAllFromBin()
+                                    // Bin confirmation dialog
+                                    if (binConfirm) {
+                                        AlertDialog(
+                                            onDismissRequest = { binConfirm = false },
+                                            shape = RoundedCornerShape(20.dp),
+                                            icon = {
+                                                Icon(
+                                                    Icons.Default.Warning,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.error,
+                                                    modifier = Modifier.size(48.dp)
+                                                )
+                                            },
+                                            title = {
+                                                Text(
+                                                    "Move to bin?",
+                                                    fontWeight = FontWeight.Bold,
+                                                    textAlign = TextAlign.Center,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            },
+                                            text = {
+                                                Text(
+                                                    "All notifications will be moved to the bin. You can restore them later from Bin.",
+                                                    textAlign = TextAlign.Center
+                                                )
+                                            },
+                                            confirmButton = {
+                                                Button(
+                                                    onClick = {
+                                                        binConfirm = false
+                                                        vm.moveToBin()
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                                ) {
+                                                    Text("OK", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onError)
                                                 }
-                                            ) {
-                                                Text("OK", fontWeight = FontWeight.Bold)
+                                            },
+                                            dismissButton = {
+                                                Button(
+                                                    onClick = { binConfirm = false },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
+                                                ) {
+                                                    Text("Cancel", fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+                                                }
                                             }
+                                        )
+                                    }
+                                }
+
+                                is Screen.Bin -> {
+                                    var deleteConfirm by remember { mutableStateOf(false) }
+                                    var restoreConfirm by remember { mutableStateOf(false) }
+                                    LaunchedEffect(Unit) { vm.loadBinNotifications() }
+                                    BinScreen(
+                                        onBack = { vm.goBack() },
+                                        notifications = state.binNotifications,
+                                        onDeletePermanent = {
+                                            deleteConfirm = true
                                         },
-                                        dismissButton = {
-                                            Button(
-                                                onClick = { restoreConfirm = false },
-                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
-                                            ) {
-                                                Text("Cancel", fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
-                                            }
+                                        onRestore = { notification ->
+                                            vm.restoreNotification(notification.id)
+                                        },
+                                        onRestoreAll = {
+                                            restoreConfirm = true
+                                        },
+                                        onDeleteNotification = { notification ->
+                                            vm.deleteNotification(notification.id)
                                         }
                                     )
-                                }
-                                // Delete permanently confirmation
-                                if (deleteConfirm) {
-                                    AlertDialog(
-                                        onDismissRequest = { deleteConfirm = false },
-                                        shape = RoundedCornerShape(20.dp),
-                                        icon = {
-                                            Icon(
-                                                Icons.Default.Warning,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.error,
-                                                modifier = Modifier.size(48.dp)
-                                            )
-                                        },
-                                        title = {
-                                            Text(
-                                                "Delete permanently?",
-                                                fontWeight = FontWeight.Bold,
-                                                textAlign = TextAlign.Center,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
-                                        },
-                                        text = {
-                                            Text(
-                                                "Are you sure you want to delete all notifications in the bin permanently? This cannot be undone.",
-                                                textAlign = TextAlign.Center
-                                            )
-                                        },
-                                        confirmButton = {
-                                            Button(
-                                                onClick = {
-                                                    deleteConfirm = false
-                                                    vm.permanentDeleteAll()
-                                                },
-                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                                            ) {
-                                                Text("OK", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onError)
+                                    // Restore all confirmation
+                                    if (restoreConfirm) {
+                                        AlertDialog(
+                                            onDismissRequest = { restoreConfirm = false },
+                                            shape = RoundedCornerShape(20.dp),
+                                            icon = {
+                                                Icon(
+                                                    Icons.Default.Info,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(48.dp)
+                                                )
+                                            },
+                                            title = {
+                                                Text(
+                                                    "Restore all notifications?",
+                                                    fontWeight = FontWeight.Bold,
+                                                    textAlign = TextAlign.Center,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            },
+                                            text = {
+                                                Text(
+                                                    "Are you sure you want to restore all your notifications from the bin?",
+                                                    textAlign = TextAlign.Center
+                                                )
+                                            },
+                                            confirmButton = {
+                                                Button(
+                                                    onClick = {
+                                                        restoreConfirm = false
+                                                        vm.restoreAllFromBin()
+                                                    }
+                                                ) {
+                                                    Text("OK", fontWeight = FontWeight.Bold)
+                                                }
+                                            },
+                                            dismissButton = {
+                                                Button(
+                                                    onClick = { restoreConfirm = false },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
+                                                ) {
+                                                    Text("Cancel", fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+                                                }
                                             }
-                                        },
-                                        dismissButton = {
-                                            Button(
-                                                onClick = { deleteConfirm = false },
-                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
-                                            ) {
-                                                Text("Cancel", fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+                                        )
+                                    }
+                                    // Delete permanently confirmation
+                                    if (deleteConfirm) {
+                                        AlertDialog(
+                                            onDismissRequest = { deleteConfirm = false },
+                                            shape = RoundedCornerShape(20.dp),
+                                            icon = {
+                                                Icon(
+                                                    Icons.Default.Warning,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.error,
+                                                    modifier = Modifier.size(48.dp)
+                                                )
+                                            },
+                                            title = {
+                                                Text(
+                                                    "Delete permanently?",
+                                                    fontWeight = FontWeight.Bold,
+                                                    textAlign = TextAlign.Center,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            },
+                                            text = {
+                                                Text(
+                                                    "Are you sure you want to delete all notifications in the bin permanently? This cannot be undone.",
+                                                    textAlign = TextAlign.Center
+                                                )
+                                            },
+                                            confirmButton = {
+                                                Button(
+                                                    onClick = {
+                                                        deleteConfirm = false
+                                                        vm.permanentDeleteAll()
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                                ) {
+                                                    Text("OK", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onError)
+                                                }
+                                            },
+                                            dismissButton = {
+                                                Button(
+                                                    onClick = { deleteConfirm = false },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
+                                                ) {
+                                                    Text("Cancel", fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+                                                }
                                             }
-                                        }
-                                    )
+                                        )
+                                    }
                                 }
+
+                            // ── FSSAI Compliance Screen ────────────────────────────────
+                            is Screen.FssaCompliance -> {
+                                val shopId = screen.shopId
+                                val complianceList = state.fssaCompliance.filter { it.shopId == shopId }
+
+                                LaunchedEffect(Unit) {
+                                    vm.loadFssaCompliance()
+                                }
+
+                                FssaComplianceScreen(
+                                    onBack = { vm.goBack() },
+                                    complianceList = complianceList,
+                                    isLoading = state.isLoadingFssaCompliance,
+                                    onMarkFiled = { id ->
+                                        vm.markFssaReturnFiled(id)
+                                    },
+                                    vm = vm
+                                )
                             }
 
-                        // ── FSSAI Compliance Screen ────────────────────────────────
-                        is Screen.FssaCompliance -> {
-                            val shopId = (state.currentScreen as? Screen.FssaCompliance)?.shopId ?: 0L
-                            val complianceList = state.fssaCompliance.filter { it.shopId == shopId }
+                            // ── Water Testing Payment Screen ────────────────────────
+                            is Screen.WaterTestingPayment -> {
+                                val shopId = screen.shopId
+                                val documentId = screen.documentId
 
-                            LaunchedEffect(Unit) {
-                                vm.loadFssaCompliance()
+                                WaterTestingPaymentScreen(
+                                    shopId = shopId,
+                                    documentId = documentId,
+                                    onBack = { vm.goBack() },
+                                    onPaySuccess = { vm.onWaterTestingPaymentSuccess() },
+                                    vm = vm
+                                )
                             }
 
-                            FssaComplianceScreen(
-                                onBack = { vm.goBack() },
-                                complianceList = complianceList,
-                                isLoading = state.isLoadingFssaCompliance,
-                                onMarkFiled = { id ->
-                                    vm.markFssaReturnFiled(id)
-                                },
-                                vm = vm
-                            )
+                            // ── AppSettings Screen ────────────────────────────────────
+                            is Screen.AppSettings -> {
+                                AppSettingsScreen(
+                                    onBack = { vm.goBack() },
+                                    isDarkTheme = isDarkTheme,
+                                    isAppLockEnabled = state.appLockEnabled,
+                                    onAppLockChanged = { enabled ->
+                                        vm.setAppLock(enabled)
+                                    },
+                                    userName = state.currentUserName,
+                                    userMobile = ApiClient.getUserMobile(context),
+                                    userEmail = state.currentUserEmail,
+                                    userRole = state.currentUserRole,
+                                    userManagerCode = state.currentUserManagerCode,
+                                    userDlId = state.currentDlId,
+                                    businessCount = state.shops.size
+                                )
+                            }
+                            is Screen.RenewalPayment -> {
+                                // Handled via overlay below
+                            }
+                            }
                         }
-
-                        // ── Water Testing Payment Screen ────────────────────────
-                        is Screen.WaterTestingPayment -> {
-                            val shopId = (state.currentScreen as? Screen.WaterTestingPayment)?.shopId ?: 0L
-                            val documentId = (state.currentScreen as? Screen.WaterTestingPayment)?.documentId
-
-                            WaterTestingPaymentScreen(
-                                shopId = shopId,
-                                documentId = documentId,
-                                onBack = { vm.goBack() },
-                                onPaySuccess = { vm.onWaterTestingPaymentSuccess() },
-                                vm = vm
-                            )
-                        }
-
-                        // ── AppSettings Screen ────────────────────────────────────
-                        is Screen.AppSettings -> {
-                            AppSettingsScreen(
-                                onBack = { vm.goBack() },
-                                isDarkTheme = state.isDarkTheme,
-                                isAppLockEnabled = state.appLockEnabled,
-                                onAppLockChanged = { enabled ->
-                                    vm.setAppLock(enabled)
-                                }
-                            )
-                        }
-                        is Screen.RenewalPayment -> {
-                            // Handled via overlay below
-                        }
-                    }
 
                     // ── Document Viewer overlay ──
                         if (state.viewDocumentId != null) {
@@ -725,7 +787,7 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                         // ── Loading overlay ──
                         if (state.isLoading) {
                             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(color = if (state.isDarkTheme) Color.White else Color(0xFF2563EB))
+                                CircularProgressIndicator(color = if (isDarkTheme) Color.White else Color(0xFF2563EB))
                             }
                         }
 
@@ -775,19 +837,19 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                 // instead of opening a dialog that can never finish.
                                 AlertDialog(
                                     onDismissRequest = { vm.dismissFetchDialog() },
-                                    containerColor = if (state.isDarkTheme) Color(0xFF1E293B) else Color.White,
+                                    containerColor = if (isDarkTheme) Color(0xFF1E293B) else Color.White,
                                     shape = RoundedCornerShape(20.dp),
                                     title = {
                                         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                                             Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
                                             Spacer(modifier = Modifier.height(8.dp))
-                                            Text("Coming Soon", fontWeight = FontWeight.Bold, color = if (state.isDarkTheme) Color.White else Color.Black)
+                                            Text("Coming Soon", fontWeight = FontWeight.Bold, color = if (isDarkTheme) Color.White else Color.Black)
                                         }
                                     },
                                     text = {
                                         Text(
                                             "We are unable to serve this service currently.\nAuto-fetch for ${fetchDoc.name} will be available soon.",
-                                            color = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                            color = if (isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
                                             textAlign = TextAlign.Center,
                                             modifier = Modifier.fillMaxWidth()
                                         )
@@ -818,16 +880,16 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                         if (state.showAppUnlockFailedDialog) {
                             AlertDialog(
                                 onDismissRequest = { vm.updateState { it.copy(showAppUnlockFailedDialog = false, showAppUnlockPrompt = true) } },
-                                containerColor = if (state.isDarkTheme) Color(0xFF1E293B) else Color.White,
+                                containerColor = if (isDarkTheme) Color(0xFF1E293B) else Color.White,
                                 shape = RoundedCornerShape(20.dp),
                                 title = {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                                         Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
                                         Spacer(modifier = Modifier.height(8.dp))
-                                        Text("Authentication Failed", fontWeight = FontWeight.Bold, color = if (state.isDarkTheme) Color.White else Color.Black)
+                                        Text("Authentication Failed", fontWeight = FontWeight.Bold, color = if (isDarkTheme) Color.White else Color.Black)
                                     }
                                 },
-                                text = { Text("Authentication failed. Please try again.", color = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                                text = { Text("Authentication failed. Please try again.", color = if (isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
                                 confirmButton = {
                                     Button(onClick = { vm.updateState { it.copy(showAppUnlockFailedDialog = false, showAppUnlockPrompt = true) } }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)) {
                                         Text("Try Again", fontWeight = FontWeight.Bold)
@@ -841,10 +903,10 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                         if (state.showBiometricLoginFailedDialog) {
                             AlertDialog(
                                 onDismissRequest = { vm.updateState { it.copy(showBiometricLoginFailedDialog = false) } },
-                                containerColor = if (state.isDarkTheme) Color(0xFF1E293B) else Color.White,
+                                containerColor = if (isDarkTheme) Color(0xFF1E293B) else Color.White,
                                 shape = RoundedCornerShape(20.dp),
-                                title = { Text("Biometric Login Unavailable", fontWeight = FontWeight.Bold, color = if (state.isDarkTheme) Color.White else Color.Black) },
-                                text = { Text("Please sign in with your email and password.", color = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                                title = { Text("Biometric Login Unavailable", fontWeight = FontWeight.Bold, color = if (isDarkTheme) Color.White else Color.Black) },
+                                text = { Text("Please sign in with your email and password.", color = if (isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
                                 confirmButton = {
                                     Button(onClick = { vm.updateState { it.copy(showBiometricLoginFailedDialog = false) } }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)) {
                                         Text("OK", fontWeight = FontWeight.Bold)
@@ -859,20 +921,20 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                             val order = state.renewalSuccessOrder!!
                             AlertDialog(
                                 onDismissRequest = { vm.dismissRenewalSuccess() },
-                                containerColor = if (state.isDarkTheme) Color(0xFF1E293B) else Color.White,
+                                containerColor = if (isDarkTheme) Color(0xFF1E293B) else Color.White,
                                 shape = RoundedCornerShape(20.dp),
                                 title = {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                                         Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
                                         Spacer(modifier = Modifier.height(8.dp))
-                                        Text("Renewal Requested", fontWeight = FontWeight.Bold, color = if (state.isDarkTheme) Color.White else Color.Black)
+                                        Text("Renewal Requested", fontWeight = FontWeight.Bold, color = if (isDarkTheme) Color.White else Color.Black)
                                     }
                                 },
                                 text = {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                                         Text(
                                             "Your license will be uploaded to your Dukaan Locker within 24 hours.",
-                                            color = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                            color = if (isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
                                             textAlign = TextAlign.Center
                                         )
                                         if (!order.dlId.isNullOrBlank()) {
@@ -885,7 +947,7 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                             Text(
                                                 "Use this DL ID to find your locker folder",
                                                 fontSize = 12.sp,
-                                                color = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                                color = if (isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
                                                 textAlign = TextAlign.Center
                                             )
                                         }
@@ -904,10 +966,20 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                     // ── Toast Overlay (bottom notifications) ──
                     // While the fetch dialog (its own window) is open the toast is rendered
                     // inside that dialog instead, so suppress it here to avoid a dimmed duplicate.
+                    // The app is edge-to-edge, so the IME paints over the bottom of this
+                    // Column; lift the stack by exactly the keyboard height (a layer
+                    // translation, so surrounding layout is untouched) instead of leaving
+                    // messages such as "Login failed" hidden behind the keyboard.
                     if (state.isAppUnlocked) {
+                        val imeBottomPx = WindowInsets.ime.getBottom(LocalDensity.current)
                         ToastOverlay(
                             toasts = if (vm.fetchTargetDoc != null) emptyList() else state.toastQueue,
-                            onDismiss = { vm.dismissToast(it) }
+                            onDismiss = { vm.dismissToast(it) },
+                            modifier = if (imeBottomPx > 0) {
+                                Modifier.graphicsLayer { translationY = -imeBottomPx.toFloat() }
+                            } else {
+                                Modifier
+                            }
                         )
                     }
 
@@ -925,12 +997,48 @@ ManagerAccess(id = mgr.id.toString(), code = mgr.managerCode ?: mgr.id.toString(
                                 }
                                 vm.setBottomTab(tab)
                             },
-                            isDarkTheme = state.isDarkTheme,
+                            isDarkTheme = isDarkTheme,
                             showTeam = state.currentUserRole != "MANAGER"
                         )
                     }
                 }
             }
         }
+    }
+}
+
+// ── Bottom-nav tab host ──
+// Position of each tab, used only to pick the slide direction.
+private fun BottomTab.position(): Int = when (this) {
+    BottomTab.Home -> 0
+    BottomTab.Business -> 1
+    BottomTab.Docs -> 2
+    BottomTab.Team -> 3
+    BottomTab.Settings -> 4
+}
+
+/**
+ * Cross-fades the bottom-nav tab content and slides the incoming tab in from
+ * the side it sits on, so Home → Docs reads as moving right and back as left.
+ */
+@Composable
+private fun TabContentHost(
+    tab: BottomTab,
+    content: @Composable (BottomTab) -> Unit
+) {
+    AnimatedContent(
+        targetState = tab,
+        transitionSpec = {
+            val forward = targetState.position() >= initialState.position()
+            val enter = slideInHorizontally(
+                animationSpec = tween(220, easing = FastOutSlowInEasing)
+            ) { width -> if (forward) width / 12 else -width / 12 } + fadeIn(
+                animationSpec = tween(180)
+            )
+            enter togetherWith fadeOut(animationSpec = tween(140, easing = FastOutLinearInEasing))
+        },
+        label = "bottomTabTransition"
+    ) { current ->
+        content(current)
     }
 }

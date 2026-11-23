@@ -1,6 +1,8 @@
 package com.iadv.dukaanlocker.ui.screens
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -108,16 +110,19 @@ fun BottomNavBar(
                         targetValue = if (isSelected) colors.primary else colors.textSecondary.copy(alpha = 0.55f),
                         label = "textColor"
                     )
+                    val pillColor by animateColorAsState(
+                        targetValue = if (isSelected) colors.primary.copy(alpha = 0.10f) else Color.Transparent,
+                        animationSpec = tween(200, easing = FastOutSlowInEasing),
+                        label = "navPill"
+                    )
 
                     Column(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(14.dp))
                             .clickable { onNavigate(item.tab) }
-                            .background(
-                                if (isSelected) colors.primary.copy(alpha = 0.10f)
-                                else Color.Transparent
-                            )
+                            .background(pillColor)
+                            .heightIn(min = 48.dp)
                             .padding(vertical = 5.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center

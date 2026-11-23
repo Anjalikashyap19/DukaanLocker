@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import com.iadv.dukaanlocker.api.NotificationItem
 import com.iadv.dukaanlocker.ui.components.EmptyStateView
 import com.iadv.dukaanlocker.ui.theme.LocalAppColors
+import com.iadv.dukaanlocker.ui.theme.topBarShadow
 
 @Composable
 fun NotificationScreen(
@@ -58,7 +59,7 @@ fun NotificationScreen(
     Scaffold(
         topBar = {
             Surface(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().topBarShadow(),
                 color = colors.background,
                 shadowElevation = 4.dp
             ) {
@@ -162,6 +163,7 @@ fun NotificationScreen(
                 ) {
                     items(filteredNotifications) { notification ->
                         NotificationCard(
+                            modifier = Modifier.animateItem(),
                             notification = notification,
                             colors = colors,
                             onClick = { onNotificationClick(notification) },
@@ -289,6 +291,7 @@ fun NotificationScreen(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NotificationCard(
+    modifier: Modifier = Modifier,
     notification: NotificationItem,
     colors: com.iadv.dukaanlocker.ui.theme.AppColors,
     onClick: () -> Unit,
@@ -313,17 +316,19 @@ private fun NotificationCard(
         else -> colors.textSecondary
     }
 
-    val bgAlpha = if (notification.isRead) 0.3f else 0.6f
-
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             ),
-        colors = CardDefaults.cardColors(
-            containerColor = colors.cardBg.copy(alpha = bgAlpha)
+        // A translucent surface vanishes into the light background, so each card keeps
+        // a solid surface and separates from its neighbour with a border instead.
+        colors = CardDefaults.cardColors(containerColor = colors.cardBg),
+        border = BorderStroke(
+            1.dp,
+            if (notification.isRead) colors.border else colors.primary.copy(alpha = 0.4f)
         ),
         shape = RoundedCornerShape(12.dp)
     ) {

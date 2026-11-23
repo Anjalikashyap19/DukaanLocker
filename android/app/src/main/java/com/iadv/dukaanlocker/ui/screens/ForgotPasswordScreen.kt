@@ -2,13 +2,10 @@ package com.iadv.dukaanlocker.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Refresh
@@ -27,6 +24,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.iadv.dukaanlocker.api.RateLimitInfo
+import com.iadv.dukaanlocker.ui.components.FieldErrorText
 import com.iadv.dukaanlocker.ui.strings.AppStrings
 import com.iadv.dukaanlocker.ui.theme.AppColors
 import kotlinx.coroutines.delay
@@ -47,7 +45,6 @@ fun ForgotPasswordScreen(
     mobileEnding: String? = null,
     onRequest: (mobile: String, onResult: (Boolean, String?, RateLimitInfo?) -> Unit) -> Unit,
     onReset: (mobile: String, otp: String, password: String, onResult: (Boolean, String?) -> Unit) -> Unit,
-    onBack: () -> Unit,
     onDone: () -> Unit
 ) {
     var step by remember { mutableStateOf("mobile") }
@@ -121,34 +118,24 @@ fun ForgotPasswordScreen(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-        border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.6f)),
         shape = RoundedCornerShape(20.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(22.dp),
+                .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            // The root login screen owns the single back arrow for every auth screen.
+            Column(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) {
-                    Icon(
-                        Icons.Default.ArrowBack,
-                        contentDescription = AppStrings.get(lang, "Back"),
-                        tint = colors.textSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text(
                         AppStrings.get(lang, "Forgot Password"),
                         fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         AppStrings.get(
                             lang,
@@ -188,7 +175,7 @@ fun ForgotPasswordScreen(
                     leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
                     isError = mobileError,
                     supportingText = if (mobileError) {{
-                        Text(AppStrings.get(lang, "Enter the 10-digit registered mobile number"), color = colors.error)
+                        FieldErrorText(AppStrings.get(lang, "Enter the 10-digit registered mobile number"), colors)
                     }} else null,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Next),
                     keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus() }),
@@ -214,7 +201,7 @@ fun ForgotPasswordScreen(
                     leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
                     isError = otpError,
                     supportingText = if (otpError) {{
-                        Text(AppStrings.get(lang, "Enter the 6-digit OTP"), color = colors.error)
+                        FieldErrorText(AppStrings.get(lang, "Enter the 6-digit OTP"), colors)
                     }} else null,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
                     keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus() }),
@@ -241,7 +228,7 @@ fun ForgotPasswordScreen(
                         placeholder = { Text(AppStrings.get(lang, "Enter your password"), color = colors.textSecondary.copy(alpha = 0.4f)) },
                         leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
                         trailingIcon = {
-                            IconButton(onClick = { passwordVisible = !passwordVisible }, modifier = Modifier.size(32.dp)) {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }, modifier = Modifier.size(48.dp)) {
                                 Icon(
                                     if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                                     contentDescription = if (passwordVisible) AppStrings.get(lang, "Hide password") else AppStrings.get(lang, "Show password"),
@@ -253,7 +240,7 @@ fun ForgotPasswordScreen(
                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         isError = passwordError,
                         supportingText = if (passwordError) {{
-                            Text(AppStrings.get(lang, "Use 8+ characters with upper, lower, number & symbol"), color = colors.error)
+                            FieldErrorText(AppStrings.get(lang, "Use 8+ characters with upper, lower, number & symbol"), colors)
                         }} else null,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
                         keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus() }),
@@ -280,7 +267,7 @@ fun ForgotPasswordScreen(
                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         isError = confirmPasswordError,
                         supportingText = if (confirmPasswordError) {{
-                            Text(AppStrings.get(lang, "Passwords do not match"), color = colors.error)
+                            FieldErrorText(AppStrings.get(lang, "Passwords do not match"), colors)
                         }} else null,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
@@ -422,11 +409,17 @@ fun ForgotPasswordScreen(
 
             // Step changes keep the typed values, so a wrong move is one tap to undo.
             if (step == "otp") {
-                TextButton(onClick = { step = "mobile"; message = null; isError = false }) {
+                TextButton(
+                    onClick = { step = "mobile"; message = null; isError = false },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(AppStrings.get(lang, "Change mobile number"), fontSize = 12.sp, color = colors.textSecondary)
                 }
             } else if (step == "password") {
-                TextButton(onClick = { step = "otp"; message = null; isError = false }) {
+                TextButton(
+                    onClick = { step = "otp"; message = null; isError = false },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(AppStrings.get(lang, "Change OTP"), fontSize = 12.sp, color = colors.textSecondary)
                 }
             }

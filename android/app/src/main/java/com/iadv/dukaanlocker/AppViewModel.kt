@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.iadv.dukaanlocker.api.*
 import com.iadv.dukaanlocker.ui.navigation.BottomTab
 import com.iadv.dukaanlocker.ui.navigation.Screen
+import com.iadv.dukaanlocker.ui.theme.ThemeMode
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.supervisorScope
@@ -19,6 +20,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
@@ -54,7 +57,7 @@ data class AppUiState(
     val editShopTarget: ShopResponse? = null,
     val selectedBottomTab: BottomTab = BottomTab.Home,
     val bottomTabHistory: List<BottomTab> = emptyList(),
-    val isDarkTheme: Boolean = true,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val language: String = "en",
     val isLoading: Boolean = false,
     val isLoadingShops: Boolean = false,
@@ -129,6 +132,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val renewalKobText: String?
         get() = paymentCreateResult?.kob
 
+    /**
+     * Serialises notification traffic. Without this a list response could land
+     * after the read-marking update and restore an unread count that was just
+     * cleared, which is why the badge only went away on the second visit.
+     *
+     * Declared before the `init` block on purpose: initialisation runs in
+     * declaration order and `init` calls [loadNotifications].
+     */
+    private val notificationsLock = Mutex()
+
     init {
         val isLoggedIn = ApiClient.isLoggedIn(application)
         val role = ApiClient.getUserRole(application)
@@ -158,7 +171,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             currentUserRole = role,
             currentUserManagerCode = ApiClient.getManagerCode(application),
             currentDlId = ApiClient.getDlId(application),
-            isDarkTheme = LockerStorage.getTheme(application),
+            themeMode = LockerStorage.getThemeMode(application),
             language = LockerStorage.getLanguage(application),
             isBiometricLoginEnabled = biometricLoginEnabled,
             appLockEnabled = appLockEnabled
@@ -176,7 +189,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun showToast(message: String, type: ToastType = ToastType.INFO, duration: Long = 3000) {
         val toast = ToastMessage(message = message, type = type, duration = duration)
-        updateState { it.copy(toastQueue = it.toastQueue + toast) }
+        // Keep at most three toasts on screen at once.
+        updateState { it.copy(toastQueue = (it.toastQueue + toast).takeLast(3)) }
         // Auto-dismiss after duration
         viewModelScope.launch {
             kotlinx.coroutines.delay(duration)
@@ -214,6 +228,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 it.copy(
                     navigationHistory = it.navigationHistory.dropLast(1),
                     currentScreen = previous
+                )
+            }
+        }
+    }
+
+    /**
+     * Leaves the sign-in screen for the main (onboarding) screen. Pops the history
+     * like [goBack] so the host animates it as a back step; if there is nothing to
+     * pop (e.g. restored straight into Login) the screen is pushed normally.
+     */
+    fun backToOnboarding() {
+        if (_uiState.value.navigationHistory.isEmpty()) {
+            navigateTo(Screen.Onboarding)
+        } else {
+            updateState {
+                it.copy(
+                    navigationHistory = it.navigationHistory.dropLast(1),
+                    currentScreen = Screen.Onboarding
                 )
             }
         }
@@ -378,9 +410,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun setTheme(dark: Boolean) {
-        LockerStorage.saveTheme(context, dark)
-        updateState { it.copy(isDarkTheme = dark) }
+    fun setThemeMode(mode: ThemeMode) {
+        LockerStorage.saveThemeMode(context, mode)
+        updateState { it.copy(themeMode = mode) }
     }
 
     fun setLanguage(code: String) {
@@ -1803,19 +1835,61 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadNotifications() {
         viewModelScope.launch {
-            updateState { it.copy(isLoadingNotifications = true) }
-            try {
-                val response = api.getNotifications()
-                if (response.isSuccessful) {
-                    val notifications = (response.body() ?: emptyList()).toList()
-                    val unreadCount = notifications.count { !it.isRead }.toLong()
-                    updateState { it.copy(notifications = notifications, unreadNotificationCount = unreadCount) }
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("Notifications", "Failed to load: ${e.message}")
-            }
-            updateState { it.copy(isLoadingNotifications = false) }
+            notificationsLock.withLock { refreshNotifications() }
         }
+    }
+
+    /**
+     * Called when the Notifications screen opens: mark everything read on the
+     * server, clear the badge, then reload the list. The PUT always finishes
+     * before the GET, and the badge is only cleared once the server confirmed
+     * the write, so a failed call leaves the real unread count in place.
+     */
+    fun markNotificationsRead() {
+        viewModelScope.launch {
+            notificationsLock.withLock {
+                val hadUnread = _uiState.value.let { state ->
+                    state.unreadNotificationCount > 0 || state.notifications.any { !it.isRead }
+                }
+                if (hadUnread) {
+                    val markedOnServer = try {
+                        api.markNotificationsAsRead().isSuccessful
+                    } catch (e: Exception) {
+                        android.util.Log.e("Notifications", "Failed to mark as read: ${e.message}")
+                        false
+                    }
+                    if (markedOnServer) {
+                        updateState {
+                            it.copy(
+                                notifications = it.notifications.map { item -> item.copy(isRead = true) },
+                                unreadNotificationCount = 0
+                            )
+                        }
+                    }
+                }
+                // Reload in both cases so the badge mirrors the stored status.
+                refreshNotifications()
+            }
+        }
+    }
+
+    private suspend fun refreshNotifications() {
+        updateState { it.copy(isLoadingNotifications = true) }
+        try {
+            val response = api.getNotifications()
+            if (response.isSuccessful) {
+                val notifications = (response.body() ?: emptyList()).toList()
+                updateState {
+                    it.copy(
+                        notifications = notifications,
+                        unreadNotificationCount = notifications.count { !it.isRead }.toLong()
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("Notifications", "Failed to load: ${e.message}")
+        }
+        updateState { it.copy(isLoadingNotifications = false) }
     }
 
     fun loadFssaCompliance() {
@@ -1852,22 +1926,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 android.util.Log.e("FSSAI", "Failed to mark as filed: ${e.message}")
                 showToast("Network error: ${e.message}", ToastType.ERROR)
-            }
-        }
-    }
-
-    fun markNotificationsRead() {
-        viewModelScope.launch {
-            try {
-                api.markNotificationsAsRead()
-                updateState { state ->
-                    state.copy(
-                        notifications = state.notifications.map { it.copy(isRead = true) },
-                        unreadNotificationCount = 0
-                    )
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("Notifications", "Failed to mark as read: ${e.message}")
             }
         }
     }

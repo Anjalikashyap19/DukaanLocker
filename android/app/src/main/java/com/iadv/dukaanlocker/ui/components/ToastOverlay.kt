@@ -30,6 +30,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,18 +43,27 @@ import com.iadv.dukaanlocker.ToastMessage
 import com.iadv.dukaanlocker.ToastType
 import com.iadv.dukaanlocker.ui.theme.AppColors
 import com.iadv.dukaanlocker.ui.theme.LocalAppColors
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+// How long the leave animation runs; the ViewModel drops the toast after
+// `duration`, so it starts this much earlier.
+private const val LEAVE_MS = 140L
 
 @Composable
 fun ToastOverlay(
     toasts: List<ToastMessage>,
-    onDismiss: (Long) -> Unit
+    onDismiss: (Long) -> Unit,
+    // Lets the host shift the stack (e.g. above the keyboard) without changing
+    // the space it occupies in the layout.
+    modifier: Modifier = Modifier
 ) {
     if (toasts.isEmpty()) return
 
     val colors = LocalAppColors.current
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -79,14 +89,32 @@ private fun ToastItem(
         isVisible = true
     }
 
-    val offsetXAnim = animateFloatAsState(
-        targetValue = if (isVisible) 0f else 400f,
-        animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f)
-    )
+    val scope = rememberCoroutineScope()
 
-    val alphaAnim = animateFloatAsState(
+    // One dismissal path for both the timer and the X button: fade out, then
+    // let the ViewModel remove the toast.
+    val dismiss: () -> Unit = {
+        isVisible = false
+        scope.launch {
+            delay(LEAVE_MS)
+            onDismiss()
+        }
+    }
+
+    LaunchedEffect(toast.id) {
+        delay((toast.duration - LEAVE_MS).coerceAtLeast(0L))
+        dismiss()
+    }
+
+    val offsetX by animateFloatAsState(
+        targetValue = if (isVisible) 0f else 400f,
+        animationSpec = if (isVisible) spring(dampingRatio = 0.8f, stiffness = 400f) else tween(LEAVE_MS.toInt()),
+        label = "toastOffset"
+    )
+    val contentAlpha by animateFloatAsState(
         targetValue = if (isVisible) 1f else 0f,
-        animationSpec = tween(200)
+        animationSpec = tween(if (isVisible) 200 else LEAVE_MS.toInt()),
+        label = "toastAlpha"
     )
 
     val toastBg = when (toast.type) {
@@ -123,8 +151,8 @@ private fun ToastItem(
             .padding(bottom = 6.dp)
             .animateContentSize()
             .graphicsLayer {
-                translationX = offsetXAnim.value
-                alpha = alphaAnim.value
+                translationX = offsetX
+                alpha = contentAlpha
             },
         shape = RoundedCornerShape(12.dp),
         color = toastBg,
@@ -158,7 +186,7 @@ private fun ToastItem(
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
             }
-            IconButton(onClick = onDismiss) {
+            IconButton(onClick = dismiss) {
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = "Dismiss",

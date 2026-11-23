@@ -2,6 +2,7 @@ package com.iadv.dukaanlocker.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,8 +12,7 @@ import com.iadv.dukaanlocker.ui.components.SkeletonSettingsCard
 import com.iadv.dukaanlocker.ui.components.SkeletonText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Store
@@ -38,8 +38,8 @@ import com.iadv.dukaanlocker.ui.theme.*
 // ── Settings Screen (bottom-nav "Settings" tab) ───────────────────────────────
 @Composable
 fun SettingsScreen(
-    isDarkTheme: Boolean,
-    onToggleTheme: () -> Unit,
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit,
     user: UserAccount,
     onLogout: () -> Unit,
     businesses: List<ShopResponse> = emptyList(),
@@ -50,10 +50,11 @@ fun SettingsScreen(
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showThemeDialog by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().background(colors.background)) {
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().topBarShadow(),
             color = colors.background,
             shadowElevation = 4.dp
         ) {
@@ -227,7 +228,7 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.padding(vertical = 4.dp)) {
                         TextButton(
-                            onClick = onToggleTheme,
+                            onClick = { showThemeDialog = true },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
@@ -235,17 +236,23 @@ fun SettingsScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
-                                     contentDescription = AppStrings.get(lang, "Toggle theme"),
+                                    Icons.Default.Contrast,
+                                    contentDescription = null,
                                     modifier = Modifier.size(20.dp),
                                     tint = colors.primary
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Text(
-                                     if (isDarkTheme) AppStrings.get(lang, "Switch to Light Theme") else AppStrings.get(lang, "Switch to Dark Theme"),
+                                    AppStrings.get(lang, "Theme"),
                                     color = colors.primary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                                Text(
+                                    themeModeLabel(themeMode, lang),
+                                    color = colors.textSecondary,
+                                    fontSize = 12.sp
                                 )
                             }
                         }
@@ -269,6 +276,18 @@ fun SettingsScreen(
 
             item { Spacer(modifier = Modifier.height(24.dp)) }
         }
+    }
+
+    // Theme preference: System Default / Light / Dark
+    if (showThemeDialog) {
+        ThemeModeDialog(
+            current = themeMode,
+            onSelect = { mode ->
+                onThemeModeChange(mode)
+                showThemeDialog = false
+            },
+            onDismiss = { showThemeDialog = false }
+        )
     }
 
     // Logout Confirmation Dialog
@@ -310,4 +329,69 @@ fun SettingsScreen(
             }
         )
     }
+}
+
+// ── Theme preference ─────────────────────────────────────────────────────────────
+
+private fun themeModeLabel(mode: ThemeMode, lang: String): String = when (mode) {
+    ThemeMode.SYSTEM -> AppStrings.get(lang, "System Default")
+    ThemeMode.LIGHT -> AppStrings.get(lang, "Light Mode")
+    ThemeMode.DARK -> AppStrings.get(lang, "Dark Mode")
+}
+
+@Composable
+private fun ThemeModeDialog(
+    current: ThemeMode,
+    onSelect: (ThemeMode) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val colors = LocalAppColors.current
+    val lang = LocalAppLanguage.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.cardBg,
+        shape = RoundedCornerShape(20.dp),
+        title = {
+            Text(
+                AppStrings.get(lang, "Theme"),
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                ThemeMode.entries.forEach { mode ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { onSelect(mode) }
+                            .padding(horizontal = 4.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = mode == current,
+                            onClick = { onSelect(mode) },
+                            colors = RadioButtonDefaults.colors(
+                                selectedColor = colors.primary,
+                                unselectedColor = colors.textSecondary
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            themeModeLabel(mode, lang),
+                            color = colors.textPrimary,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(AppStrings.get(lang, "Cancel"), color = colors.primary)
+            }
+        }
+    )
 }

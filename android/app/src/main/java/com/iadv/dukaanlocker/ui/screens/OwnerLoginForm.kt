@@ -1,7 +1,7 @@
 package com.iadv.dukaanlocker.ui.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,6 +24,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -32,6 +34,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.iadv.dukaanlocker.api.RateLimitInfo
+import com.iadv.dukaanlocker.ui.components.FieldErrorText
 import com.iadv.dukaanlocker.ui.strings.AppStrings
 import com.iadv.dukaanlocker.ui.theme.AppColors
 
@@ -58,175 +61,261 @@ fun OwnerLoginForm(
             lang = lang,
             onMsmeLoginRequest = onMsmeLoginRequest,
             onMsmeLoginVerify = onMsmeLoginVerify,
-            onBack = { msmeMode = false }
+            onBack = { msmeMode = false },
+            scrollable = false
         )
         return
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-        border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.4f)),
-        shape = RoundedCornerShape(20.dp)
+    val focusManager = LocalFocusManager.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.background)
+            .navigationBarsPadding()
+            .imePadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Column(
+        // ── Header: back + title ──
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = AppStrings.get(lang, "Back"), tint = colors.textSecondary, modifier = Modifier.size(20.dp))
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Column {
-                    Text(AppStrings.get(lang, "Owner Sign In"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                    Text(AppStrings.get(lang, "Access your business dashboard"), fontSize = 12.sp, color = colors.textSecondary)
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(colors.primary.copy(alpha = 0.06f))
-                    .padding(horizontal = 14.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                 Icon(
-                    Icons.Default.Business,
-                    contentDescription = null,
-                    tint = colors.primary,
-                    modifier = Modifier.size(22.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        AppStrings.get(lang, "Have a Udyam number?"),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = colors.textPrimary
-                    )
-                    Text(
-                        AppStrings.get(lang, "Sign in with Udyam number & OTP"),
-                        fontSize = 11.sp,
-                        color = colors.textSecondary
-                    )
-                }
-                Switch(
-                    checked = msmeMode,
-                    onCheckedChange = { msmeMode = it },
-                    colors = SwitchDefaults.colors(checkedTrackColor = colors.primary)
+                    Icons.Default.ArrowBack,
+                    contentDescription = AppStrings.get(lang, "Back"),
+                    modifier = Modifier.size(20.dp),
+                    tint = colors.textSecondary
                 )
             }
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(
+                    AppStrings.get(lang, "Owner Sign In"),
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textPrimary
+                )
+                Text(
+                    AppStrings.get(lang, "Access your business dashboard"),
+                    fontSize = 12.sp,
+                    color = colors.textSecondary,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
 
-            val focusManager = LocalFocusManager.current
-            OutlinedTextField(
-                value = email,
-                onValueChange = onEmailChange,
-                label = { Text(AppStrings.get(lang, "Email Address"), color = colors.textSecondary) },
-                placeholder = { Text("you@example.com", color = colors.textSecondary.copy(alpha = 0.4f)) },
-                leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
-                isError = emailError,
-                supportingText = if (emailError) {{ Text(AppStrings.get(lang, "Enter a valid email address"), color = colors.error) }} else null,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Email,
-                    capitalization = KeyboardCapitalization.None,
-                    imeAction = ImeAction.Next
-                ),
-                keyboardActions = KeyboardActions(
-                    onNext = { focusManager.clearFocus() }
-                ),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
-                    focusedLabelColor = colors.primary, cursorColor = colors.primary
-                ),
-                shape = RoundedCornerShape(12.dp)
+        // ── MSME toggle (subtle tinted surface) ──
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(colors.primary.copy(alpha = 0.06f))
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.Business,
+                contentDescription = null,
+                tint = colors.primary,
+                modifier = Modifier.size(20.dp)
             )
-
-            OutlinedTextField(
-                value = password,
-                onValueChange = onPasswordChange,
-                label = { Text(AppStrings.get(lang, "Password"), color = colors.textSecondary) },
-                placeholder = { Text(AppStrings.get(lang, "Enter your password"), color = colors.textSecondary.copy(alpha = 0.4f)) },
-                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
-                trailingIcon = {
-                    IconButton(onClick = onTogglePasswordVisible, modifier = Modifier.size(32.dp)) {
-                        Icon(
-                            if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                            contentDescription = if (passwordVisible) AppStrings.get(lang, "Hide password") else AppStrings.get(lang, "Show password"),
-                            tint = colors.textSecondary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                },
-                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                isError = passwordError,
-                supportingText = if (passwordError) {{ Text(AppStrings.get(lang, "Password is required"), color = colors.error) }} else null,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Password,
-                    imeAction = ImeAction.Done
-                ),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        focusManager.clearFocus()
-                        if (email.isNotBlank() && password.isNotBlank()) {
-                            onLogin()
-                        }
-                    }
-                ),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,
-                    focusedLabelColor = colors.primary, cursorColor = colors.primary
-                ),
-                shape = RoundedCornerShape(12.dp)
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    AppStrings.get(lang, "Have a Udyam number?"),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.textPrimary
+                )
+                Text(
+                    AppStrings.get(lang, "Sign in with Udyam number & OTP"),
+                    fontSize = 10.sp,
+                    color = colors.textSecondary
+                )
+            }
+            Switch(
+                checked = msmeMode,
+                onCheckedChange = { msmeMode = it },
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = colors.primary,
+                    checkedThumbColor = Color.White
+                )
             )
+        }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(
-                    onClick = onForgotPassword,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                ) {
-                    Text(
-                        AppStrings.get(lang, "forgot password?"),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = colors.primary
+        UiTextField(
+            label = AppStrings.get(lang, "Email Address"),
+            placeholder = "you@example.com",
+            value = email,
+            onValueChange = onEmailChange,
+            leadingIcon = Icons.Default.Email,
+            isError = emailError,
+            errorText = if (emailError) AppStrings.get(lang, "Enter a valid email address") else null,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Email,
+                capitalization = KeyboardCapitalization.None,
+                imeAction = ImeAction.Next
+            ),
+            keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus() }),
+            colors = colors
+        )
+
+        UiTextField(
+            label = AppStrings.get(lang, "Password"),
+            placeholder = AppStrings.get(lang, "Enter your password"),
+            value = password,
+            onValueChange = onPasswordChange,
+            leadingIcon = Icons.Default.Lock,
+            trailingIcon = {
+                IconButton(onClick = onTogglePasswordVisible, modifier = Modifier.size(48.dp)) {
+                    Icon(
+                        if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                        contentDescription = if (passwordVisible) AppStrings.get(lang, "Hide password") else AppStrings.get(lang, "Show password"),
+                        tint = colors.textSecondary,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
-            }
-
-            LoginLockoutBanner(colors = colors, remainingMs = lockoutRemainingMs)
-
-            Button(
-                onClick = onLogin,
-                enabled = email.isNotBlank() && password.isNotBlank() && !isChecking && lockoutRemainingMs <= 0L,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = colors.background)
-            ) {
-                if (isChecking) {
-                    CircularProgressIndicator(modifier = Modifier.size(22.dp), color = colors.background, strokeWidth = 2.dp)
-                } else {
-                    Icon(Icons.Default.Login, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(AppStrings.get(lang, "SECURE ACCESS"), fontWeight = FontWeight.Bold, fontSize = 14.sp, letterSpacing = 1.sp)
+            },
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            isError = passwordError,
+            errorText = if (passwordError) AppStrings.get(lang, "Password is required") else null,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    focusManager.clearFocus()
+                    if (email.isNotBlank() && password.isNotBlank()) {
+                        onLogin()
+                    }
                 }
+            ),
+            colors = colors
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            TextButton(
+                onClick = onForgotPassword,
+                modifier = Modifier.padding(top = 4.dp),
+                colors = ButtonDefaults.textButtonColors(contentColor = colors.primary)
+            ) {
+                Text(
+                    AppStrings.get(lang, "forgot password?"),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.primary
+                )
+            }
+        }
+
+        LoginLockoutBanner(colors = colors, remainingMs = lockoutRemainingMs)
+
+        Button(
+            onClick = onLogin,
+            enabled = email.isNotBlank() && password.isNotBlank() && !isChecking && lockoutRemainingMs <= 0L,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = colors.primary,
+                contentColor = colors.background,
+                disabledContainerColor = colors.primary.copy(alpha = 0.4f),
+                disabledContentColor = colors.background.copy(alpha = 0.6f)
+            )
+        ) {
+            if (isChecking) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    color = colors.background,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Icon(Icons.Default.Login, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    AppStrings.get(lang, "SECURE ACCESS"),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    letterSpacing = 1.sp
+                )
             }
         }
     }
+}
+
+/** ── Reusable input field (shared with RegisterForm) ── */
+@Composable
+private fun UiTextField(
+    label: String,
+    placeholder: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    leadingIcon: androidx.compose.ui.graphics.vector.ImageVector?,
+    trailingIcon: @Composable (() -> Unit)? = null,
+    isError: Boolean = false,
+    errorText: String? = null,
+    keyboardOptions: KeyboardOptions = KeyboardOptions(),
+    keyboardActions: KeyboardActions = KeyboardActions(),
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    colors: AppColors,
+    modifier: Modifier = Modifier
+) {
+    val textFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = if (isError) colors.error else colors.primary,
+        unfocusedBorderColor = if (isError) colors.error.copy(alpha = 0.5f) else colors.border,
+        focusedLabelColor = if (isError) colors.error else colors.primary,
+        unfocusedLabelColor = colors.textSecondary,
+        focusedTextColor = colors.textPrimary,
+        unfocusedTextColor = colors.textPrimary,
+        cursorColor = colors.primary
+    )
+
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label, fontSize = 12.sp, color = colors.textSecondary) },
+        placeholder = { Text(placeholder, fontSize = 12.sp, color = colors.textSecondary.copy(alpha = 0.4f)) },
+        leadingIcon = leadingIcon?.let {
+            {
+                Icon(
+                    imageVector = it,
+                    contentDescription = null,
+                    tint = if (isError) colors.error else colors.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        },
+        trailingIcon = trailingIcon,
+        isError = isError,
+        supportingText = if (isError && errorText != null) {
+            { FieldErrorText(text = errorText, colors = colors) }
+        } else {
+            null
+        },
+        keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
+        visualTransformation = visualTransformation,
+        singleLine = true,
+        modifier = modifier.fillMaxWidth(),
+        colors = textFieldColors,
+        shape = RoundedCornerShape(12.dp),
+        textStyle = TextStyle(
+            color = colors.textPrimary,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Normal,
+            fontStyle = androidx.compose.ui.text.font.FontStyle.Normal
+        )
+    )
 }

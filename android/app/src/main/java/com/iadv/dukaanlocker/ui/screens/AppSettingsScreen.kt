@@ -8,24 +8,20 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Business
-import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Help
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Visibility
@@ -34,13 +30,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -48,6 +42,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.iadv.dukaanlocker.BuildConfig
@@ -71,6 +68,64 @@ fun SettingsSectionHeader(title: String, colors: AppColors) {
     )
 }
 
+/**
+ * The single header used by App Settings and everything opened from it.
+ *
+ * The bar keeps the plain screen background, so it reads as part of the page
+ * rather than a separate slab. Separation comes from the shared
+ * [topBarShadow] depth cue: a real elevation shadow is cast in black and
+ * vanishes on the dark background, so the edge is drawn instead.
+ */
+@Composable
+private fun SettingsTopBar(
+    title: String,
+    colors: AppColors,
+    lang: String,
+    onBack: () -> Unit,
+    subtitle: String? = null
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.background)
+            .topBarShadow(colors)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 16.dp, top = 6.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = AppStrings.get(lang, "Back"),
+                    tint = colors.textPrimary
+                )
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
+                Text(
+                    title,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        subtitle,
+                        fontSize = 12.sp,
+                        color = colors.textSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun HelpSupportScreen(
     onBack: () -> Unit,
@@ -79,31 +134,9 @@ fun HelpSupportScreen(
     context: android.content.Context
 ) {
     val scrollState = rememberScrollState()
-    Column(modifier = Modifier.fillMaxSize().background(colors.background).imePadding().verticalScroll(scrollState)) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = colors.background,
-            shadowElevation = 4.dp
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        Icons.Filled.ArrowBack,
-                        contentDescription = AppStrings.get(lang, "Back"),
-                        tint = colors.textPrimary
-                    )
-                }
-                Column(modifier = Modifier.weight(1f).padding(start = 4.dp, end = 12.dp)) {
-                    Text(AppStrings.get(lang, "Help & Support"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                }
-            }
-        }
-
+    Column(modifier = Modifier.fillMaxWidth().background(colors.background).imePadding().verticalScroll(scrollState)) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Contact Card
@@ -182,7 +215,7 @@ fun HelpSupportScreen(
                             },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Email, contentDescription = null, tint = Color(0xFF25D366), modifier = Modifier.size(24.dp))
+                        Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, tint = colors.success, modifier = Modifier.size(24.dp))
                         Spacer(modifier = Modifier.width(16.dp))
                         Column {
                             Text("WhatsApp", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.textPrimary)
@@ -282,7 +315,7 @@ fun VerifyMobileForPasswordChange(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.background)
-            .padding(horizontal = 24.dp, vertical = 16.dp)
+            .padding(horizontal = 20.dp, vertical = 20.dp)
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -292,37 +325,15 @@ fun VerifyMobileForPasswordChange(
                 .fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = colors.cardBg),
             border = BorderStroke(1.dp, colors.border),
-            shape = RoundedCornerShape(20.dp)
+            shape = RoundedCornerShape(18.dp)
         ) {
-Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp).imePadding(),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) {
-                        Icon(
-                            Icons.Default.ArrowBack,
-                            contentDescription = AppStrings.get(lang, "Back"),
-                            tint = colors.textSecondary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
-                        Text(
-                            AppStrings.get(lang, "Change Password"),
-                            fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary
-                        )
-                        Text(
-                            AppStrings.get(lang, "Verify Mobile Number"),
-                            fontSize = 12.sp, color = colors.textSecondary
-                        )
-                    }
-                }
-
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 20.dp)
+                    .imePadding(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 when (step) {
                     "mobile" -> OutlinedTextField(
                         value = mobile,
@@ -388,7 +399,7 @@ Column(
                             placeholder = { Text(AppStrings.get(lang, "Enter your password"), color = colors.textSecondary.copy(alpha = 0.4f)) },
                             leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
                             trailingIcon = {
-                                IconButton(onClick = { passwordVisible = !passwordVisible }, modifier = Modifier.size(32.dp)) {
+                                IconButton(onClick = { passwordVisible = !passwordVisible }, modifier = Modifier.size(48.dp)) {
                                     Icon(
                                         if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                                         contentDescription = if (passwordVisible) AppStrings.get(lang, "Hide password") else AppStrings.get(lang, "Show password"),
@@ -536,75 +547,56 @@ fun AboutAppScreen(
     lang: String
 ) {
     val scrollState = rememberScrollState()
-    Column(modifier = Modifier.fillMaxSize().background(colors.background).imePadding().verticalScroll(scrollState)) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = colors.background,
-            shadowElevation = 4.dp
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        Icons.Filled.ArrowBack,
-                        contentDescription = AppStrings.get(lang, "Back"),
-                        tint = colors.textPrimary
-                    )
-                }
-                Column(modifier = Modifier.weight(1f).padding(start = 4.dp, end = 12.dp)) {
-                    Text(AppStrings.get(lang, "About App"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                }
-            }
-        }
-
+    Column(modifier = Modifier.fillMaxWidth().background(colors.background).imePadding().verticalScroll(scrollState)) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            LauncherLogo(modifier = Modifier.size(80.dp))
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Dukaan Locker", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-            Text(AppStrings.get(lang, "Version") + " ${BuildConfig.VERSION_NAME}", fontSize = 14.sp, color = colors.textSecondary)
-            Spacer(modifier = Modifier.height(16.dp))
+            LauncherLogo(modifier = Modifier.size(72.dp))
+            Text("Dukaan Locker", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+            Text(AppStrings.get(lang, "Version") + " ${BuildConfig.VERSION_NAME}", fontSize = 13.sp, color = colors.textSecondary)
             Text(
                 AppStrings.get(lang, "Secure business document vault with auto-fetch and renewal reminders"),
-                fontSize = 14.sp,
+                fontSize = 13.sp,
+                lineHeight = 19.sp,
                 color = colors.textSecondary,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 16.dp)
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 4.dp, start = 8.dp, end = 8.dp)
             )
-            Spacer(modifier = Modifier.height(16.dp))
 
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                colors = CardDefaults.cardColors(containerColor = colors.cardBg),
+                border = BorderStroke(1.dp, colors.border),
+                shape = RoundedCornerShape(14.dp)
             ) {
-                DetailRow(icon = Icons.Default.Security, title = AppStrings.get(lang, "Bank-Grade Security"), description = AppStrings.get(lang, "Your documents stay encrypted and private in one vault."), colors = colors)
-                DetailRow(icon = Icons.Default.Notifications, title = AppStrings.get(lang, "Renewal Reminders"), description = AppStrings.get(lang, "Never miss an expiry - get timely alerts for every important document."), colors = colors)
-                DetailRow(icon = Icons.Default.CloudDownload, title = AppStrings.get(lang, "Auto-Fetch Documents"), description = AppStrings.get(lang, "Fetch official certificates directly from government portals."), colors = colors)
-                DetailRow(icon = Icons.Default.Business, title = AppStrings.get(lang, "Multi-Business Support"), description = AppStrings.get(lang, "Manage multiple businesses and assign managers with unique access codes."), colors = colors)
-                DetailRow(icon = Icons.Default.Language, title = AppStrings.get(lang, "Multi-Language"), description = AppStrings.get(lang, "Available in 11 Indian languages including Hindi, Bengali, Gujarati, Marathi, Tamil, Telugu and more."), colors = colors)
-                DetailRow(icon = Icons.Default.Lock, title = AppStrings.get(lang, "App Lock"), description = AppStrings.get(lang, "Optional fingerprint/PIN authentication on app open for extra security."), colors = colors)
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                ) {
+                    DetailRow(title = AppStrings.get(lang, "Bank-Grade Security"), description = AppStrings.get(lang, "Your documents stay encrypted and private in one vault."), colors = colors)
+                    HorizontalDivider(color = colors.border)
+                    DetailRow(title = AppStrings.get(lang, "Renewal Reminders"), description = AppStrings.get(lang, "Never miss an expiry - get timely alerts for every important document."), colors = colors)
+                    HorizontalDivider(color = colors.border)
+                    DetailRow(title = AppStrings.get(lang, "Auto-Fetch Documents"), description = AppStrings.get(lang, "Fetch official certificates directly from government portals."), colors = colors)
+                    HorizontalDivider(color = colors.border)
+                    DetailRow(title = AppStrings.get(lang, "Multi-Business Support"), description = AppStrings.get(lang, "Manage multiple businesses and assign managers with unique access codes."), colors = colors)
+                    HorizontalDivider(color = colors.border)
+                    DetailRow(title = AppStrings.get(lang, "Multi-Language"), description = AppStrings.get(lang, "Available in 11 Indian languages including Hindi, Bengali, Gujarati, Marathi, Tamil, Telugu and more."), colors = colors)
+                    HorizontalDivider(color = colors.border)
+                    DetailRow(title = AppStrings.get(lang, "App Lock"), description = AppStrings.get(lang, "Optional fingerprint/PIN authentication on app open for extra security."), colors = colors)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun DetailRow(icon: ImageVector, title: String, description: String, colors: AppColors) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.Top
-    ) {
-        Icon(icon, contentDescription = null, tint = colors.primary, modifier = Modifier.size(24.dp).padding(top = 2.dp))
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-            Text(description, fontSize = 13.sp, color = colors.textSecondary)
-        }
+private fun DetailRow(title: String, description: String, colors: AppColors) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+        Text(title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+        Spacer(modifier = Modifier.height(3.dp))
+        Text(description, fontSize = 13.sp, lineHeight = 19.sp, color = colors.textSecondary)
     }
 }
 
@@ -619,31 +611,9 @@ fun FeedbackScreen(
     var comment by remember { mutableStateOf("") }
     var showToast by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxSize().background(colors.background).imePadding()) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = colors.background,
-            shadowElevation = 4.dp
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        Icons.Filled.ArrowBack,
-                        contentDescription = AppStrings.get(lang, "Back"),
-                        tint = colors.textPrimary
-                    )
-                }
-                Column(modifier = Modifier.weight(1f).padding(start = 4.dp, end = 12.dp)) {
-                    Text(AppStrings.get(lang, "User Feedback"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                }
-            }
-        }
-
+    Column(modifier = Modifier.fillMaxWidth().background(colors.background).imePadding()) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(AppStrings.get(lang, "Rate this app"), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
@@ -722,6 +692,195 @@ fun sendFeedback(context: android.content.Context, rating: Int, comment: String)
     } catch (e: Exception) {}
 }
 
+@Composable
+private fun ProfileAvatar(name: String, colors: AppColors, size: Dp = 46.dp) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .background(colors.primary.copy(alpha = 0.12f), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+            fontSize = (size.value / 2.2f).sp,
+            fontWeight = FontWeight.Bold,
+            color = colors.primary
+        )
+    }
+}
+
+private fun roleLabel(role: String, lang: String): String = when (role.uppercase()) {
+    "OWNER", "ADMIN" -> AppStrings.get(lang, "Business Owner")
+    "MANAGER" -> AppStrings.get(lang, "Manager")
+    else -> role.replaceFirstChar { it.uppercase() }
+}
+
+@Composable
+private fun ProfileInfoRow(label: String, value: String, colors: AppColors) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, fontSize = 13.sp, color = colors.textSecondary)
+        Spacer(modifier = Modifier.weight(1f))
+        Text(
+            value.ifBlank { "\u2014" },
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            color = colors.textPrimary,
+            textAlign = TextAlign.End,
+            modifier = Modifier.padding(start = 16.dp)
+        )
+    }
+}
+
+@Composable
+private fun ProfileEntryCard(
+    userName: String,
+    userMobile: String,
+    userRole: String,
+    colors: AppColors,
+    lang: String,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBg),
+        border = BorderStroke(1.dp, colors.border),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ProfileAvatar(name = userName, colors = colors)
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    userName.ifBlank { AppStrings.get(lang, "User Profile") },
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    listOf(roleLabel(userRole, lang), userMobile)
+                        .filter { it.isNotBlank() }
+                        .joinToString(" \u2022 "),
+                    fontSize = 13.sp,
+                    color = colors.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = colors.textSecondary
+            )
+        }
+    }
+}
+
+@Composable
+private fun UserProfileScreen(
+    colors: AppColors,
+    lang: String,
+    userName: String,
+    userMobile: String,
+    userEmail: String,
+    userRole: String,
+    managerCode: String,
+    dlId: String,
+    businessCount: Int,
+    appLockEnabled: Boolean
+) {
+    val scrollState = rememberScrollState()
+    Column(
+        modifier = Modifier.fillMaxWidth().background(colors.background).verticalScroll(scrollState)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                ProfileAvatar(name = userName, colors = colors, size = 60.dp)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    userName.ifBlank { AppStrings.get(lang, "User Profile") },
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textPrimary,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    roleLabel(userRole, lang),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.primary,
+                    letterSpacing = 1.sp
+                )
+            }
+
+            SettingsSectionHeader(title = AppStrings.get(lang, "ACCOUNT DETAILS"), colors = colors)
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = colors.cardBg),
+                border = BorderStroke(1.dp, colors.border),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) {
+                    ProfileInfoRow(AppStrings.get(lang, "Mobile Number"), userMobile, colors)
+                    HorizontalDivider(color = colors.border)
+                    ProfileInfoRow(AppStrings.get(lang, "Email Address"), userEmail, colors)
+                    HorizontalDivider(color = colors.border)
+                    ProfileInfoRow(AppStrings.get(lang, "Role"), roleLabel(userRole, lang), colors)
+                    HorizontalDivider(color = colors.border)
+                    ProfileInfoRow(AppStrings.get(lang, "Registered Businesses"), businessCount.toString(), colors)
+                    if (dlId.isNotBlank()) {
+                        HorizontalDivider(color = colors.border)
+                        ProfileInfoRow(AppStrings.get(lang, "Dukaan Locker ID"), dlId, colors)
+                    }
+                    if (managerCode.isNotBlank()) {
+                        HorizontalDivider(color = colors.border)
+                        ProfileInfoRow(AppStrings.get(lang, "Manager Code"), managerCode, colors)
+                    }
+                }
+            }
+
+            SettingsSectionHeader(title = AppStrings.get(lang, "SECURITY"), colors = colors)
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = colors.cardBg),
+                border = BorderStroke(1.dp, colors.border),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) {
+                    ProfileInfoRow(
+                        AppStrings.get(lang, "App Lock"),
+                        AppStrings.get(lang, if (appLockEnabled) "Enabled" else "Disabled"),
+                        colors
+                    )
+                    HorizontalDivider(color = colors.border)
+                    ProfileInfoRow(
+                        AppStrings.get(lang, "Account Status"),
+                        AppStrings.get(lang, "Active"),
+                        colors
+                    )
+                }
+            }
+        }
+    }
+}
+
 object AppSettingsInfo {
     fun buildFeedbackSubject(rating: Int): String =
         "[Feedback] DukaanLocker v${BuildConfig.VERSION_NAME} \u2014 ${rating}\u2605"
@@ -746,7 +905,14 @@ fun AppSettingsScreen(
     onBack: () -> Unit,
     isDarkTheme: Boolean,
     isAppLockEnabled: Boolean,
-    onAppLockChanged: (Boolean) -> Unit
+    onAppLockChanged: (Boolean) -> Unit,
+    userName: String = "",
+    userMobile: String = "",
+    userEmail: String = "",
+    userRole: String = "",
+    userManagerCode: String = "",
+    userDlId: String = "",
+    businessCount: Int = 0
 ) {
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
@@ -757,32 +923,55 @@ fun AppSettingsScreen(
     var showHelpSupport by remember { mutableStateOf(false) }
     var showAboutApp by remember { mutableStateOf(false) }
     var showFeedback by remember { mutableStateOf(false) }
+    var showUserProfile by remember { mutableStateOf(false) }
+
+    // A single header owns the whole flow. It stays in place while sub-screens
+    // swap in underneath, so there is never a second stacked title, and back
+    // closes the current sub-screen before leaving App Settings entirely.
+    val headerTitle = when {
+        showUserProfile -> AppStrings.get(lang, "User Profile")
+        showChangePassword -> AppStrings.get(lang, "Change Password")
+        showHelpSupport -> AppStrings.get(lang, "Help & Support")
+        showAboutApp -> AppStrings.get(lang, "About App")
+        showFeedback -> AppStrings.get(lang, "User Feedback")
+        else -> AppStrings.get(lang, "App Settings")
+    }
+    val headerSubtitle = if (showChangePassword) {
+        AppStrings.get(lang, "Verify Mobile Number")
+    } else null
 
     Column(modifier = Modifier.fillMaxSize().background(colors.background)) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = colors.background,
-            shadowElevation = 4.dp
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        Icons.Filled.ArrowBack,
-                        contentDescription = AppStrings.get(lang, "Back"),
-                        tint = colors.textPrimary
-                    )
-                }
-                Column(modifier = Modifier.weight(1f).padding(start = 4.dp, end = 12.dp)) {
-                    Text(AppStrings.get(lang, "App Settings"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                    Text(AppStrings.get(lang, "Security, help & feedback"), fontSize = 12.sp, color = colors.textSecondary)
+        SettingsTopBar(
+            title = headerTitle,
+            subtitle = headerSubtitle,
+            lang = lang,
+            colors = colors,
+            onBack = {
+                when {
+                    showUserProfile -> showUserProfile = false
+                    showChangePassword -> showChangePassword = false
+                    showHelpSupport -> showHelpSupport = false
+                    showAboutApp -> showAboutApp = false
+                    showFeedback -> showFeedback = false
+                    else -> onBack()
                 }
             }
-        }
+        )
 
-        if (showChangePassword) {
+        if (showUserProfile) {
+            UserProfileScreen(
+                colors = colors,
+                lang = lang,
+                userName = userName,
+                userMobile = userMobile,
+                userEmail = userEmail,
+                userRole = userRole,
+                managerCode = userManagerCode,
+                dlId = userDlId,
+                businessCount = businessCount,
+                appLockEnabled = appLockEnabled
+            )
+        } else if (showChangePassword) {
             VerifyMobileForPasswordChange(
                 colors = colors,
                 lang = lang,
@@ -815,6 +1004,17 @@ fun AppSettingsScreen(
                 contentPadding = PaddingValues(vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                item {
+                    ProfileEntryCard(
+                        userName = userName,
+                        userMobile = userMobile,
+                        userRole = userRole,
+                        colors = colors,
+                        lang = lang,
+                        onClick = { showUserProfile = true }
+                    )
+                }
+
                 // SECURITY SECTION
                 item {
                     SettingsSectionHeader(title = AppStrings.get(lang, "SECURITY"), colors = colors)
@@ -831,13 +1031,6 @@ fun AppSettingsScreen(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    Icons.Default.Lock,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp),
-                                    tint = colors.primary
-                                )
-                                Spacer(modifier = Modifier.width(16.dp))
                                 Column {
                                     Text(
                                         AppStrings.get(lang, "App Lock"),
@@ -866,7 +1059,7 @@ fun AppSettingsScreen(
                                     )
                                 )
                             }
-                            HorizontalDivider(color = colors.border, modifier = Modifier.padding(start = 56.dp))
+                            HorizontalDivider(color = colors.border, modifier = Modifier.padding(horizontal = 16.dp))
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -874,13 +1067,6 @@ fun AppSettingsScreen(
                                     .clickable { showChangePassword = true },
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    Icons.Default.Lock,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp),
-                                    tint = colors.primary
-                                )
-                                Spacer(modifier = Modifier.width(16.dp))
                                 Column {
                                     Text(
                                         AppStrings.get(lang, "Change Password"),
@@ -888,14 +1074,12 @@ fun AppSettingsScreen(
                                         fontWeight = FontWeight.Bold,
                                         color = colors.textPrimary
                                     )
+                                    Text(
+                                        AppStrings.get(lang, "Update your sign-in password"),
+                                        fontSize = 13.sp,
+                                        color = colors.textSecondary
+                                    )
                                 }
-                                Spacer(modifier = Modifier.weight(1f))
-                                Icon(
-                                    Icons.Filled.ArrowBack,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp),
-                                    tint = colors.textSecondary
-                                )
                             }
                         }
                     }
@@ -920,30 +1104,14 @@ fun AppSettingsScreen(
                                     .clickable { showHelpSupport = true },
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    Icons.Default.Help,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp),
-                                    tint = colors.primary
-                                )
-                                Spacer(modifier = Modifier.width(16.dp))
-                                Column {
-                                    Text(
-                                        AppStrings.get(lang, "Help & Support"),
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = colors.textPrimary
-                                    )
-                                }
-                                Spacer(modifier = Modifier.weight(1f))
-                                Icon(
-                                    Icons.Filled.ArrowBack,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp),
-                                    tint = colors.textSecondary
+                                Text(
+                                    AppStrings.get(lang, "Help & Support"),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.textPrimary
                                 )
                             }
-                            HorizontalDivider(color = colors.border, modifier = Modifier.padding(start = 56.dp))
+                            HorizontalDivider(color = colors.border, modifier = Modifier.padding(horizontal = 16.dp))
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -951,27 +1119,11 @@ fun AppSettingsScreen(
                                     .clickable { showAboutApp = true },
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    Icons.Default.Info,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp),
-                                    tint = colors.primary
-                                )
-                                Spacer(modifier = Modifier.width(16.dp))
-                                Column {
-                                    Text(
-                                        AppStrings.get(lang, "About App"),
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = colors.textPrimary
-                                    )
-                                }
-                                Spacer(modifier = Modifier.weight(1f))
-                                Icon(
-                                    Icons.Filled.ArrowBack,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp),
-                                    tint = colors.textSecondary
+                                Text(
+                                    AppStrings.get(lang, "About App"),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.textPrimary
                                 )
                             }
                         }
@@ -997,13 +1149,6 @@ fun AppSettingsScreen(
                                     .clickable { showFeedback = true },
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    Icons.Default.Star,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp),
-                                    tint = colors.primary
-                                )
-                                Spacer(modifier = Modifier.width(16.dp))
                                 Column {
                                     Text(
                                         AppStrings.get(lang, "User Feedback"),
@@ -1017,13 +1162,6 @@ fun AppSettingsScreen(
                                         color = colors.textSecondary
                                     )
                                 }
-                                Spacer(modifier = Modifier.weight(1f))
-                                Icon(
-                                    Icons.Filled.ArrowBack,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp),
-                                    tint = colors.textSecondary
-                                )
                             }
                         }
                     }

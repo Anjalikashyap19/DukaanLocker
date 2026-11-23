@@ -3,6 +3,7 @@ package com.iadv.dukaanlocker
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.iadv.dukaanlocker.ui.theme.ThemeMode
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -97,6 +98,7 @@ object LockerStorage {
     private const val K_MANAGERS = "managers"
     private const val K_DOCS = "documents"
     private const val K_THEME = "dark_theme"
+    private const val K_THEME_MODE = "theme_mode"
     private const val K_BIOMETRIC_ENABLED = "biometric_enabled"
 private const val K_BIOMETRIC_LOGIN_ENABLED = "biometric_login_enabled"
 private const val K_BIOMETRIC_LOGIN_DEFAULTS_V1 = "biometric_login_defaults_v1"
@@ -277,11 +279,22 @@ private const val K_APP_LOCK_ENABLED = "app_lock_enabled"
     }
 
     // ── Theme ───────────────────────────────────────────────────────────────
-    fun saveTheme(ctx: Context, isDark: Boolean) =
-        pref(ctx).edit().putBoolean(K_THEME, isDark).apply()
+    // Stored as a mode so "System Default" can follow the device. Installs
+    // that predate this only have the K_THEME boolean; that is migrated once,
+    // on read, into an explicit light/dark choice.
+    fun saveThemeMode(ctx: Context, mode: ThemeMode) =
+        pref(ctx).edit().putString(K_THEME_MODE, mode.storageValue).apply()
 
-    fun getTheme(ctx: Context): Boolean =
-        pref(ctx).getBoolean(K_THEME, true) // default to dark
+    fun getThemeMode(ctx: Context): ThemeMode {
+        val p = pref(ctx)
+        p.getString(K_THEME_MODE, null)?.let { return ThemeMode.fromStorageValue(it) }
+        if (p.contains(K_THEME)) {
+            val legacy = if (p.getBoolean(K_THEME, false)) ThemeMode.DARK else ThemeMode.LIGHT
+            p.edit().putString(K_THEME_MODE, legacy.storageValue).apply()
+            return legacy
+        }
+        return ThemeMode.SYSTEM
+    }
 
     // ── Language ────────────────────────────────────────────────────────────
     fun saveLanguage(ctx: Context, code: String) =

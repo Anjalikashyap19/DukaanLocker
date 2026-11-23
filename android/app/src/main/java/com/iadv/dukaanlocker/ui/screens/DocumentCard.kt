@@ -12,7 +12,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Autorenew
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
@@ -26,10 +28,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.iadv.dukaanlocker.*
@@ -105,14 +109,18 @@ fun DocumentCard(
     val applyUrl = applyUrlFor(doc.type)
     val needsApply = doc.status != "FETCHED" && doc.status != "UPLOADED"
     val showApply = needsApply && doc.type !in applyExcludedTypes
-    // Renew button shows when FSSAI doc is expiring within 15 days OR already expired
+    // Renewal applies to FSSAI docs that are expiring soon or expired.
     val isRenewable = doc.status == "EXPIRING_SOON" || doc.status == "EXPIRED"
     val isRenewableFssai = isRenewable && doc.type.equals("FSSAI_FOOD_LICENSE", ignoreCase = true)
-    // Check if FSSAI doc is expired >180 days (license cancelled)
+    // FSSAI doc expired more than 180 days: the licence is cancelled and a new
+    // one has to be applied for instead of renewed.
     val daysExpired = calculateDaysExpired(doc.expiryDate)
     val isFssaiCancelled = doc.type.equals("FSSAI_FOOD_LICENSE", ignoreCase = true) &&
         doc.status == "EXPIRED" && daysExpired > 180
+    val canRenew = isRenewableFssai && !isFssaiCancelled
     var showApplyDialog by remember { mutableStateOf(false) }
+    var showActions by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -234,7 +242,7 @@ fun DocumentCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         if (doc.regNumber.isNotBlank()) {
                             Text("${AppStrings.get(lang, "REG:")} ${doc.regNumber}", fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = colors.textPrimary)
                         }
@@ -245,73 +253,44 @@ fun DocumentCard(
                             Text(AppStrings.get(lang, "✓ Certificate uploaded"), fontSize = 10.sp, color = colors.success, fontWeight = FontWeight.Medium)
                         }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        // Show preview button if fileUrl is available
-                        if (!doc.fileUrl.isNullOrBlank()) {
-                            IconButton(onClick = onView, modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.success.copy(alpha = 0.15f))) {
-                                Icon(Icons.Default.Visibility, contentDescription = AppStrings.get(lang, "Preview Certificate"), tint = colors.success, modifier = Modifier.size(14.dp))
-                            }
-                        } else {
-                            IconButton(onClick = onView, modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.border)) {
-                                Icon(Icons.Default.Visibility, contentDescription = AppStrings.get(lang, "View"), tint = colors.accent, modifier = Modifier.size(14.dp))
-                            }
-                        }
-                        IconButton(onClick = onUpload, modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.secondary.copy(alpha = 0.15f))) {
-                            Icon(Icons.Default.Refresh, contentDescription = AppStrings.get(lang, "Reupload"), tint = colors.secondary, modifier = Modifier.size(14.dp))
-                        }
-                        // FSSAI licence cancelled (>180 days expired) - show "Licence Cancelled" badge + Apply New button
-                        if (isFssaiCancelled) {
-                            Column(
-                                modifier = Modifier.padding(start = 4.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    "Licence Cancelled",
-                                    fontSize = 8.sp, fontWeight = FontWeight.Bold, color = colors.error
-                                )
-                                IconButton(
-                                    onClick = { onApplyNew(doc) },
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(colors.primary.copy(alpha = 0.15f))
-                                ) {
-                                    Icon(
-                                        Icons.Default.Add,
-                                        contentDescription = AppStrings.get(lang, "Apply New Licence"),
-                                        tint = colors.primary,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-}
-}
 
-fun calculateDaysExpired(expiryDate: String): Long {
-    if (expiryDate.isBlank()) return 0
-    val datePart = expiryDate.trim().take(10)
-    return try {
-        val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(datePart) ?: return 0
-        val expiry = parsed.time
-        val now = System.currentTimeMillis()
-        val diffDays = (now - expiry) / (1000 * 60 * 60 * 24)
-        if (diffDays > 0) diffDays else 0
-    } catch (e: Exception) {
-        0
-    }
-}
-                        }
-                        // Renew button — shown only for FSSAI docs expiring within 15 days OR expired <=180 days
-                        else if (isRenewableFssai) {
-                            IconButton(
-                                onClick = onRenew,
-                                modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(colors.warning.copy(alpha = 0.15f))
-                            ) {
-                                Icon(Icons.Default.Refresh, contentDescription = AppStrings.get(lang, "Renew License"), tint = colors.warning, modifier = Modifier.size(14.dp))
-                            }
+                    // Compact actions: one menu holds every document action, so
+                    // the card stays clean and the two similar circular arrows
+                    // (re-upload vs renew) no longer sit side by side.
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        IconButton(
+                            onClick = { showActions = true },
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(colors.primary.copy(alpha = 0.12f))
+                        ) {
+                            Icon(
+                                Icons.Default.MoreVert,
+                                contentDescription = AppStrings.get(lang, "More Actions"),
+                                tint = colors.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
                         }
                     }
                 }
             }
         }
+    }
+
+    if (showActions) {
+        DocumentActionsSheet(
+            docName = doc.name,
+            colors = colors,
+            lang = lang,
+            canRenew = canRenew,
+            canApplyNew = isFssaiCancelled,
+            onDismiss = { showActions = false },
+            onView = { showActions = false; onView() },
+            onReupload = { showActions = false; onUpload() },
+            onRenew = { showActions = false; onRenew() },
+            onApplyNew = { showActions = false; onApplyNew(doc) }
+        )
     }
 
     // ── Apply-now confirmation popup → open IndiaAdvocacy service page ──────
@@ -381,6 +360,138 @@ fun calculateDaysExpired(expiryDate: String): Long {
                     }
                 }
             }
+        )
+    }
+}
+
+// ── Manage Document sheet ────────────────────────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DocumentActionsSheet(
+    docName: String,
+    colors: AppColors,
+    lang: String,
+    canRenew: Boolean,
+    canApplyNew: Boolean,
+    onDismiss: () -> Unit,
+    onView: () -> Unit,
+    onReupload: () -> Unit,
+    onRenew: () -> Unit,
+    onApplyNew: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = colors.cardBg,
+        contentColor = colors.textPrimary,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = { BottomSheetDefaults.DragHandle(color = colors.border) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+        ) {
+            Text(
+                AppStrings.get(lang, "Manage Document"),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+            Text(
+                docName,
+                fontSize = 12.sp,
+                color = colors.textSecondary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+
+            DocumentActionRow(
+                icon = Icons.Default.Visibility,
+                title = AppStrings.get(lang, "View Document"),
+                description = AppStrings.get(lang, "Open and check the existing document."),
+                tint = colors.accent,
+                colors = colors,
+                onClick = onView
+            )
+            DocumentActionRow(
+                icon = Icons.Default.CloudUpload,
+                title = AppStrings.get(lang, "Re-upload Document"),
+                description = AppStrings.get(lang, "Upload an updated document file."),
+                tint = colors.secondary,
+                colors = colors,
+                onClick = onReupload
+            )
+            if (canRenew) {
+                DocumentActionRow(
+                    icon = Icons.Default.Autorenew,
+                    title = AppStrings.get(lang, "Renew License"),
+                    description = AppStrings.get(lang, "Start the existing renewal workflow."),
+                    tint = colors.warning,
+                    colors = colors,
+                    onClick = onRenew
+                )
+            }
+            if (canApplyNew) {
+                DocumentActionRow(
+                    icon = Icons.Default.Add,
+                    title = AppStrings.get(lang, "Apply New Licence"),
+                    description = AppStrings.get(lang, "This licence is cancelled - apply for a new one."),
+                    tint = colors.primary,
+                    colors = colors,
+                    onClick = onApplyNew
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DocumentActionRow(
+    icon: ImageVector,
+    title: String,
+    description: String,
+    tint: Color,
+    colors: AppColors,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(tint.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(21.dp))
+        }
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+            Text(
+                description,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                color = colors.textSecondary,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = colors.textSecondary,
+            modifier = Modifier.size(18.dp)
         )
     }
 }

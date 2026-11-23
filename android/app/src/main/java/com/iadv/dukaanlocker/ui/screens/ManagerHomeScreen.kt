@@ -20,8 +20,6 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Store
@@ -60,8 +58,6 @@ fun ManagerHomeScreen(
     onRenewDoc: (DocumentItem) -> Unit = {},
     onApplyNew: (DocumentItem) -> Unit = {},
     onLogout: () -> Unit,
-    isDarkTheme: Boolean = true,
-    onToggleTheme: () -> Unit = {},
     isLoadingShops: Boolean = false
 ) {
     val renewalVm: AppViewModel = viewModel<AppViewModel>()
@@ -129,7 +125,7 @@ fun ManagerHomeScreen(
         } else {
             // Header
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().topBarShadow(),
             color = colors.background,
             shadowElevation = 4.dp
         ) {
@@ -265,7 +261,7 @@ private fun ManagerBusinessDetailView(
     val total = documents.size
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Surface(modifier = Modifier.fillMaxWidth(), color = colors.background, shadowElevation = 4.dp) {
+        Surface(modifier = Modifier.fillMaxWidth().topBarShadow(), color = colors.background, shadowElevation = 4.dp) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
