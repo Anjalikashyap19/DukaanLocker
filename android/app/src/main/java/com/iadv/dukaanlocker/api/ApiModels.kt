@@ -569,12 +569,12 @@ data class LocationSearchResponse(
 )
 
 data class LocationSuggestion(
-    @SerializedName("display_name") val displayName: String?,
-    @SerializedName("full_address") val fullAddress: String?,
+    @SerializedName("displayName") val displayName: String?,
+    @SerializedName("fullAddress") val fullAddress: String?,
     @SerializedName("city") val city: String?,
     @SerializedName("state") val state: String?,
-    @SerializedName("lat") val lat: Double? = null,
-    @SerializedName("lon") val lon: Double? = null
+    @SerializedName("latitude") val lat: Double? = null,
+    @SerializedName("longitude") val lon: Double? = null
 )
 
 // ── Location Search (proxied by backend) ───────────────────────

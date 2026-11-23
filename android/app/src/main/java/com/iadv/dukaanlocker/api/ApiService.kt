@@ -208,5 +208,5 @@ interface ApiService {
     // ── Location Search ────────────────────────────────────────
 
     @GET("api/location/search")
-    suspend fun searchLocations(@Query("q") query: String): Response<LocationSearchResponse>
+    suspend fun searchLocations(@Query("query") query: String): Response<LocationSearchResponse>
 }
