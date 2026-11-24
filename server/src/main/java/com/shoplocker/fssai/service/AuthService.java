@@ -225,6 +225,7 @@ public class AuthService {
         user.setEnabled(true);
 
         User saved = userRepository.save(user);
+        refreshLastActive(saved);
         String token = jwtService.generateToken(saved);
 
         log.info("User registered: id={} email={} role={}", saved.getId(), maskEmail(saved.getEmailId()), saved.getRole());
@@ -274,6 +275,7 @@ public class AuthService {
                     FailureCode.MSME_LOGIN_NOT_ALLOWED);
         }
 
+        refreshLastActive(user);
         String token = jwtService.generateToken(user);
         createLoginNotifications(user);
         return authResponse(user, token);
@@ -338,6 +340,7 @@ public class AuthService {
         if (existingUser.isPresent()) {
             // User already exists — just log them in
             User user = existingUser.get();
+            refreshLastActive(user);
             String token = jwtService.generateToken(user);
             createLoginNotifications(user);
             log.info("Google login: existing user email={}", maskEmail(email));
@@ -355,6 +358,7 @@ public class AuthService {
         user.setEnabled(true);
 
         User saved = userRepository.save(user);
+        refreshLastActive(saved);
         String token = jwtService.generateToken(saved);
 
         log.info("Google registration: userId={} email={}", saved.getId(), maskEmail(email));
@@ -379,6 +383,7 @@ public class AuthService {
                         "No account found with this Google email. Please register with email/password first.",
                         FailureCode.USER_NOT_FOUND));
 
+        refreshLastActive(user);
         String token = jwtService.generateToken(user);
         createLoginNotifications(user);
         log.info("Google login: existing user email={}", maskEmail(email));
@@ -464,11 +469,7 @@ public class AuthService {
         loginAttemptService.reset(codeKey);
         loginAttemptService.reset(ipKey);
 
-        // Update last active time so the session doesn't immediately expire
-        // on the next authenticated request (JwtAuthenticationFilter enforces
-        // a 15-day inactivity window).
-        user.setLastActiveAt(LocalDateTime.now());
-        userRepository.save(user);
+        refreshLastActive(user);
 
         String token = jwtService.generateToken(user);
         createLoginNotifications(user);
@@ -616,6 +617,7 @@ public class AuthService {
         log.info("Required documents created for shop {}", savedShop.getId());
 
         // ── Step 6: Generate JWT token ──
+        refreshLastActive(savedUser);
         String token = jwtService.generateToken(savedUser);
 
         log.info("MSME auto-registration complete: userId={} shopId={} udyam={}",
@@ -949,6 +951,7 @@ public class AuthService {
         }
 
         // Issue fresh JWT token
+        refreshLastActive(user);
         String token = jwtService.generateToken(user);
         createLoginNotifications(user);
         log.info("Biometric login successful: userId={} email={}", userId, maskEmail(email));
@@ -1031,6 +1034,7 @@ public class AuthService {
         // A completed login clears the send budget, so a legitimate owner is not
         // left locked out by their own earlier resends.
         otpService.clearRateLimit(user.getMobileNumber());
+        refreshLastActive(user);
         String token = jwtService.generateToken(user);
         createLoginNotifications(user);
         log.info("MSME login successful: userId={} udyam={}", user.getId(), udyamNumber);
@@ -1178,6 +1182,11 @@ public class AuthService {
                     return (owner != null && owner.isMsmeUser()) ? owner : null;
                 })
                 .orElse(null);
+    }
+
+    private void refreshLastActive(User user) {
+        user.setLastActiveAt(LocalDateTime.now());
+        userRepository.save(user);
     }
 
     private static String normalizeEmail(String raw) {
