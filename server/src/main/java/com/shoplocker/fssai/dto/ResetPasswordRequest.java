@@ -1,5 +1,6 @@
 package com.shoplocker.fssai.dto;
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -7,10 +8,16 @@ import jakarta.validation.constraints.Size;
 /**
  * Step 2 of the forgot-password flow: {@code POST /api/auth/reset-password}.
  * The OTP is verified against the active challenge for this mobile before the
- * password is touched, and the new password is held to the same rules as
+ * password is touched, the email must be the one already bound to that mobile, and
+ * the new password is held to the same rules as
  * {@link RegisterRequest#getPassword()}.
  */
 public class ResetPasswordRequest {
+
+    @NotBlank(message = "emailId is required")
+    @Email(message = "emailId must be a valid email address")
+    @Size(max = 255, message = "emailId must be at most 255 characters")
+    private String emailId;
 
     @NotBlank(message = "mobileNumber is required")
     @Pattern(regexp = "^[0-9]{10}$", message = "mobileNumber must be exactly 10 digits")
@@ -28,6 +35,9 @@ public class ResetPasswordRequest {
             message = "password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character"
     )
     private String password;
+
+    public String getEmailId() { return emailId; }
+    public void setEmailId(String emailId) { this.emailId = emailId; }
 
     public String getMobileNumber() { return mobileNumber; }
     public void setMobileNumber(String mobileNumber) { this.mobileNumber = mobileNumber; }

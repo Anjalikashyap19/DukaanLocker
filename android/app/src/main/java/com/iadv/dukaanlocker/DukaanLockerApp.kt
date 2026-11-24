@@ -354,8 +354,8 @@ BackHandler(
                                         onInitMsmeCaptcha = { onResult -> vm.initUdyamCaptcha(onResult) },
                                         onMsmeLoginRequest = { msmeNumber, onResult -> vm.msmeLoginRequest(msmeNumber, onResult) },
                                         onMsmeLoginVerify = { msmeNumber, otp, onResult -> vm.msmeLoginVerify(msmeNumber, otp, onResult) },
-                                        onForgotPasswordRequest = { mobile, onResult -> vm.forgotPasswordRequest(mobile, onResult) },
-                                        onForgotPasswordReset = { mobile, otp, password, onResult -> vm.resetPassword(mobile, otp, password, onResult) },
+                                        onForgotPasswordRequest = { email, mobile, onResult -> vm.forgotPasswordRequest(email, mobile, onResult) },
+                                        onForgotPasswordReset = { email, mobile, otp, password, onResult -> vm.resetPassword(email, mobile, otp, password, onResult) },
                                         onMobileHint = { email, onResult -> vm.mobileHint(email, onResult) },
                                         onManagerLogin = { code, onDone -> vm.loginByCode(code, onDone) }
                                     )

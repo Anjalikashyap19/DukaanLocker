@@ -325,26 +325,48 @@ data class MsmeOtpResponse(
 
 // ── Owner password reset (forgot password) ───────────────────────────────
 
-/** Step 1: ask for an OTP against a registered owner mobile number. */
+/**
+ * Step 1: ask for an OTP against a registered owner mobile number. The email typed
+ * on the sign-in form travels with it, and the server only sends when the two
+ * belong to the same account.
+ */
 data class ForgotPasswordRequest(
+    @SerializedName("emailId") val emailId: String,
     @SerializedName("mobileNumber") val mobileNumber: String
 )
 
-/**
- * Masked-tail lookup for the forgot-password screen, keyed by the email already
- * typed on the sign-in form. The answer is only ever the last three digits, and
- * only for accounts that can actually reset a password.
- */
+/** The email typed on the sign-in form, looked up against resettable accounts. */
 data class MobileHintRequest(
     @SerializedName("emailId") val emailId: String
 )
 
+/**
+ * Answer to the sign-in screen's email lookup. `registered` is the gate: the reset
+ * flow only opens when it is true. The tail is only ever the last three digits, and
+ * only for accounts that can actually reset a password.
+ */
 data class MobileHintResponse(
-    @SerializedName("mobileEnding") val mobileEnding: String?
+    @SerializedName("mobileEnding") val mobileEnding: String? = null,
+    @SerializedName("registered") val registered: Boolean = false
 )
 
-/** Step 2: verify the OTP and store the new password. */
+/**
+ * What the sign-in screen needs from a hint lookup, with the three outcomes kept
+ * apart: found an account, found nothing, or could not ask (throttled/offline).
+ * Collapsing them would tell a rate-limited user their email is not registered.
+ */
+data class MobileHintResult(
+    val registered: Boolean = false,
+    val mobileEnding: String? = null,
+    /** Seconds until another lookup is allowed; 0 when not throttled. */
+    val retryAfterSeconds: Int = 0,
+    /** True when the lookup never reached the server (network/5xx). */
+    val failed: Boolean = false
+)
+
+/** Step 2: verify the OTP and store the new password, for the same email/mobile pair. */
 data class ResetPasswordRequest(
+    @SerializedName("emailId") val emailId: String,
     @SerializedName("mobileNumber") val mobileNumber: String,
     @SerializedName("otp") val otp: String,
     @SerializedName("password") val password: String

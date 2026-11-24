@@ -27,6 +27,7 @@ import com.shoplocker.fssai.service.OtpService;
 import com.shoplocker.fssai.entity.*;
 import com.shoplocker.fssai.exception.FailureCode;
 import com.shoplocker.fssai.exception.FssaiException;
+import com.shoplocker.fssai.exception.OtpRateLimitedException;
 import com.shoplocker.fssai.repository.*;
 import com.shoplocker.fssai.security.JwtService;
 import com.shoplocker.fssai.scheduler.DocumentMissingScheduler;
@@ -1050,56 +1051,63 @@ public class AuthService {
      * digits of that account's mobile — enough to recognise the number, never enough
      * to address an SMS to it.</p>
      *
-     * <p>It returns the tail only for accounts that could actually complete a reset
+     * <p>It answers only for accounts that could actually complete a reset
      * ({@link #canResetPassword}), so managers, MSME (Udyam) users, disabled accounts
-     * and unknown emails all get the same empty answer. Unlike the OTP endpoints this
-     * does deliberately distinguish "matched an eligible account" from "no match" —
-     * that distinction is the feature — so it is throttled per client IP and only ever
-     * exposes three digits.</p>
+     * and unknown emails all get {@code registered = false} and no tail. Unlike the OTP
+     * endpoints this does deliberately distinguish "matched an eligible account" from
+     * "no match" — the sign-in screen uses that to refuse to open a reset flow for an
+     * address that is not in the database — so it is throttled per client IP, returns
+     * three digits at most, and answers a throttled caller with 429 instead of a
+     * misleading "not registered".</p>
      */
     public MobileHintResponse mobileHint(MobileHintRequest request, String clientIp) {
         String email = normalizeEmail(request.getEmailId());
 
         String ipKey = "hint:ip:" + (clientIp == null || clientIp.isBlank() ? "unknown" : clientIp);
         if (loginAttemptService.isOverLimit(ipKey, HINT_MAX_PER_IP)) {
-            log.info("Mobile hint suppressed: caller over the per-IP limit");
-            return new MobileHintResponse(null);
+            int wait = loginAttemptService.retryAfterSeconds(ipKey, HINT_MAX_PER_IP);
+            log.info("Mobile hint throttled: caller over the per-IP limit ({}s left)", wait);
+            throw new OtpRateLimitedException(
+                    "Too many email checks. Please try again later.", wait, 0, true);
         }
         loginAttemptService.recordUse(ipKey);
 
-        if (email == null || !email.contains("@")) return new MobileHintResponse(null);
+        if (email == null || !email.contains("@")) return new MobileHintResponse(false, null);
 
         User user = userRepository.findByEmailId(email).orElse(null);
         if (!canResetPassword(user)) {
             log.info("Mobile hint: no eligible account for {}", maskEmail(email));
-            return new MobileHintResponse(null);
+            return new MobileHintResponse(false, null);
         }
 
         String mobile = user.getMobileNumber();
-        if (mobile == null || mobile.length() < 4) return new MobileHintResponse(null);
+        if (mobile == null || mobile.length() < 4) return new MobileHintResponse(true, null);
 
         log.info("Mobile hint issued for userId={} {}", user.getId(), maskEmail(email));
-        return new MobileHintResponse(mobile.substring(mobile.length() - 3));
+        return new MobileHintResponse(true, mobile.substring(mobile.length() - 3));
     }
 
     /**
      * Forgot password — step 1: send an OTP to the account's registered mobile.
      *
      * <p>Only ADMIN accounts that actually have a password are served; MSME (Udyam)
-     * users have no password and are told nothing. The response is byte-for-byte
-     * identical whether the mobile exists, is eligible, or is entirely unknown —
-     * probing the endpoint never reveals which mobile numbers hold owner accounts.</p>
+     * users have no password and are told nothing. The email and the mobile must both
+     * belong to the same eligible account, so a made-up email cannot start a reset.
+     * The response is byte-for-byte identical whether the pair exists, is ineligible,
+     * or is entirely unknown — probing the endpoint never reveals which accounts exist.</p>
      *
      * <p>Rate limiting lives inside {@link OtpService#requestOtp}, so an ineligible
      * probe costs no SMS and no send credit.</p>
      */
     public OtpSendResponse forgotPassword(ForgotPasswordRequest request) {
         String mobile = request.getMobileNumber().trim();
-        User user = userRepository.findByMobileNumber(mobile).orElse(null);
+        String email = normalizeEmail(request.getEmailId());
+        User user = email == null ? null : userRepository.findByEmailId(email).orElse(null);
 
-        if (!canResetPassword(user)) {
+        if (!canResetPassword(user) || !mobile.equals(user.getMobileNumber())) {
             log.info("Forgot-password request for {} rejected: {}",
-                    maskMobile(mobile), user == null ? "no such mobile" : "account not eligible");
+                    maskMobile(mobile),
+                    user == null ? "no such email" : "email/mobile mismatch or account not eligible");
             return new OtpSendResponse(null, PASSWORD_RESET_REQUEST_MESSAGE);
         }
 
@@ -1140,6 +1148,16 @@ public class AuthService {
         if (!canResetPassword(user)) {
             throw new FssaiException(
                     "This account does not use password login, so its password can't be reset here.",
+                    FailureCode.PASSWORD_RESET_NOT_ALLOWED);
+        }
+
+        // The reset is only valid for the email the account was started with, so a
+        // stale or forged email on the final step cannot claim this mobile's reset.
+        String email = normalizeEmail(request.getEmailId());
+        if (email == null || !email.equals(normalizeEmail(user.getEmailId()))) {
+            log.warn("Password reset: email/mobile mismatch for userId={}", user.getId());
+            throw new FssaiException(
+                    "This reset no longer matches the account. Start again from the sign-in screen.",
                     FailureCode.PASSWORD_RESET_NOT_ALLOWED);
         }
 

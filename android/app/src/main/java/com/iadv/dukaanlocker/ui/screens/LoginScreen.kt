@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.iadv.dukaanlocker.api.MobileHintResult
 import com.iadv.dukaanlocker.api.RateLimitInfo
 import com.iadv.dukaanlocker.R
 import com.iadv.dukaanlocker.ui.components.FieldErrorText
@@ -59,9 +60,9 @@ fun LoginScreen(
     onInitMsmeCaptcha: (onResult: (sessionId: String, captchaImage: String) -> Unit) -> Unit = { onResult -> onResult("", "") },
     onMsmeLoginRequest: (msmeNumber: String, onResult: (success: Boolean, message: String?, limit: RateLimitInfo?) -> Unit) -> Unit = { _, _ -> },
     onMsmeLoginVerify: (msmeNumber: String, otp: String, onResult: (success: Boolean, message: String?) -> Unit) -> Unit = { _, _, _ -> },
-    onForgotPasswordRequest: (mobile: String, onResult: (success: Boolean, message: String?, limit: RateLimitInfo?) -> Unit) -> Unit = { _, _ -> },
-    onForgotPasswordReset: (mobile: String, otp: String, password: String, onResult: (success: Boolean, message: String?) -> Unit) -> Unit = { _, _, _, _ -> },
-    onMobileHint: (email: String, onResult: (mobileEnding: String?) -> Unit) -> Unit = { _, onResult -> onResult(null) },
+    onForgotPasswordRequest: (email: String, mobile: String, onResult: (success: Boolean, message: String?, limit: RateLimitInfo?) -> Unit) -> Unit = { _, _, _ -> },
+    onForgotPasswordReset: (email: String, mobile: String, otp: String, password: String, onResult: (success: Boolean, message: String?) -> Unit) -> Unit = { _, _, _, _, _ -> },
+    onMobileHint: (email: String, onResult: (MobileHintResult) -> Unit) -> Unit = { _, onResult -> onResult(MobileHintResult(failed = true)) },
     onGoogleSignIn: () -> Unit = {},
     onBackToMain: () -> Unit,
     isBiometricLoginEnabled: Boolean = false,
@@ -90,7 +91,11 @@ fun LoginScreen(
     // (today: tapping "forgot password?" without a registered email typed).
     var loginFormMessage by remember { mutableStateOf<String?>(null) }
 
+    // Email that passed the server's registered-account check; the reset screen
+    // carries it through both steps so the server can bind it to the mobile.
+    var resetEmail by remember { mutableStateOf("") }
     var mobileEnding by remember { mutableStateOf<String?>(null) }
+    var isCheckingEmail by remember { mutableStateOf(false) }
 
     var accessCode by remember { mutableStateOf("") }
     var codeError by remember { mutableStateOf(false) }
@@ -266,15 +271,40 @@ fun LoginScreen(
                                         lang,
                                         "Enter your registered email address to reset your password"
                                     )
-                                } else {
+                                } else if (!isCheckingEmail) {
                                     loginEmailError = false
                                     loginFormMessage = null
-                                    mobileEnding = null
-                                    // The hint fills in the masked tail shown above the
-                                    // mobile field of the reset screen.
-                                    onMobileHint(typedEmail) { ending -> mobileEnding = ending }
                                     authFocusManager.clearFocus(force = true)
-                                    selectedView = "forgot"
+                                    // Ask the server whether this address belongs to a real,
+                                    // resettable account before opening the reset flow. The
+                                    // same answer carries the masked mobile tail shown above
+                                    // the number field.
+                                    isCheckingEmail = true
+                                    onMobileHint(typedEmail) { result ->
+                                        isCheckingEmail = false
+                                        when {
+                                            result.registered -> {
+                                                resetEmail = typedEmail
+                                                mobileEnding = result.mobileEnding
+                                                selectedView = "forgot"
+                                            }
+                                            result.failed -> loginFormMessage = AppStrings.get(
+                                                lang,
+                                                "Could not verify your email. Check your connection and try again."
+                                            )
+                                            result.retryAfterSeconds > 0 -> loginFormMessage = String.format(
+                                                AppStrings.get(lang, "Too many attempts. Try again in %s"),
+                                                formatCountdown(result.retryAfterSeconds)
+                                            )
+                                            else -> {
+                                                loginEmailError = true
+                                                loginFormMessage = AppStrings.get(
+                                                    lang,
+                                                    "No account found with this email address"
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             },
                             onMsmeLoginRequest = onMsmeLoginRequest,
@@ -332,6 +362,7 @@ fun LoginScreen(
                         "forgot" -> ForgotPasswordScreen(
                             colors = colors,
                             lang = lang,
+                            email = resetEmail,
                             mobileEnding = mobileEnding,
                             onRequest = onForgotPasswordRequest,
                             onReset = onForgotPasswordReset,

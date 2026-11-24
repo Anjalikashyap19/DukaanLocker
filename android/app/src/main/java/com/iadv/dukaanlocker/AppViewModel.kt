@@ -1117,17 +1117,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Last three digits of the mobile registered to [email], so the forgot-password
-     * screen can tell the user which number it is asking for. Null whenever the
-     * server declines to hint — unknown email, manager/MSME account, or throttled.
+     * Whether [email] belongs to an owner account that can reset its password, plus
+     * the last three digits of its registered mobile so the reset screen can say
+     * which number it is asking for.
+     *
+     * The three outcomes stay distinct: a matching account, a non-matching email, and
+     * "could not ask" (throttled or offline). Only the first may open the reset flow;
+     * the third must not be shown as "email not registered".
      */
-    fun mobileHint(email: String, onResult: (String?) -> Unit) {
+    fun mobileHint(email: String, onResult: (MobileHintResult) -> Unit) {
         viewModelScope.launch {
             try {
                 val response = api.mobileHint(MobileHintRequest(emailId = email.trim()))
-                onResult(if (response.isSuccessful) response.body()?.mobileEnding else null)
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    onResult(
+                        MobileHintResult(
+                            registered = body?.registered == true,
+                            mobileEnding = body?.mobileEnding
+                        )
+                    )
+                } else if (response.code() == 429) {
+                    val parsed = response.parseOtpError()
+                    onResult(
+                        MobileHintResult(retryAfterSeconds = parsed.limit?.retryAfterSeconds ?: 60)
+                    )
+                } else {
+                    onResult(MobileHintResult(failed = true))
+                }
             } catch (e: Exception) {
-                onResult(null)
+                onResult(MobileHintResult(failed = true))
             }
         }
     }
@@ -1140,12 +1159,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * was sent to a real account" — the UI must never claim otherwise.
      */
     fun forgotPasswordRequest(
+        email: String,
         mobileNumber: String,
         onResult: (Boolean, String?, RateLimitInfo?) -> Unit
     ) {
         viewModelScope.launch {
             try {
-                val response = api.forgotPassword(ForgotPasswordRequest(mobileNumber = mobileNumber))
+                val response = api.forgotPassword(
+                    ForgotPasswordRequest(emailId = email.trim(), mobileNumber = mobileNumber)
+                )
                 if (response.isSuccessful) {
                     val body = response.body()
                     onResult(
@@ -1167,12 +1189,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Verifies the reset OTP and stores the new password. Success means sign in. */
-    fun resetPassword(mobileNumber: String, otp: String, password: String, onResult: (Boolean, String?) -> Unit) {
+    fun resetPassword(
+        email: String,
+        mobileNumber: String,
+        otp: String,
+        password: String,
+        onResult: (Boolean, String?) -> Unit
+    ) {
         viewModelScope.launch {
             updateState { it.copy(isLoading = true) }
             try {
                 val response = api.resetPassword(
-                    ResetPasswordRequest(mobileNumber = mobileNumber, otp = otp, password = password)
+                    ResetPasswordRequest(
+                        emailId = email.trim(),
+                        mobileNumber = mobileNumber,
+                        otp = otp,
+                        password = password
+                    )
                 )
                 if (response.isSuccessful) {
                     val msg = response.body()?.message

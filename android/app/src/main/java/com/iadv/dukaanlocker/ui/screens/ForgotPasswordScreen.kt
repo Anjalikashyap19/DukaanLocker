@@ -37,14 +37,19 @@ import kotlinx.coroutines.delay
  * every success message here stays deliberately neutral ("if this number is
  * registered..."). The flow only advances to the password step after the OTP is
  * accepted, which is what actually proves the caller owns the number.
+ *
+ * [email] is the address typed on the sign-in form, which already passed the server's
+ * registered-account check. It travels with both steps so the server can require the
+ * email/mobile pair to belong to the same account.
  */
 @Composable
 fun ForgotPasswordScreen(
     colors: AppColors,
     lang: String,
+    email: String,
     mobileEnding: String? = null,
-    onRequest: (mobile: String, onResult: (Boolean, String?, RateLimitInfo?) -> Unit) -> Unit,
-    onReset: (mobile: String, otp: String, password: String, onResult: (Boolean, String?) -> Unit) -> Unit,
+    onRequest: (email: String, mobile: String, onResult: (Boolean, String?, RateLimitInfo?) -> Unit) -> Unit,
+    onReset: (email: String, mobile: String, otp: String, password: String, onResult: (Boolean, String?) -> Unit) -> Unit,
     onDone: () -> Unit
 ) {
     var step by remember { mutableStateOf("mobile") }
@@ -98,7 +103,7 @@ fun ForgotPasswordScreen(
         isChecking = true
         message = null
         isError = false
-        onRequest(mobile.trim()) { success, msg, limit ->
+        onRequest(email, mobile.trim()) { success, msg, limit ->
             isChecking = false
             applyRateLimit(limit)
             if (success) {
@@ -317,7 +322,7 @@ fun ForgotPasswordScreen(
                                 isChecking = true
                                 message = null
                                 isError = false
-                                onReset(mobile.trim(), otp, password) { success, msg ->
+                                onReset(email, mobile.trim(), otp, password) { success, msg ->
                                     isChecking = false
                                     if (success) {
                                         onDone()

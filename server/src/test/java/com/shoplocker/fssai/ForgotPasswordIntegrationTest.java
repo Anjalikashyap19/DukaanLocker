@@ -38,6 +38,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * in the response message — {@link com.shoplocker.fssai.service.OtpService}'s
  * dev mode — which is exactly what lets these tests drive the whole flow
  * end-to-end without an SMS gateway.</p>
+ *
+ * <p>The reset is bound to an email/mobile pair: the email typed on the sign-in
+ * form must belong to the same owner account as the mobile that receives the OTP,
+ * so an unregistered address cannot start (or finish) a reset.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -80,6 +84,11 @@ class ForgotPasswordIntegrationTest {
 
     // ---------------------------------------------------------------- helpers
 
+    /** The email {@link #registerOwner(String)} assigns to an account. */
+    private static String ownerEmail(String mobile) {
+        return "owner" + mobile + "@example.com";
+    }
+
     /** Registers an ADMIN through the public endpoint so the account is realistic. */
     private void registerOwner(String mobile) throws Exception {
         mockMvc.perform(post("/api/auth/register")
@@ -88,16 +97,18 @@ class ForgotPasswordIntegrationTest {
                                 {
                                   "userName": "Owner %s",
                                   "mobileNumber": "%s",
-                                  "emailId": "owner%s@example.com",
+                                  "emailId": "%s",
                                   "password": "Strong@123"
-                                }""".formatted(mobile, mobile, mobile)))
+                                }""".formatted(mobile, mobile, ownerEmail(mobile))))
                 .andExpect(status().isCreated());
     }
 
-    private String requestOtp(String mobile) throws Exception {
+    private String requestOtp(String email, String mobile) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/auth/forgot-password")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"mobileNumber\": \"%s\"}".formatted(mobile)))
+                        .content("""
+                                {"emailId": "%s", "mobileNumber": "%s"}"""
+                                .formatted(email, mobile)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value(
                         org.hamcrest.Matchers.containsString("your OTP is")))
@@ -110,15 +121,16 @@ class ForgotPasswordIntegrationTest {
         return matcher.group(1);
     }
 
-    private void resetPassword(String mobile, String otp, String password) throws Exception {
+    private void resetPassword(String email, String mobile, String otp, String password) throws Exception {
         mockMvc.perform(post("/api/auth/reset-password")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "emailId": "%s",
                                   "mobileNumber": "%s",
                                   "otp": "%s",
                                   "password": "%s"
-                                }""".formatted(mobile, otp, password)))
+                                }""".formatted(email, mobile, otp, password)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
     }
@@ -129,11 +141,12 @@ class ForgotPasswordIntegrationTest {
     @DisplayName("owner can reset their password and log in with it")
     void ownerResetsPasswordThenLogsIn() throws Exception {
         String mobile = "9000000001";
+        String email = ownerEmail(mobile);
         String newPassword = "Brand@New1";
         registerOwner(mobile);
 
-        String otp = requestOtp(mobile);
-        resetPassword(mobile, otp, newPassword);
+        String otp = requestOtp(email, mobile);
+        resetPassword(email, mobile, otp, newPassword);
 
         User user = userRepository.findByMobileNumber(mobile).orElseThrow();
         assertThat(passwordEncoder.matches(newPassword, user.getPassword())).isTrue();
@@ -143,15 +156,16 @@ class ForgotPasswordIntegrationTest {
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"emailId": "owner9000000001@example.com", "password": "%s"}"""
-                                .formatted(newPassword)))
+                                {"emailId": "%s", "password": "%s"}"""
+                                .formatted(email, newPassword)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").isNotEmpty());
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"emailId": "owner9000000001@example.com", "password": "Strong@123"}"""))
+                                {"emailId": "%s", "password": "Strong@123"}"""
+                                .formatted(email)))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -159,19 +173,21 @@ class ForgotPasswordIntegrationTest {
     @DisplayName("the OTP is single-use")
     void otpCannotBeReused() throws Exception {
         String mobile = "9000000002";
+        String email = ownerEmail(mobile);
         registerOwner(mobile);
 
-        String otp = requestOtp(mobile);
-        resetPassword(mobile, otp, "Brand@New1");
+        String otp = requestOtp(email, mobile);
+        resetPassword(email, mobile, otp, "Brand@New1");
 
         mockMvc.perform(post("/api/auth/reset-password")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "emailId": "%s",
                                   "mobileNumber": "%s",
                                   "otp": "%s",
                                   "password": "Another@Pass1"
-                                }""".formatted(mobile, otp)))
+                                }""".formatted(email, mobile, otp)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("invalid_otp"));
     }
@@ -186,10 +202,11 @@ class ForgotPasswordIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "emailId": "%s",
                                   "mobileNumber": "%s",
                                   "otp": "000000",
                                   "password": "Brand@New1"
-                                }""".formatted(mobile)))
+                                }""".formatted(ownerEmail(mobile), mobile)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("invalid_otp"));
 
@@ -198,18 +215,66 @@ class ForgotPasswordIntegrationTest {
     }
 
     @Test
-    @DisplayName("unknown mobile gets the same generic response as a real one")
+    @DisplayName("unknown email and mobile get the same generic response as a real pair")
     void unknownMobileIsNotEnumerated() throws Exception {
         // Not registered: no OTP may be echoed, and the wording must be identical
         // to the response a real owner account receives.
         mockMvc.perform(post("/api/auth/forgot-password")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"mobileNumber\": \"9000000004\"}"))
+                        .content("""
+                                {"emailId": "nobody@example.com", "mobileNumber": "9000000004"}"""))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value(GENERIC_MESSAGE))
                 .andExpect(jsonPath("$.requestId").doesNotExist());
 
         assertThat(otpChallengeRepository.count()).isZero();
+    }
+
+    @Test
+    @DisplayName("an unregistered email cannot start a reset even for a real mobile")
+    void unregisteredEmailCannotStartReset() throws Exception {
+        String mobile = "9000000010";
+        registerOwner(mobile);
+
+        // The mobile is real, the email is not: the pair is what must match.
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"emailId": "dummy@example.com", "mobileNumber": "%s"}"""
+                                .formatted(mobile)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value(GENERIC_MESSAGE))
+                .andExpect(jsonPath("$.requestId").doesNotExist());
+
+        assertThat(otpChallengeRepository.count()).isZero();
+    }
+
+    @Test
+    @DisplayName("an email cannot claim a reset for someone else's mobile")
+    void resetIsScopedToTheAccountsOwnMobile() throws Exception {
+        String ownerMobile = "9000000011";
+        String otherMobile = "9000000012";
+        registerOwner(ownerMobile);
+        registerOwner(otherMobile);
+
+        // A valid OTP for the first account, presented with the second account's
+        // email: the OTP itself is fine, the identity claim is not.
+        String otp = requestOtp(ownerEmail(ownerMobile), ownerMobile);
+
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "emailId": "%s",
+                                  "mobileNumber": "%s",
+                                  "otp": "%s",
+                                  "password": "Brand@New1"
+                                }""".formatted(ownerEmail(otherMobile), ownerMobile, otp)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("password_reset_not_allowed"));
+
+        User user = userRepository.findByMobileNumber(ownerMobile).orElseThrow();
+        assertThat(passwordEncoder.matches("Strong@123", user.getPassword())).isTrue();
     }
 
     @Test
@@ -226,7 +291,8 @@ class ForgotPasswordIntegrationTest {
 
         mockMvc.perform(post("/api/auth/forgot-password")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"mobileNumber\": \"9000000005\"}"))
+                        .content("""
+                                {"emailId": "ravi.manager@example.com", "mobileNumber": "9000000005"}"""))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value(GENERIC_MESSAGE))
                 .andExpect(jsonPath("$.requestId").doesNotExist());
@@ -239,16 +305,17 @@ class ForgotPasswordIntegrationTest {
     void weakPasswordIsRejected() throws Exception {
         String mobile = "9000000006";
         registerOwner(mobile);
-        String otp = requestOtp(mobile);
+        String otp = requestOtp(ownerEmail(mobile), mobile);
 
         mockMvc.perform(post("/api/auth/reset-password")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "emailId": "%s",
                                   "mobileNumber": "%s",
                                   "otp": "%s",
                                   "password": "password"
-                                }""".formatted(mobile, otp)))
+                                }""".formatted(ownerEmail(mobile), mobile, otp)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("validation_failed"));
     }
@@ -258,22 +325,37 @@ class ForgotPasswordIntegrationTest {
     void malformedMobileIsRejected() throws Exception {
         mockMvc.perform(post("/api/auth/forgot-password")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"mobileNumber\": \"12345\"}"))
+                        .content("""
+                                {"emailId": "owner@example.com", "mobileNumber": "12345"}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_failed"));
+    }
+
+    @Test
+    @DisplayName("a missing email is rejected before anything is sent")
+    void missingEmailIsRejected() throws Exception {
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"mobileNumber\": \"9000000013\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("validation_failed"));
     }
 
     // ------------------------------------------------------ masked mobile hint
 
-    /** @return the reported mobile ending, or {@code null} when the field is absent. */
-    private String hint(String email) throws Exception {
+    /** Runs one hint lookup and returns the whole body. */
+    private JsonNode hintBody(String email) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/auth/mobile-hint")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"emailId\": \"%s\"}".formatted(email)))
                 .andExpect(status().isOk())
                 .andReturn();
-        JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
-        JsonNode ending = node.get("mobileEnding");
+        return objectMapper.readTree(result.getResponse().getContentAsString());
+    }
+
+    /** @return the reported mobile ending, or {@code null} when the field is absent. */
+    private String hint(String email) throws Exception {
+        JsonNode ending = hintBody(email).get("mobileEnding");
         return (ending == null || ending.isNull()) ? null : ending.asText();
     }
 
@@ -283,7 +365,8 @@ class ForgotPasswordIntegrationTest {
         String mobile = "9000000007";
         registerOwner(mobile);
 
-        assertThat(hint("owner9000000007@example.com")).isEqualTo("007");
+        assertThat(hint(ownerEmail(mobile))).isEqualTo("007");
+        assertThat(hintBody(ownerEmail(mobile)).get("registered").asBoolean()).isTrue();
         // Whatever the user typed on the sign-in form must not have to match the
         // stored casing (clients trim before sending; @Email rejects stray spaces).
         assertThat(hint("Owner9000000007@Example.COM")).isEqualTo("007");
@@ -293,6 +376,7 @@ class ForgotPasswordIntegrationTest {
     @DisplayName("unknown emails and non-owner accounts get no hint")
     void ineligibleAccountsGetNoHint() throws Exception {
         assertThat(hint("nobody@example.com")).isNull();
+        assertThat(hintBody("nobody@example.com").get("registered").asBoolean()).isFalse();
     }
 
     @Test
@@ -308,6 +392,7 @@ class ForgotPasswordIntegrationTest {
         userRepository.save(manager);
 
         assertThat(hint("ravi.hint@example.com")).isNull();
+        assertThat(hintBody("ravi.hint@example.com").get("registered").asBoolean()).isFalse();
     }
 
     @Test
@@ -321,17 +406,24 @@ class ForgotPasswordIntegrationTest {
     }
 
     @Test
-    @DisplayName("hint lookups are throttled per client IP")
+    @DisplayName("hint lookups are throttled per client IP and answer 429 when throttled")
     void hintIsThrottledPerIp() throws Exception {
         String mobile = "9000000009";
         registerOwner(mobile);
 
         for (int i = 1; i <= 30; i++) {
-            assertThat(hint("owner9000000009@example.com"))
+            assertThat(hint(ownerEmail(mobile)))
                     .as("lookup %d", i)
                     .isEqualTo("009");
         }
-        // The 31st lookup inside the window is suppressed rather than answered.
-        assertThat(hint("owner9000000009@example.com")).isNull();
+
+        // The 31st lookup inside the window is rejected with retry metadata rather
+        // than a null hint, so the client can show "wait" instead of "not registered".
+        mockMvc.perform(post("/api/auth/mobile-hint")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"emailId\": \"%s\"}".formatted(ownerEmail(mobile))))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("too_many_attempts"))
+                .andExpect(jsonPath("$.retryAfterSeconds").isNumber());
     }
 }

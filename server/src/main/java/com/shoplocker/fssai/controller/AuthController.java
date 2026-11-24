@@ -175,10 +175,11 @@ public class AuthController {
 
     @Operation(
             summary = "Forgot password — masked mobile hint",
-            description = "Looks up the email typed on the sign-in form and returns the last three digits of the " +
-                          "registered mobile for an account that may reset its password, so the user can recognise " +
-                          "their own number when asked for it. Unknown emails, managers and MSME (Udyam) accounts " +
-                          "all get an empty hint. Throttled per client IP."
+            description = "Looks up the email typed on the sign-in form. For an account that may reset its " +
+                          "password it returns registered=true plus the last three digits of the registered mobile, " +
+                          "so the user can recognise their own number when asked for it. Unknown emails, managers and " +
+                          "MSME (Udyam) accounts get registered=false with no hint. Throttled per client IP, and a " +
+                          "throttled caller gets 429 with retryAfterSeconds rather than a false \"not registered\"."
     )
     @SecurityRequirements
     @PostMapping("/mobile-hint")
@@ -191,8 +192,10 @@ public class AuthController {
     @Operation(
             summary = "Forgot password — request OTP",
             description = "Sends a one-time code to the registered mobile of an owner (ADMIN) account so its " +
-                          "password can be reset. The response is identical whether or not the mobile is registered, " +
-                          "so the endpoint cannot be used to enumerate accounts. Rate-limited like any other OTP send."
+                          "password can be reset. The email and mobile must belong to the same eligible account, so an " +
+                          "unregistered email cannot start a reset. The response is identical whether or not that " +
+                          "pair exists, so the endpoint cannot be used to enumerate accounts. Rate-limited like any " +
+                          "other OTP send."
     )
     @SecurityRequirements
     @PostMapping("/forgot-password")
@@ -206,7 +209,8 @@ public class AuthController {
             summary = "Forgot password — reset with OTP",
             description = "Verifies the OTP sent to the registered mobile and stores the new BCrypt-encoded " +
                           "password. The OTP is checked before any account detail is revealed, so a caller must " +
-                          "first prove control of the mobile. Password rules match registration."
+                          "first prove control of the mobile, and the email must be the one bound to that mobile. " +
+                          "Password rules match registration."
     )
     @SecurityRequirements
     @PostMapping("/reset-password")

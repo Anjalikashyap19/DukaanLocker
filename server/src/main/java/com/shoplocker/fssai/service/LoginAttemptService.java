@@ -48,6 +48,26 @@ public class LoginAttemptService {
         }
     }
 
+    /**
+     * Seconds until the key drops back under {@code max} uses, for building an
+     * accurate {@code retryAfterSeconds} on a 429. Returns {@code 0} when the key is
+     * not throttled.
+     */
+    public int retryAfterSeconds(String key, int max) {
+        if (key == null || key.isBlank()) return 0;
+        Deque<Long> deque = failures.get(key);
+        if (deque == null) return 0;
+        synchronized (deque) {
+            prune(deque);
+            if (deque.size() < max) return 0;
+            Long oldest = deque.peekFirst();
+            if (oldest == null) return 0;
+            long millisLeft = oldest + WINDOW_MILLIS - System.currentTimeMillis();
+            if (millisLeft <= 0) return 0;
+            return (int) Math.max(1, (millisLeft + 999) / 1000);
+        }
+    }
+
     /** Records a failed attempt for the given key (best-effort, bounded in size). */
     public void registerFailure(String key) {
         record(key);
