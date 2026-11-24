@@ -347,7 +347,13 @@ data class MobileHintRequest(
  */
 data class MobileHintResponse(
     @SerializedName("mobileEnding") val mobileEnding: String? = null,
-    @SerializedName("registered") val registered: Boolean = false
+    /**
+     * Null means the backend answered without the flag at all — a server older than
+     * the email gate. Such a server still returns [mobileEnding] only for an account
+     * that may reset, so the caller falls back to `mobileEnding != null` instead of
+     * assuming the address is registered.
+     */
+    @SerializedName("registered") val registered: Boolean? = null
 )
 
 /**

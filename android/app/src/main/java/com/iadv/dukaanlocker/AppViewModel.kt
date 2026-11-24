@@ -1131,12 +1131,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val response = api.mobileHint(MobileHintRequest(emailId = email.trim()))
                 if (response.isSuccessful) {
                     val body = response.body()
-                    onResult(
-                        MobileHintResult(
-                            registered = body?.registered == true,
-                            mobileEnding = body?.mobileEnding
+                    if (body == null) {
+                        onResult(MobileHintResult(failed = true))
+                    } else {
+                        // A server older than the email gate omits `registered` (prod
+                        // can still be one release behind the app). Such a server only
+                        // returns the mobile tail for an account that may reset, and
+                        // null for every other address, so the tail itself is the
+                        // answer — never assume "registered" just because a 200 came
+                        // back, or dummy emails would open the reset flow.
+                        val registered = body.registered
+                            ?: !body.mobileEnding.isNullOrBlank()
+                        onResult(
+                            MobileHintResult(
+                                registered = registered,
+                                mobileEnding = body.mobileEnding
+                            )
                         )
-                    )
+                    }
                 } else if (response.code() == 429) {
                     val parsed = response.parseOtpError()
                     onResult(
