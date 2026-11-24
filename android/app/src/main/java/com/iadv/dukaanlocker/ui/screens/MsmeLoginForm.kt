@@ -144,7 +144,7 @@ fun MsmeLoginForm(
                         imeAction = ImeAction.Next
                     ),
                     keyboardActions = KeyboardActions(
-                        onNext = { focusManager.clearFocus() }
+                        onNext = { focusManager.clearFocus(force = true) }
                     ),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -172,7 +172,7 @@ fun MsmeLoginForm(
                     ),
                     keyboardActions = KeyboardActions(
                         onDone = {
-                            focusManager.clearFocus()
+                            focusManager.clearFocus(force = true)
                             if (otp.length >= 4) {
                                 isChecking = true
                                 message = null

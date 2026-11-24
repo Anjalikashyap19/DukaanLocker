@@ -462,7 +462,7 @@ fun AddBusinessScreen(
                 leadingIcon = { Icon(Icons.Default.Place, contentDescription = null, tint = colors.primary) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus(force = true) }),
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = colors.primary, unfocusedBorderColor = colors.border,

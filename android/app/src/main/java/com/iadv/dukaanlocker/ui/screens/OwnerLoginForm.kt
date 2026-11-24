@@ -54,6 +54,7 @@ fun OwnerLoginForm(
     onMsmeLoginRequest: (msmeNumber: String, onResult: (Boolean, String?, RateLimitInfo?) -> Unit) -> Unit = { _, _ -> },
     onMsmeLoginVerify: (msmeNumber: String, otp: String, onResult: (Boolean, String?) -> Unit) -> Unit = { _, _, _ -> }
 ) {
+    val focusManager = LocalFocusManager.current
     var msmeMode by remember { mutableStateOf(false) }
     if (msmeMode) {
         MsmeLoginForm(
@@ -61,13 +62,14 @@ fun OwnerLoginForm(
             lang = lang,
             onMsmeLoginRequest = onMsmeLoginRequest,
             onMsmeLoginVerify = onMsmeLoginVerify,
-            onBack = { msmeMode = false },
+            onBack = {
+                focusManager.clearFocus(force = true)
+                msmeMode = false
+            },
             scrollable = false
         )
         return
     }
-
-    val focusManager = LocalFocusManager.current
 
     Column(
         modifier = Modifier
@@ -142,7 +144,10 @@ fun OwnerLoginForm(
             }
             Switch(
                 checked = msmeMode,
-                onCheckedChange = { msmeMode = it },
+                onCheckedChange = { newValue ->
+                    focusManager.clearFocus(force = true)
+                    msmeMode = newValue
+                },
                 colors = SwitchDefaults.colors(
                     checkedTrackColor = colors.primary,
                     checkedThumbColor = Color.White
@@ -163,7 +168,7 @@ fun OwnerLoginForm(
                 capitalization = KeyboardCapitalization.None,
                 imeAction = ImeAction.Next
             ),
-            keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus() }),
+            keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus(force = true) }),
             colors = colors
         )
 
@@ -192,7 +197,7 @@ fun OwnerLoginForm(
             ),
             keyboardActions = KeyboardActions(
                 onDone = {
-                    focusManager.clearFocus()
+                    focusManager.clearFocus(force = true)
                     if (email.isNotBlank() && password.isNotBlank()) {
                         onLogin()
                     }

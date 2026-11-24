@@ -77,7 +77,7 @@ fun ManagerLoginForm(
             ),
             keyboardActions = KeyboardActions(
                 onDone = {
-                    focusManager.clearFocus()
+                    focusManager.clearFocus(force = true)
                     if (accessCode.length == 6) {
                         onLogin()
                     }

@@ -162,7 +162,7 @@ fun LoginScreen(
                     if (selectedView == null) {
                         onBackToMain()
                     } else {
-                        authFocusManager.clearFocus()
+                        authFocusManager.clearFocus(force = true)
                         selectedView = null
                         codeError = false
                         mobileEnding = null
@@ -273,19 +273,19 @@ fun LoginScreen(
                                     // The hint fills in the masked tail shown above the
                                     // mobile field of the reset screen.
                                     onMobileHint(typedEmail) { ending -> mobileEnding = ending }
-                                    authFocusManager.clearFocus()
+                                    authFocusManager.clearFocus(force = true)
                                     selectedView = "forgot"
                                 }
                             },
                             onMsmeLoginRequest = onMsmeLoginRequest,
                             onMsmeLoginVerify = onMsmeLoginVerify,
                             onMsmeLoginTap = {
-                                authFocusManager.clearFocus()
+                                authFocusManager.clearFocus(force = true)
                                 selectedView = "msme"
                             },
                             onGoogleSignIn = onGoogleSignIn,
                             onManagerLoginTap = {
-                                authFocusManager.clearFocus()
+                                authFocusManager.clearFocus(force = true)
                                 selectedView = "manager"
                             }
                         )
@@ -296,7 +296,7 @@ fun LoginScreen(
                             onMsmeLoginRequest = onMsmeLoginRequest,
                             onMsmeLoginVerify = onMsmeLoginVerify,
                             onBack = {
-                                authFocusManager.clearFocus()
+                                authFocusManager.clearFocus(force = true)
                                 selectedView = null
                             },
                             scrollable = false,
@@ -336,7 +336,7 @@ fun LoginScreen(
                             onRequest = onForgotPasswordRequest,
                             onReset = onForgotPasswordReset,
                             onDone = {
-                                authFocusManager.clearFocus()
+                                authFocusManager.clearFocus(force = true)
                                 selectedView = null
                                 loginPassword = ""
                                 loginPasswordError = false
@@ -427,7 +427,7 @@ fun LoginForm(
                 capitalization = KeyboardCapitalization.None,
                 imeAction = ImeAction.Next
             ),
-            keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus() }),
+            keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus(force = true) }),
             colors = colors
         )
 
@@ -456,7 +456,7 @@ fun LoginForm(
             ),
             keyboardActions = KeyboardActions(
                 onDone = {
-                    focusManager.clearFocus()
+                    focusManager.clearFocus(force = true)
                     if (email.isNotBlank() && password.isNotBlank()) {
                         onLogin()
                     }

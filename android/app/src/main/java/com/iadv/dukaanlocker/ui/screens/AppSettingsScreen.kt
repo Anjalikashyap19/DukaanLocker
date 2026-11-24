@@ -351,7 +351,7 @@ fun VerifyMobileForPasswordChange(
                             { Text(AppStrings.get(lang, "Enter the 10-digit registered mobile number"), color = colors.error) }
                         } else null,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Next),
-                        keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus() }),
+                        keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus(force = true) }),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -376,7 +376,7 @@ fun VerifyMobileForPasswordChange(
                             { Text(AppStrings.get(lang, "Enter the 6-digit OTP"), color = colors.error) }
                         } else null,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-                        keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus() }),
+                        keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus(force = true) }),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -414,7 +414,7 @@ fun VerifyMobileForPasswordChange(
                                 { Text(AppStrings.get(lang, "Use 8+ characters with upper, lower, number & symbol"), color = colors.error) }
                             } else null,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
-                            keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus() }),
+                            keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus(force = true) }),
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                             colors = OutlinedTextFieldDefaults.colors(
@@ -441,7 +441,7 @@ fun VerifyMobileForPasswordChange(
                                 { Text(AppStrings.get(lang, "Passwords do not match"), color = colors.error) }
                             } else null,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus(force = true) }),
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                             colors = OutlinedTextFieldDefaults.colors(

@@ -189,7 +189,10 @@ fun RegisterForm(
             }
             Switch(
                 checked = registerWithMsme,
-                onCheckedChange = { registerWithMsme = it },
+                onCheckedChange = { newValue ->
+                    focusManager.clearFocus(force = true)
+                    registerWithMsme = newValue
+                },
                 colors = SwitchDefaults.colors(
                     checkedTrackColor = colors.primary,
                     checkedThumbColor = Color.White
@@ -216,7 +219,7 @@ fun RegisterForm(
                         capitalization = KeyboardCapitalization.Characters,
                         imeAction = ImeAction.Next
                     ),
-                    keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus() }),
+                    keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus(force = true) }),
                     colors = colors
                 )
             }
@@ -233,7 +236,7 @@ fun RegisterForm(
                     capitalization = KeyboardCapitalization.Words,
                     imeAction = ImeAction.Next
                 ),
-                keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus() }),
+                keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus(force = true) }),
                 colors = colors
             )
         }
@@ -251,7 +254,7 @@ fun RegisterForm(
                 keyboardType = KeyboardType.Phone,
                 imeAction = ImeAction.Next
             ),
-            keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus() }),
+            keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus(force = true) }),
             colors = colors
         )
 
@@ -270,7 +273,7 @@ fun RegisterForm(
                         capitalization = KeyboardCapitalization.Characters,
                         imeAction = ImeAction.Done
                     ),
-                    keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus() }),
+                    keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus(force = true) }),
                     colors = colors
                 )
 
@@ -311,7 +314,7 @@ fun RegisterForm(
                     capitalization = KeyboardCapitalization.None,
                     imeAction = ImeAction.Next
                 ),
-                keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus() }),
+                keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus(force = true) }),
                 colors = colors
             )
 
@@ -340,7 +343,7 @@ fun RegisterForm(
                 ),
                 keyboardActions = KeyboardActions(
                     onDone = {
-                        focusManager.clearFocus()
+                        focusManager.clearFocus(force = true)
                         if (name.isNotBlank() && email.isNotBlank() && password.length >= 8 && mobile.length == 10) {
                             onRegister(name, email, password, mobile) { isChecking = false }
                         }

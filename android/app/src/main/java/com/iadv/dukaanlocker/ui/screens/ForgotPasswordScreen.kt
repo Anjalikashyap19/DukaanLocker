@@ -72,6 +72,8 @@ fun ForgotPasswordScreen(
     val isWaiting = waitSeconds > 0
     val lockedActive = isLocked && waitSeconds > 0
 
+    val focusManager = LocalFocusManager.current
+
     LaunchedEffect(isWaiting) {
         while (waitSeconds > 0) {
             delay(1000)
@@ -100,6 +102,7 @@ fun ForgotPasswordScreen(
             isChecking = false
             applyRateLimit(limit)
             if (success) {
+                focusManager.clearFocus(force = true)
                 step = "otp"
                 otp = ""
                 otpError = false
@@ -178,7 +181,7 @@ fun ForgotPasswordScreen(
                         FieldErrorText(AppStrings.get(lang, "Enter the 10-digit registered mobile number"), colors)
                     }} else null,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Next),
-                    keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus() }),
+                    keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus(force = true) }),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -204,7 +207,7 @@ fun ForgotPasswordScreen(
                         FieldErrorText(AppStrings.get(lang, "Enter the 6-digit OTP"), colors)
                     }} else null,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-                    keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus() }),
+                    keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus(force = true) }),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -243,7 +246,7 @@ fun ForgotPasswordScreen(
                             FieldErrorText(AppStrings.get(lang, "Use 8+ characters with upper, lower, number & symbol"), colors)
                         }} else null,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
-                        keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus() }),
+                        keyboardActions = KeyboardActions(onNext = { focusManager.clearFocus(force = true) }),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -270,7 +273,7 @@ fun ForgotPasswordScreen(
                             FieldErrorText(AppStrings.get(lang, "Passwords do not match"), colors)
                         }} else null,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus(force = true) }),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -301,6 +304,7 @@ fun ForgotPasswordScreen(
                         "otp" -> {
                             otpError = otp.length != 6
                             if (!otpError) {
+                                focusManager.clearFocus(force = true)
                                 step = "password"
                                 message = null
                                 isError = false
@@ -410,14 +414,24 @@ fun ForgotPasswordScreen(
             // Step changes keep the typed values, so a wrong move is one tap to undo.
             if (step == "otp") {
                 TextButton(
-                    onClick = { step = "mobile"; message = null; isError = false },
+                    onClick = {
+                        focusManager.clearFocus(force = true)
+                        step = "mobile"
+                        message = null
+                        isError = false
+                    },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(AppStrings.get(lang, "Change mobile number"), fontSize = 12.sp, color = colors.textSecondary)
                 }
             } else if (step == "password") {
                 TextButton(
-                    onClick = { step = "otp"; message = null; isError = false },
+                    onClick = {
+                        focusManager.clearFocus(force = true)
+                        step = "otp"
+                        message = null
+                        isError = false
+                    },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(AppStrings.get(lang, "Change OTP"), fontSize = 12.sp, color = colors.textSecondary)
