@@ -3,6 +3,7 @@ package com.shoplocker.fssai.config;
 import com.shoplocker.fssai.scheduler.DocumentExpiryScheduler;
 import com.shoplocker.fssai.scheduler.DocumentMissingScheduler;
 import com.shoplocker.fssai.scheduler.FssaAnnualReturnScheduler;
+import com.shoplocker.fssai.scheduler.FssaiOnboardingScheduler;
 import com.shoplocker.fssai.scheduler.NoBusinessScheduler;
 import com.shoplocker.fssai.scheduler.RandomTimeTrigger;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,6 +19,7 @@ public class SchedulingConfig implements SchedulingConfigurer {
     private final DocumentMissingScheduler documentMissingScheduler;
     private final FssaAnnualReturnScheduler fssaAnnualReturnScheduler;
     private final NoBusinessScheduler noBusinessScheduler;
+    private final FssaiOnboardingScheduler fssaiOnboardingScheduler;
     private final RandomTimeTrigger randomTimeTrigger;
 
     /**
@@ -46,15 +48,20 @@ public class SchedulingConfig implements SchedulingConfigurer {
     @Value("${notification.fssa.cron:0 0 9 * * *}")
     private String fssaCron;
 
+    @Value("${app.onboarding.cron:0 */10 * * * *}")
+    private String onboardingCron;
+
     public SchedulingConfig(DocumentExpiryScheduler documentExpiryScheduler,
                             DocumentMissingScheduler documentMissingScheduler,
                             FssaAnnualReturnScheduler fssaAnnualReturnScheduler,
                             NoBusinessScheduler noBusinessScheduler,
+                            FssaiOnboardingScheduler fssaiOnboardingScheduler,
                             RandomTimeTrigger randomTimeTrigger) {
         this.documentExpiryScheduler = documentExpiryScheduler;
         this.documentMissingScheduler = documentMissingScheduler;
         this.fssaAnnualReturnScheduler = fssaAnnualReturnScheduler;
         this.noBusinessScheduler = noBusinessScheduler;
+        this.fssaiOnboardingScheduler = fssaiOnboardingScheduler;
         this.randomTimeTrigger = randomTimeTrigger;
     }
 
@@ -69,5 +76,7 @@ public class SchedulingConfig implements SchedulingConfigurer {
         registrar.addTriggerTask(() -> fssaAnnualReturnScheduler.checkFssaAnnualReturn(),
                 new CronTrigger(fssaCron));
         registrar.addTriggerTask(noBusinessScheduler::checkUsersWithoutBusiness, randomTimeTrigger);
+        // Self-gates on app.onboarding.enabled, so registering it is always safe.
+        registrar.addTriggerTask(fssaiOnboardingScheduler::pollFeed, new CronTrigger(onboardingCron));
     }
 }
