@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
@@ -27,8 +26,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.iadv.dukaanlocker.api.ApiClient
 import com.iadv.dukaanlocker.api.StreamDocumentRequest
 import com.iadv.dukaanlocker.api.ViewDocumentRequest
@@ -36,6 +35,7 @@ import com.iadv.dukaanlocker.ui.components.EmptyStateView
 import com.iadv.dukaanlocker.ui.strings.AppStrings
 import com.iadv.dukaanlocker.ui.strings.LocalAppLanguage
 import com.iadv.dukaanlocker.ui.theme.LocalAppColors
+import com.iadv.dukaanlocker.ui.theme.TypeScale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -249,22 +249,37 @@ fun DocumentViewerScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(text = documentName, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
-                },
-                navigationIcon = {
+            // Plain Surface + Row header, matching the app's other screens. A Material
+            // TopAppBar with a forced height does not recentre its title/icon, which is
+            // what made the back arrow and document name look misaligned.
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = colors.primary.copy(alpha = 0.15f)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 4.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     IconButton(onClick = onBack) {
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = AppStrings.get(lang, "Back"),
-
-                            )
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = AppStrings.get(lang, "Back"),
+                            tint = colors.textPrimary
+                        )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = colors.primary.copy(alpha = 0.15f)
-                ),
-                modifier = Modifier.height(78.dp)
-            )
+                    Text(
+                        text = documentName,
+                        fontSize = TypeScale.Title,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(start = 4.dp)
+                    )
+                }
+            }
         }
     ) { paddingValues ->
         Column(
@@ -315,22 +330,6 @@ fun DocumentViewerScreen(
 
                 else -> {
                     Column(modifier = Modifier.fillMaxSize()) {
-                        if (pageInfos.size > 1) {
-                            Surface(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                                shape = RoundedCornerShape(8.dp),
-                                color = colors.accent
-                            ) {
-                             Text("${AppStrings.get(lang, "Page")} ${currentPage + 1} ${AppStrings.get(lang, "of")} ${pageInfos.size}",
-                                 modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                 textAlign = TextAlign.Center,
-                                 style = MaterialTheme.typography.bodyMedium,
-                                 fontWeight = FontWeight.Medium,
-                                 color = colors.primary
-                             )
-                            }
-                        }
-
                         val listState = rememberLazyListState()
 
                         LazyColumn(

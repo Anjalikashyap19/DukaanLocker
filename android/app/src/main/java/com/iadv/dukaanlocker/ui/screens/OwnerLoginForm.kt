@@ -37,6 +37,7 @@ import com.iadv.dukaanlocker.api.RateLimitInfo
 import com.iadv.dukaanlocker.ui.components.FieldErrorText
 import com.iadv.dukaanlocker.ui.strings.AppStrings
 import com.iadv.dukaanlocker.ui.theme.AppColors
+import com.iadv.dukaanlocker.ui.theme.NotoSans
 
 @Composable
 fun OwnerLoginForm(
@@ -320,6 +321,7 @@ private fun UiTextField(
             color = colors.textPrimary,
             fontSize = 14.sp,
             fontWeight = FontWeight.Normal,
+            fontFamily = NotoSans,
             fontStyle = androidx.compose.ui.text.font.FontStyle.Normal
         )
     )

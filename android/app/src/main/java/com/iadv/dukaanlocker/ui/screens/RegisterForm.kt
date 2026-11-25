@@ -39,6 +39,7 @@ import com.iadv.dukaanlocker.api.RateLimitInfo
 import com.iadv.dukaanlocker.ui.components.FieldErrorText
 import com.iadv.dukaanlocker.ui.strings.AppStrings
 import com.iadv.dukaanlocker.ui.theme.AppColors
+import com.iadv.dukaanlocker.ui.theme.NotoSans
 import kotlinx.coroutines.delay
 
 @Composable
@@ -489,6 +490,7 @@ private fun RegisterUiTextField(
             color = colors.textPrimary,
             fontSize = 14.sp,
             fontWeight = FontWeight.Normal,
+            fontFamily = NotoSans,
         )
     )
 }
