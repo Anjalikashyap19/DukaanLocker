@@ -69,6 +69,15 @@ public class PdfPreprocessor {
      * {@link Optional#empty()} so this can only ever add coverage, never remove it.</p>
      */
     public Optional<String> extractTextLayer(byte[] pdfBytes) {
+        return extractTextLayer(pdfBytes, true);
+    }
+
+    /**
+     * @param sortByPosition keeps the historical column-sorted output used by
+     *                       validators; certificate onboarding passes {@code false}
+     *                       so Form C's two-column label/value pairs stay contiguous
+     */
+    public Optional<String> extractTextLayer(byte[] pdfBytes, boolean sortByPosition) {
         if (pdfBytes == null || pdfBytes.length == 0) return Optional.empty();
         try (PDDocument document = PDDocument.load(pdfBytes)) {
             // Same ceiling as the rasterizer: past it we let OCR report the
@@ -76,7 +85,7 @@ public class PdfPreprocessor {
             if (document.getNumberOfPages() > MAX_PAGES) return Optional.empty();
 
             PDFTextStripper stripper = new PDFTextStripper();
-            stripper.setSortByPosition(true);
+            stripper.setSortByPosition(sortByPosition);
             String text = normalizeExtractedText(stripper.getText(document));
 
             if (text.length() < MIN_TEXT_LAYER_CHARS) return Optional.empty();

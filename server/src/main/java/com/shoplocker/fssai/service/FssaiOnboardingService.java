@@ -17,7 +17,6 @@ import com.shoplocker.fssai.repository.ShopRepository;
 import com.shoplocker.fssai.repository.UserRepository;
 import com.shoplocker.fssai.util.DlIds;
 import com.shoplocker.fssai.util.FssaiCertificateParser;
-import com.shoplocker.fssai.util.MsmeDataParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,11 +35,12 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
@@ -73,8 +73,11 @@ public class FssaiOnboardingService {
     private static final Logger log = LoggerFactory.getLogger(FssaiOnboardingService.class);
 
     private static final Pattern UNSAFE_FILE_CHARS = Pattern.compile("[^A-Za-z0-9._-]");
-    private static final String PASSWORD_ALPHABET =
-            "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+    private static final Pattern HONORIFIC = Pattern.compile(
+            "^(?:MR|MRS|MS|MISS|MASTER|SHRI|SMT|SRI|DR|M/S)\\s*\\.?\\s*",
+            Pattern.CASE_INSENSITIVE);
+    private static final String PASSWORD_SUFFIX = "@123";
+    private static final String ONBOARDING_CATEGORY = "FOOD MANUFACTURING & PROCESSING";
     private static final int MAX_ATTEMPTS = 3;
 
     private final OnboardingJobRepository jobRepository;
@@ -156,7 +159,7 @@ public class FssaiOnboardingService {
 
         try {
             byte[] pdf = download(fileName);
-            String text = pdfPreprocessor.extractTextLayer(pdf).orElse(null);
+            String text = pdfPreprocessor.extractTextLayer(pdf, false).orElse(null);
             if (text == null) {
                 finish(job, OnboardingJobStatus.FAILED,
                         "Could not read a text layer from the PDF (scanned or corrupted)");
@@ -211,6 +214,24 @@ public class FssaiOnboardingService {
         }
     }
 
+    /**
+     * End-of-day catch-up: give every job that failed today a fresh retry budget
+     * and return its file name so the scheduler can reprocess it even when it has
+     * already rolled off the feed.
+     */
+    public List<String> requeueFailedJobsForToday() {
+        LocalDateTime start = LocalDateTime.now().toLocalDate().atStartOfDay();
+        List<OnboardingJob> failed = jobRepository.findByStatusAndCreatedAtBetween(
+                OnboardingJobStatus.FAILED, start, start.plusDays(1));
+        List<String> fileNames = new ArrayList<>();
+        for (OnboardingJob job : failed) {
+            job.setAttempts(0);
+            jobRepository.save(job);
+            fileNames.add(job.getFileName());
+        }
+        return fileNames;
+    }
+
     /** Result of the transactional creation step. */
     public record Created(Long userId, Long shopId) {
     }
@@ -222,7 +243,7 @@ public class FssaiOnboardingService {
      */
     @Transactional
     public Created createAccount(Long jobId, FssaiCertificateData data, byte[] pdf, String fileName) {
-        String rawPassword = generatePassword();
+        String rawPassword = passwordFor(data.getOwnerName());
 
         User user = new User();
         user.setUserName(data.getOwnerName().trim());
@@ -237,7 +258,7 @@ public class FssaiOnboardingService {
         savedUser.setDlId(DlIds.forUser(savedUser.getId()));
         savedUser = userRepository.save(savedUser);
 
-        String category = MsmeDataParser.mapToDukaanLockerCategory(data.getKindOfBusiness());
+        String category = ONBOARDING_CATEGORY;
         BusinessScale scale = resolveScale(data.getLicenseCategory());
         String state = FssaiCertificateParser.detectState(data.getPremisesAddress());
         if (state == null) {
@@ -379,13 +400,12 @@ public class FssaiOnboardingService {
                 && category.toUpperCase(Locale.ROOT).contains("MANUFACTURING");
     }
 
-    private static String generatePassword() {
-        SecureRandom random = new SecureRandom();
-        StringBuilder builder = new StringBuilder(10);
-        for (int i = 0; i < 10; i++) {
-            builder.append(PASSWORD_ALPHABET.charAt(random.nextInt(PASSWORD_ALPHABET.length())));
-        }
-        return builder.toString();
+    /** First name of the owner (honorifics dropped) plus the fixed suffix. */
+    static String passwordFor(String ownerName) {
+        String name = ownerName == null ? "" : HONORIFIC.matcher(ownerName.trim()).replaceFirst("").trim();
+        String[] parts = name.split("\\s+");
+        String first = parts.length == 0 ? "" : parts[0].replaceAll("[^A-Za-z]", "");
+        return (first.isEmpty() ? "User" : first) + PASSWORD_SUFFIX;
     }
 
     private static String sha256Hex(byte[] bytes) {

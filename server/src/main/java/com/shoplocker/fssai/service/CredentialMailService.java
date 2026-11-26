@@ -3,13 +3,18 @@ package com.shoplocker.fssai.service;
 import com.shoplocker.fssai.entity.OnboardingJob;
 import com.shoplocker.fssai.event.AccountCredentialsEvent;
 import com.shoplocker.fssai.repository.OnboardingJobRepository;
+import jakarta.activation.DataHandler;
+import jakarta.mail.internet.InternetAddress;
+import jakarta.mail.internet.MimeBodyPart;
 import jakarta.mail.internet.MimeMessage;
+import jakarta.mail.internet.MimeMultipart;
+import jakarta.mail.util.ByteArrayDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -37,7 +42,7 @@ public class CredentialMailService {
     @Value("${spring.mail.username:}")
     private String fromAddress;
 
-    @Value("${app.onboarding.play-store-url:https://play.google.com/store/apps/details?id=com.iadv.dukaanlocker}")
+    @Value("${app.onboarding.play-store-url:https://play.google.com/store/apps/details?id=com.iadv.dukaanlocker&pcampaignid=web_share}")
     private String playStoreUrl;
 
     public CredentialMailService(ObjectProvider<JavaMailSender> mailSenderProvider,
@@ -61,13 +66,12 @@ public class CredentialMailService {
         }
         try {
             MimeMessage message = sender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, false, "UTF-8");
-            helper.setTo(event.emailId());
+            message.setRecipient(MimeMessage.RecipientType.TO, new InternetAddress(event.emailId()));
             if (fromAddress != null && !fromAddress.isBlank()) {
-                helper.setFrom(fromAddress);
+                message.setFrom(new InternetAddress(fromAddress));
             }
-            helper.setSubject("Your DukaanLocker account is ready");
-            helper.setText(buildHtml(event), true);
+            message.setSubject("Your DukaanLocker account is ready", "UTF-8");
+            message.setContent(buildContent(event));
             sender.send(message);
             log.info("Onboarding credentials emailed to user {} (job {})", event.userId(), event.jobId());
             annotate(event.jobId(), "credentials emailed");
@@ -94,22 +98,80 @@ public class CredentialMailService {
         }
     }
 
-    private String buildHtml(AccountCredentialsEvent event) {
+    /** multipart/related(logo) wrapping multipart/alternative(text, html). */
+    private MimeMultipart buildContent(AccountCredentialsEvent event) throws Exception {
+        MimeMultipart alternative = new MimeMultipart("alternative");
+        MimeBodyPart textPart = new MimeBodyPart();
+        textPart.setText(buildPlainText(event), "UTF-8");
+        MimeBodyPart htmlPart = new MimeBodyPart();
+        htmlPart.setContent(buildHtml(event), "text/html; charset=UTF-8");
+        alternative.addBodyPart(textPart);
+        alternative.addBodyPart(htmlPart);
+
+        MimeMultipart related = new MimeMultipart("related");
+        MimeBodyPart body = new MimeBodyPart();
+        body.setContent(alternative);
+        related.addBodyPart(body);
+
+        MimeBodyPart logo = new MimeBodyPart();
+        byte[] image = new ClassPathResource("branding/dukaanlocker-logo.png").getContentAsByteArray();
+        logo.setDataHandler(new DataHandler(new ByteArrayDataSource(image, "image/png")));
+        logo.setContentID("<dukaanlockerLogo>");
+        logo.setDisposition(MimeBodyPart.INLINE);
+        logo.setFileName("dukaanlocker-logo.png");
+        related.addBodyPart(logo);
+        return related;
+    }
+
+    private String buildPlainText(AccountCredentialsEvent event) {
+        String name = event.ownerName() == null ? "there" : event.ownerName().trim();
+        String shop = event.shopName() == null ? "your business" : event.shopName().trim();
+        return "Welcome to DukaanLocker!\n"
+                + "A secure business document vault for your business.\n\n"
+                + "Hello " + name + ",\n"
+                + "Your account for " + shop + " has been created from the FSSAI licence on your "
+                + "certificate. Your FSSAI licence has been renewed successfully — you can see it "
+                + "in the DukaanLocker app.\n\n"
+                + "Your login credentials\n"
+                + "Login ID: " + event.emailId() + "\n"
+                + "Password: " + event.rawPassword() + "\n\n"
+                + "Please change your password for security reasons.\n\n"
+                + "Download the app: " + playStoreUrl + "\n\n"
+                + "This is a system-generated mail. Please do not reply.\n"
+                + "A product of IndiaAdvocacy. Copyright © 2026. All rights reserved.\n";
+    }
+
+    String buildHtml(AccountCredentialsEvent event) {
         String name = HtmlUtils.htmlEscape(event.ownerName() == null ? "there" : event.ownerName());
         String shop = HtmlUtils.htmlEscape(event.shopName() == null ? "your business" : event.shopName());
         String email = HtmlUtils.htmlEscape(event.emailId());
         String password = HtmlUtils.htmlEscape(event.rawPassword());
         String store = HtmlUtils.htmlEscape(playStoreUrl);
 
-        return "<div style=\"font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#222;line-height:1.5\">"
-                + "<p>Hello " + name + ",</p>"
-                + "<p>Your DukaanLocker account for <strong>" + shop + "</strong> has been created using "
-                + "the FSSAI licence printed on your certificate.</p>"
-                + "<p><strong>Login email:</strong> " + email + "<br/>"
-                + "<strong>Password:</strong> " + password + "</p>"
-                + "<p>Please change this password after your first login.</p>"
-                + "<p><a href=\"" + store + "\">Download the DukaanLocker app from Google Play</a></p>"
-                + "<p>Regards,<br/>Team DukaanLocker</p>"
-                + "</div>";
+        return "<!DOCTYPE html><html><body style=\"margin:0\">"
+                + "<div style=\"font-family:Arial,Helvetica,sans-serif;background:#f6f8fb;padding:24px;color:#222\">"
+                + "<div style=\"max-width:600px;margin:auto;background:#fff;border:1px solid #e5e9f0;"
+                + "border-radius:12px;padding:28px\">"
+                + "<div style=\"text-align:center;border-bottom:1px solid #e5e9f0;padding-bottom:20px;margin-bottom:24px\">"
+                + "<img src=\"cid:dukaanlockerLogo\" alt=\"DukaanLocker\" width=\"72\" height=\"72\" "
+                + "style=\"display:block;margin:0 auto 10px\"/>"
+                + "<div style=\"font-size:22px;font-weight:700;color:#1b3a6b\">DukaanLocker</div>"
+                + "<div style=\"font-size:13px;color:#667\">A secure business document vault for your business</div>"
+                + "</div>"
+                + "<h2 style=\"margin:0 0 12px;font-size:20px\">Welcome to DukaanLocker, " + name + "!</h2>"
+                + "<p style=\"margin:0 0 16px\">Your account for <strong>" + shop + "</strong> has been created "
+                + "from the FSSAI licence on your certificate. Your FSSAI licence has been renewed successfully "
+                + "— you can see it <a href=\"" + store + "\">here</a> in the DukaanLocker app.</p>"
+                + "<div style=\"background:#f1f5fb;border:1px solid #dce4f2;border-radius:8px;padding:16px;margin:0 0 16px\">"
+                + "<p style=\"margin:0 0 8px;font-weight:700\">Your login credentials</p>"
+                + "<p style=\"margin:0 0 6px\"><strong>Login ID:</strong> " + email + "</p>"
+                + "<p style=\"margin:0\"><strong>Password:</strong> " + password + "</p>"
+                + "</div>"
+                + "<p style=\"margin:0 0 16px;color:#a33\"><strong>Please change your password for security reasons.</strong></p>"
+                + "<p style=\"margin:0 0 16px\">Download the app: <a href=\"" + store + "\">" + store + "</a></p>"
+                + "<div style=\"border-top:1px solid #e5e9f0;margin-top:24px;padding-top:16px;font-size:12px;color:#777\">"
+                + "<p style=\"margin:0 0 6px\">This is a system-generated mail. Please do not reply.</p>"
+                + "<p style=\"margin:0\">A product of IndiaAdvocacy. Copyright &copy; 2026. All rights reserved.</p>"
+                + "</div></div></div></body></html>";
     }
 }

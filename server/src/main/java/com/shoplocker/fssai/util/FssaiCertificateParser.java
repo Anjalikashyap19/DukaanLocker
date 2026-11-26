@@ -76,6 +76,10 @@ public final class FssaiCertificateParser {
 
     private static final Pattern FILE_LICENSE = Pattern.compile("(\\d{10,16})");
 
+    /** "PROP:", "PROP-", "PRO:" etc. separate the business name from the proprietor. */
+    private static final Pattern PROPRIETOR = Pattern.compile(
+            "\\b(?:PROPRIETOR|PROPRITOR|PROP|PRO)\\b", FLAGS);
+
     /** Where the licensee name ends and its street address begins. */
     private static final List<String> ADDRESS_MARKERS = List.of(
             "plot no", "plot nos", "shop no", "door no", "d.no", "h.no", "h. no",
@@ -155,21 +159,33 @@ public final class FssaiCertificateParser {
      */
     private static String extractLicenseeName(String flat) {
         int label = indexOf(flat, "Registered Office address of Licensee", 0);
-        if (label < 0) {
-            return null;
+        String rest;
+        if (label >= 0) {
+            int colon = flat.indexOf(':', label);
+            if (colon < 0) {
+                return null;
+            }
+            rest = flat.substring(colon + 1).trim();
+        } else {
+            int start = indexOf(flat, "Registered Office address of ", 0);
+            int lic = start < 0 ? -1 : indexOf(flat, "Licensee", start);
+            int colon = lic < 0 ? -1 : flat.indexOf(':', lic);
+            if (colon < 0) {
+                return null;
+            }
+            // Column-sorted text interleaves the label and the value, so join
+            // both sides of "Licensee:" back together before cutting the name.
+            rest = (flat.substring(start + "Registered Office address of ".length(), lic)
+                    + " " + flat.substring(colon + 1)).trim();
         }
-        int colon = flat.indexOf(':', label);
-        if (colon < 0) {
-            return null;
-        }
-        String rest = flat.substring(colon + 1).trim();
         int cut = firstMarker(rest);
-        String name = (cut > 0 ? rest.substring(0, cut) : rest).trim();
-        if (name.regionMatches(true, 0, "M/s.", 0, 4)) {
-            name = name.substring(4).trim();
-        } else if (name.regionMatches(true, 0, "M/S", 0, 3)) {
-            name = name.substring(3).trim();
+        Matcher proprietor = PROPRIETOR.matcher(rest);
+        if (proprietor.find() && (cut < 0 || proprietor.start() < cut)) {
+            cut = proprietor.start();
         }
+        String name = (cut > 0 ? rest.substring(0, cut) : rest).trim();
+        name = name.replaceFirst("(?i)^M\\s*/\\s*S\\.?\\s*[-.]?\\s*", "");
+        name = name.replaceFirst("^[,;.\\-\\s]+", "");
         name = name.replaceAll("[,;\\-\\s]+$", "").trim();
         if (name.length() < 3 || name.length() > 140 || !hasLetter(name)
                 || name.equalsIgnoreCase("N/A")) {

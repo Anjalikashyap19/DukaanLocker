@@ -8,11 +8,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * Polls the certificate feed and hands every new PDF to
@@ -55,29 +60,9 @@ public class FssaiOnboardingScheduler {
             return;
         }
         try {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(feedUrl))
-                    .timeout(Duration.ofSeconds(30))
-                    .GET()
-                    .build();
-            HttpResponse<String> response = httpClient.send(request,
-                    HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) {
-                log.warn("FSSAI feed returned HTTP {}", response.statusCode());
-                return;
-            }
-
-            JsonNode root = objectMapper.readTree(response.body());
-            JsonNode files = root.path("new_files");
-            if (!files.isArray() || files.isEmpty()) {
-                return;
-            }
-
+            List<String> names = fetchPdfNames();
             int processed = 0;
-            for (JsonNode node : files) {
-                String fileName = fileNameOf(node);
-                if (fileName == null || !fileName.toLowerCase().endsWith(".pdf")) {
-                    continue;
-                }
+            for (String fileName : names) {
                 if (processed >= maxPerRun) {
                     log.info("FSSAI onboarding cap ({}) reached; remaining files wait for the next poll", maxPerRun);
                     break;
@@ -92,6 +77,66 @@ public class FssaiOnboardingScheduler {
         } catch (Exception e) {
             log.warn("FSSAI onboarding poll failed: {}", e.getMessage());
         }
+    }
+
+    /** End-of-day reconciliation: full feed, no per-run cap, plus today's failed jobs. */
+    public void endOfDaySweep() {
+        if (!enabled) {
+            return;
+        }
+        try {
+            Set<String> names = new LinkedHashSet<>(onboardingService.requeueFailedJobsForToday());
+            names.addAll(fetchPdfNames());
+            for (String fileName : names) {
+                onboardingService.process(fileName);
+            }
+            log.info("FSSAI onboarding end-of-day sweep: {} file(s) checked", names.size());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("FSSAI onboarding end-of-day sweep interrupted");
+        } catch (Exception e) {
+            log.warn("FSSAI onboarding end-of-day sweep failed: {}", e.getMessage());
+        }
+    }
+
+    List<String> fetchPdfNames() throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(feedUrl))
+                .timeout(Duration.ofSeconds(30))
+                .GET()
+                .build();
+        HttpResponse<String> response = httpClient.send(request,
+                HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() != 200) {
+            log.warn("FSSAI feed returned HTTP {}", response.statusCode());
+            return List.of();
+        }
+        JsonNode files = feedFiles(objectMapper.readTree(response.body()));
+        if (files == null || files.isEmpty()) {
+            return List.of();
+        }
+        List<String> names = new ArrayList<>();
+        for (JsonNode node : files) {
+            String fileName = fileNameOf(node);
+            if (fileName != null && fileName.toLowerCase().endsWith(".pdf")) {
+                names.add(fileName);
+            }
+        }
+        return names;
+    }
+
+    /**
+     * The live feed answers with a bare JSON array, while older captures wrapped
+     * it in {@code {"new_files": [...]}}. Both shapes are accepted.
+     */
+    static JsonNode feedFiles(JsonNode root) {
+        if (root == null || root.isMissingNode() || root.isNull()) {
+            return null;
+        }
+        if (root.isArray()) {
+            return root;
+        }
+        JsonNode files = root.path("new_files");
+        return files.isArray() ? files : null;
     }
 
     /**

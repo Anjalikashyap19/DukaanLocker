@@ -44,6 +44,33 @@ class FssaiCertificateParserTest {
     }
 
     @Test
+    @DisplayName("reads the business name when the label and value are contiguous")
+    void businessNameWithProprietor() {
+        String certificate =
+                "Name & Registered Office address of Licensee: M/S.SRI SARADA AGENCIES, "
+                        + "PROP:D.VENKATA JAGANNADHAM NORTHERN SIDE OF SHAR BYPASS ROAD, "
+                        + "HSC.NO.16444, SULLURPET, Andhra Pradesh-524121 "
+                        + "2. Address of Authorized Premises: NORTHERN SIDE OF SHAR BYPASS ROAD "
+                        + "3. Kind of Business: Trade/Retail - Distributor";
+
+        assertThat(FssaiCertificateParser.parse(certificate, "10118009000370.pdf").getShopName())
+                .isEqualTo("SRI SARADA AGENCIES");
+    }
+
+    @Test
+    @DisplayName("rejoins a column-interleaved label before reading the business name")
+    void businessNameFromInterleavedLabel() {
+        String certificate =
+                "Name & Registered Office address of SHREEJI PRODUCTS PRO: RAJ TRALSAWALA "
+                        + "Licensee: PLOT NO. C-4/5, UDHYOG NAGAR, BHARUCH, Gujarat-392002 "
+                        + "2. Address of Authorized Premises: PLOT NO. C-4/5 "
+                        + "3. Kind of Business: Manufacturer - Substances Added to Food";
+
+        assertThat(FssaiCertificateParser.parse(certificate, "10721007000398.pdf").getShopName())
+                .isEqualTo("SHREEJI PRODUCTS");
+    }
+
+    @Test
     @DisplayName("falls back to the file name for the licence number")
     void licenceNumberFromFileName() {
         String text = FULL_CERTIFICATE.replace("Issued On:", "Issued On:")

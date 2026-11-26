@@ -51,6 +51,9 @@ public class SchedulingConfig implements SchedulingConfigurer {
     @Value("${app.onboarding.cron:0 */10 * * * *}")
     private String onboardingCron;
 
+    @Value("${app.onboarding.eod-cron:0 45 23 * * *}")
+    private String onboardingEodCron;
+
     public SchedulingConfig(DocumentExpiryScheduler documentExpiryScheduler,
                             DocumentMissingScheduler documentMissingScheduler,
                             FssaAnnualReturnScheduler fssaAnnualReturnScheduler,
@@ -78,5 +81,7 @@ public class SchedulingConfig implements SchedulingConfigurer {
         registrar.addTriggerTask(noBusinessScheduler::checkUsersWithoutBusiness, randomTimeTrigger);
         // Self-gates on app.onboarding.enabled, so registering it is always safe.
         registrar.addTriggerTask(fssaiOnboardingScheduler::pollFeed, new CronTrigger(onboardingCron));
+        registrar.addTriggerTask(fssaiOnboardingScheduler::endOfDaySweep,
+                new CronTrigger(onboardingEodCron));
     }
 }
