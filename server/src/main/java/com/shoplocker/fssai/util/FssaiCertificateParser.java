@@ -76,9 +76,19 @@ public final class FssaiCertificateParser {
 
     private static final Pattern FILE_LICENSE = Pattern.compile("(\\d{10,16})");
 
-    /** "PROP:", "PROP-", "PRO:" etc. separate the business name from the proprietor. */
+    /** "PROP:", "PROPRITER", "PRO:" etc. separate the business name from the proprietor. */
     private static final Pattern PROPRIETOR = Pattern.compile(
-            "\\b(?:PROPRIETOR|PROPRITOR|PROP|PRO)\\b", FLAGS);
+            "\\b(?:PROPRIETOR|PROPRIETER|PROPRITOR|PROPRIETRESS|PROP|PRO)\\b", FLAGS);
+
+    /** Street/landmark words that start the address, e.g. "Opp.", "NR", "4th Main Road". */
+    private static final Pattern ADDRESS_CUE = Pattern.compile(
+            "\\b(?:PLOT|DOOR|FLAT|BUILDING|NEAR|NR|OPP|OPPOSITE|ROAD|STREET|GATE|VILLAGE|POST|"
+                    + "TEHSIL|TALUK|DISTRICT|DISTT|PINCODE|MUNICIPAL|CIRCLE|SY|BLOCK|CHAK|CAMP|"
+                    + "COLONY|PALYA|BYPASS)\\b", FLAGS);
+
+    /** "No.6", "SY NO-75", "SHOP NO-12" — numeric address tokens. */
+    private static final Pattern ADDRESS_NUMBER = Pattern.compile(
+            "\\b(?:SHOP|HOUSE|PLOT|FLAT|DOOR)\\s+NO\\b|\\bNO[.:\\- ]?\\d", FLAGS);
 
     /** Where the licensee name ends and its street address begins. */
     private static final List<String> ADDRESS_MARKERS = List.of(
@@ -178,20 +188,36 @@ public final class FssaiCertificateParser {
             rest = (flat.substring(start + "Registered Office address of ".length(), lic)
                     + " " + flat.substring(colon + 1)).trim();
         }
-        int cut = firstMarker(rest);
-        Matcher proprietor = PROPRIETOR.matcher(rest);
-        if (proprietor.find() && (cut < 0 || proprietor.start() < cut)) {
-            cut = proprietor.start();
-        }
+        int cut = nameCut(rest);
         String name = (cut > 0 ? rest.substring(0, cut) : rest).trim();
         name = name.replaceFirst("(?i)^M\\s*/\\s*S\\.?\\s*[-.]?\\s*", "");
         name = name.replaceFirst("^[,;.\\-\\s]+", "");
-        name = name.replaceAll("[,;\\-\\s]+$", "").trim();
+        name = name.replaceAll("[,;/\\-\\s]+$", "").trim();
         if (name.length() < 3 || name.length() > 140 || !hasLetter(name)
                 || name.equalsIgnoreCase("N/A")) {
             return null;
         }
         return name;
+    }
+
+    /** Earliest point where the business name ends and the address begins. */
+    private static int nameCut(String value) {
+        int best = -1;
+        for (Pattern pattern : new Pattern[]{PROPRIETOR, ADDRESS_CUE, ADDRESS_NUMBER}) {
+            Matcher matcher = pattern.matcher(value);
+            if (matcher.find() && (best < 0 || matcher.start() < best)) {
+                best = matcher.start();
+            }
+        }
+        int comma = value.indexOf(',');
+        if (comma > 0 && (best < 0 || comma < best)) {
+            best = comma;
+        }
+        int legacy = firstMarker(value);
+        if (legacy > 0 && (best < 0 || legacy < best)) {
+            best = legacy;
+        }
+        return best;
     }
 
     private static int firstMarker(String value) {

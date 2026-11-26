@@ -396,6 +396,37 @@ data class MessageResponse(
     @SerializedName("message") val message: String?
 )
 
+// ── Verified account contact changes ────────────────────────────────────────
+
+data class EmailVerificationRequest(
+    @SerializedName("email") val email: String
+)
+
+data class EmailUpdateRequest(
+    @SerializedName("email") val email: String,
+    @SerializedName("code") val code: String
+)
+
+data class MobileVerificationRequest(
+    @SerializedName("mobile") val mobile: String
+)
+
+data class MobileUpdateRequest(
+    @SerializedName("mobile") val mobile: String,
+    @SerializedName("otp") val otp: String
+)
+
+data class ContactStatusResponse(
+    @SerializedName("emailId") val emailId: String? = null,
+    @SerializedName("mobileNumber") val mobileNumber: String? = null,
+    @SerializedName("emailPending") val emailPending: Boolean = false,
+    @SerializedName("mobilePending") val mobilePending: Boolean = false,
+    @SerializedName("requestId") val requestId: String? = null,
+    @SerializedName("resendAvailableInSeconds") val resendAvailableInSeconds: Int? = null,
+    @SerializedName("remainingSends") val remainingSends: Int? = null,
+    @SerializedName("devOtp") val devOtp: String? = null
+)
+
 // ── GST Verification ─────────────────────────────────────────────────────
 
 data class GstVerificationResponse(

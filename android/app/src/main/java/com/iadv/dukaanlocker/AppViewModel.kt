@@ -1233,6 +1233,105 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Step 1 of changing the account email: send a code to the new address. */
+    fun requestEmailChangeCode(email: String, onResult: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            updateState { it.copy(isLoading = true) }
+            try {
+                val response = api.requestEmailChangeCode(
+                    EmailVerificationRequest(email = email.trim())
+                )
+                if (response.isSuccessful) {
+                    onResult(true, "Verification code sent to ${email.trim()}")
+                } else {
+                    onResult(false, response.parseErrorMessage())
+                }
+            } catch (e: Exception) {
+                onResult(false, "Network error: ${e.message}")
+            }
+            updateState { it.copy(isLoading = false) }
+        }
+    }
+
+    /** Step 2: verify the emailed code and persist the new email address. */
+    fun confirmEmailChange(email: String, code: String, onResult: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            updateState { it.copy(isLoading = true) }
+            try {
+                val response = api.updateEmail(
+                    EmailUpdateRequest(email = email.trim(), code = code.trim())
+                )
+                if (response.isSuccessful) {
+                    val newEmail = response.body()?.emailId ?: email.trim()
+                    ApiClient.updateProfileContact(context, email = newEmail)
+                    updateState { it.copy(currentUserEmail = newEmail) }
+                    showToast("Email address updated", ToastType.SUCCESS)
+                    onResult(true, null)
+                } else {
+                    onResult(false, response.parseErrorMessage())
+                }
+            } catch (e: Exception) {
+                onResult(false, "Network error: ${e.message}")
+            }
+            updateState { it.copy(isLoading = false) }
+        }
+    }
+
+    /** Step 1 of changing the account mobile: Fast2SMS OTP to the new number. */
+    fun requestMobileChangeOtp(
+        mobile: String,
+        onResult: (Boolean, String?, RateLimitInfo?) -> Unit
+    ) {
+        viewModelScope.launch {
+            updateState { it.copy(isLoading = true) }
+            try {
+                val response = api.requestMobileChangeOtp(
+                    MobileVerificationRequest(mobile = mobile.trim())
+                )
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    onResult(
+                        true,
+                        body?.devOtp?.let { "Dev OTP: $it" } ?: "OTP sent to ${mobile.trim()}",
+                        RateLimitInfo(
+                            retryAfterSeconds = body?.resendAvailableInSeconds ?: 0,
+                            remainingSends = body?.remainingSends ?: 0
+                        )
+                    )
+                } else {
+                    val parsed = response.parseOtpError()
+                    onResult(false, parsed.message, parsed.limit)
+                }
+            } catch (e: Exception) {
+                onResult(false, "Network error: ${e.message}", null)
+            }
+            updateState { it.copy(isLoading = false) }
+        }
+    }
+
+    /** Step 2: verify the Fast2SMS OTP and persist the new mobile number. */
+    fun confirmMobileChange(mobile: String, otp: String, onResult: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            updateState { it.copy(isLoading = true) }
+            try {
+                val response = api.updateMobile(
+                    MobileUpdateRequest(mobile = mobile.trim(), otp = otp.trim())
+                )
+                if (response.isSuccessful) {
+                    val newMobile = response.body()?.mobileNumber ?: mobile.trim()
+                    ApiClient.updateProfileContact(context, mobile = newMobile)
+                    showToast("Mobile number updated", ToastType.SUCCESS)
+                    onResult(true, null)
+                } else {
+                    onResult(false, response.parseErrorMessage())
+                }
+            } catch (e: Exception) {
+                onResult(false, "Network error: ${e.message}")
+            }
+            updateState { it.copy(isLoading = false) }
+        }
+    }
+
     fun biometricLogin(credentials: BiometricCredentials, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             updateState { it.copy(isLoading = true) }

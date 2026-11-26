@@ -147,6 +147,15 @@ object ApiClient {
 
     fun getUserMobile(context: Context): String = prefs(context).getString(KEY_MOBILE, "") ?: ""
 
+    /** Refresh cached contact details after a verified change. */
+    fun updateProfileContact(context: Context, email: String? = null, mobile: String? = null) {
+        prefs(context).edit().apply {
+            if (email != null) putString(KEY_EMAIL, email)
+            if (mobile != null) putString(KEY_MOBILE, mobile)
+            apply()
+        }
+    }
+
     fun getUserRole(context: Context): String = prefs(context).getString(KEY_ROLE, "") ?: ""
 
     /** Dukaan Locker ID (DL ID) of the signed-in account, "" when not signed in. */

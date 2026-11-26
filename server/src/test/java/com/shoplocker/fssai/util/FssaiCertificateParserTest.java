@@ -71,6 +71,43 @@ class FssaiCertificateParserTest {
     }
 
     @Test
+    @DisplayName("cuts the business name before proprietor and address text")
+    void businessNameBeforeAddress() {
+        assertBusinessName(
+                "Name & Registered Office address of Licensee: NEW RAIPUR BHAJIYA HOUSE / Proprieter "
+                        + "LODHA DIPAKKUMAR LALSINGBHAI 22/A/2 GHASWALA SHOP ,NR, SARANGPUR GATE , "
+                        + "Ahmedabad, Gujarat-380002 2. Address of Authorized Premises: NR GATE",
+                "NEW RAIPUR BHAJIYA HOUSE");
+        assertBusinessName(
+                "Name & Registered Office address of Licensee: TANDOOR KINGS RESTAURANT & CATERING "
+                        + "Opp. McDonald's, G.T. Road, Dasuya, Punjab-144205 2. "
+                        + "Address of Authorized Premises: G.T. Road",
+                "TANDOOR KINGS RESTAURANT & CATERING");
+        assertBusinessName(
+                "Name & Registered Office address of Licensee: A J EGG CENTER No.6, 4th Main Road, "
+                        + "D.B. Street, Bangalore, Karnataka-560003 2. Address of Authorized Premises: Main Road",
+                "A J EGG CENTER");
+        assertBusinessName(
+                "Name & Registered Office address of Licensee: SERENDIPITY FLAVOURS HOSPITALITY LLP "
+                        + "SY NO-75 AND SY NO-172/1, NS PALYA, BANGALORE, Karnataka-560076 2. "
+                        + "Address of Authorized Premises: NS PALYA",
+                "SERENDIPITY FLAVOURS HOSPITALITY LLP");
+        assertBusinessName(
+                "Name & Registered Office address of Licensee: M/S T.T. ENTERPRISES, THUPTEN TSERING "
+                        + "RAMA CAMP, DIRANG, Arunachal Pradesh-790101 2. "
+                        + "Address of Authorized Premises: DIRANG",
+                "T.T. ENTERPRISES");
+        assertBusinessName(
+                "Name & Registered Office address of Licensee: SHUBH KAMNA AGENCIES CHAK PURE MIYAN, "
+                        + "Prayagraj, Uttar Pradesh-212402 2. Address of Authorized Premises: MIYAN",
+                "SHUBH KAMNA AGENCIES");
+    }
+
+    private static void assertBusinessName(String certificate, String expected) {
+        assertThat(FssaiCertificateParser.parse(certificate, "x.pdf").getShopName()).isEqualTo(expected);
+    }
+
+    @Test
     @DisplayName("falls back to the file name for the licence number")
     void licenceNumberFromFileName() {
         String text = FULL_CERTIFICATE.replace("Issued On:", "Issued On:")

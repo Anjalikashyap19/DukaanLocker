@@ -35,6 +35,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -79,6 +80,7 @@ public class FssaiOnboardingService {
     private static final String PASSWORD_SUFFIX = "@123";
     private static final String ONBOARDING_CATEGORY = "FOOD MANUFACTURING & PROCESSING";
     private static final int MAX_ATTEMPTS = 3;
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final OnboardingJobRepository jobRepository;
     private final UserRepository userRepository;
@@ -169,11 +171,20 @@ public class FssaiOnboardingService {
             FssaiCertificateData data = FssaiCertificateParser.parse(text, fileName);
             job.setLicenseNumber(trimTo(data.getLicenseNumber(), 32));
 
-            if (!data.hasOwnerDetails()) {
-                log.info("Onboarding skipped {}: owner details missing on the certificate", fileName);
-                finish(job, OnboardingJobStatus.SKIPPED_NO_OWNER,
-                        "Owner name / mobile / email not printed on the certificate — no account created");
-                return;
+            boolean emailPending = !hasUsableEmail(data.getEmailId());
+            boolean mobilePending = !hasUsableMobile(data.getMobileNumber());
+            if (emailPending || mobilePending) {
+                if (!FssaiCertificateData.isRealValue(data.getOwnerName())) {
+                    data.setOwnerName(placeholderOwnerName(data.getShopName()));
+                }
+                if (emailPending) {
+                    data.setEmailId(generatePlaceholderEmail(data.getOwnerName()));
+                }
+                if (mobilePending) {
+                    data.setMobileNumber(generatePlaceholderMobile());
+                }
+                log.info("Onboarding {} uses generated contact details (email={}, mobile={})",
+                        fileName, emailPending, mobilePending);
             }
 
             if (userRepository.existsByMobileNumber(data.getMobileNumber())) {
@@ -199,13 +210,16 @@ public class FssaiOnboardingService {
                 return;
             }
 
-            Created created = self.createAccount(job.getId(), data, pdf, fileName);
+            Created created = self.createAccount(job.getId(), data, pdf, fileName,
+                    emailPending, mobilePending);
             job.setUserId(created.userId());
             job.setShopId(created.shopId());
-            finish(job, OnboardingJobStatus.COMPLETED,
-                    "Account and shop created; credentials email queued");
-            log.info("Onboarded {} -> user {} shop {} licence {}",
-                    fileName, created.userId(), created.shopId(), data.getLicenseNumber());
+            boolean generatedContact = emailPending || mobilePending;
+            finish(job, OnboardingJobStatus.COMPLETED, generatedContact
+                    ? "Account created with generated contact details; awaiting owner verification"
+                    : "Account and shop created; credentials email queued");
+            log.info("Onboarded {} -> user {} shop {} licence {} (generatedContact={})",
+                    fileName, created.userId(), created.shopId(), data.getLicenseNumber(), generatedContact);
         } catch (Exception e) {
             log.error("Onboarding failed for {}: {}", fileName, e.getMessage(), e);
             finish(job, OnboardingJobStatus.FAILED, e.getMessage() == null
@@ -232,6 +246,18 @@ public class FssaiOnboardingService {
         return fileNames;
     }
 
+    /** One-time backfill: re-queue every failed job regardless of when it was created. */
+    public List<String> requeueAllFailedJobs() {
+        List<OnboardingJob> failed = jobRepository.findByStatus(OnboardingJobStatus.FAILED);
+        List<String> fileNames = new ArrayList<>();
+        for (OnboardingJob job : failed) {
+            job.setAttempts(0);
+            jobRepository.save(job);
+            fileNames.add(job.getFileName());
+        }
+        return fileNames;
+    }
+
     /** Result of the transactional creation step. */
     public record Created(Long userId, Long shopId) {
     }
@@ -242,7 +268,8 @@ public class FssaiOnboardingService {
      * applies; a constraint violation rolls the whole account back.
      */
     @Transactional
-    public Created createAccount(Long jobId, FssaiCertificateData data, byte[] pdf, String fileName) {
+    public Created createAccount(Long jobId, FssaiCertificateData data, byte[] pdf, String fileName,
+                                 boolean emailPending, boolean mobilePending) {
         String rawPassword = passwordFor(data.getOwnerName());
 
         User user = new User();
@@ -254,6 +281,8 @@ public class FssaiOnboardingService {
         user.setEnabled(true);
         // Must stay false: MSME users are blocked from email+password login.
         user.setMsmeUser(false);
+        user.setContactEmailPending(emailPending);
+        user.setContactMobilePending(mobilePending);
         User savedUser = userRepository.save(user);
         savedUser.setDlId(DlIds.forUser(savedUser.getId()));
         savedUser = userRepository.save(savedUser);
@@ -331,7 +360,8 @@ public class FssaiOnboardingService {
                 rawPassword,
                 savedUser.getUserName(),
                 savedShop.getShopName(),
-                data.getLicenseNumber()));
+                data.getLicenseNumber(),
+                emailPending || mobilePending));
 
         return new Created(savedUser.getId(), savedShop.getId());
     }
@@ -398,6 +428,53 @@ public class FssaiOnboardingService {
         }
         return kob.isBlank() && category != null
                 && category.toUpperCase(Locale.ROOT).contains("MANUFACTURING");
+    }
+
+    private static boolean hasUsableEmail(String email) {
+        return email != null && email.contains("@") && FssaiCertificateData.isRealValue(email);
+    }
+
+    private static boolean hasUsableMobile(String mobile) {
+        return mobile != null && mobile.matches("^[6-9]\\d{9}$");
+    }
+
+    private static String placeholderOwnerName(String shopName) {
+        return FssaiCertificateData.isRealValue(shopName) ? shopName.trim() : "Owner";
+    }
+
+    /** ownerfirstname@gmail.com, with a numeric suffix only when that address is taken. */
+    String generatePlaceholderEmail(String ownerName) {
+        String[] parts = ownerName == null ? new String[0] : ownerName.trim().split("\\s+");
+        String first = parts.length == 0 ? "" : parts[0].replaceAll("[^A-Za-z0-9]", "").toLowerCase(Locale.ROOT);
+        if (first.length() < 3 || first.chars().noneMatch(Character::isLetter)) {
+            first = "owner";
+        }
+        String candidate = first + "@gmail.com";
+        int suffix = 1;
+        while (userRepository.existsByEmailId(candidate)) {
+            candidate = first + suffix + "@gmail.com";
+            suffix++;
+            if (suffix > 10000) {
+                throw new IllegalStateException("Could not allocate a placeholder email for " + first);
+            }
+        }
+        return candidate;
+    }
+
+    /** A unique, non-existent 10-digit mobile number for placeholder accounts. */
+    String generatePlaceholderMobile() {
+        for (int attempt = 0; attempt < 200; attempt++) {
+            StringBuilder builder = new StringBuilder(10);
+            builder.append(6 + RANDOM.nextInt(4));
+            for (int i = 1; i < 10; i++) {
+                builder.append(RANDOM.nextInt(10));
+            }
+            String mobile = builder.toString();
+            if (!userRepository.existsByMobileNumber(mobile)) {
+                return mobile;
+            }
+        }
+        throw new IllegalStateException("Could not allocate a unique placeholder mobile number");
     }
 
     /** First name of the owner (honorifics dropped) plus the fixed suffix. */

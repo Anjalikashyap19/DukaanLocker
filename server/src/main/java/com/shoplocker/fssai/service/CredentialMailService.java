@@ -2,6 +2,8 @@ package com.shoplocker.fssai.service;
 
 import com.shoplocker.fssai.entity.OnboardingJob;
 import com.shoplocker.fssai.event.AccountCredentialsEvent;
+import com.shoplocker.fssai.exception.FailureCode;
+import com.shoplocker.fssai.exception.FssaiException;
 import com.shoplocker.fssai.repository.OnboardingJobRepository;
 import jakarta.activation.DataHandler;
 import jakarta.mail.internet.InternetAddress;
@@ -56,6 +58,12 @@ public class CredentialMailService {
         if (event.emailId() == null || event.emailId().isBlank()) {
             return;
         }
+        if (event.placeholderContact()) {
+            log.info("Onboarding mail skipped for user {} (job {}): generated contact details",
+                    event.userId(), event.jobId());
+            annotate(event.jobId(), "credentials NOT emailed (generated contact details)");
+            return;
+        }
         JavaMailSender sender = mailSenderProvider.getIfAvailable();
         // An empty spring.mail.host still satisfies Boot's condition and yields a
         // sender that can only fail, so the host itself decides availability.
@@ -78,6 +86,48 @@ public class CredentialMailService {
         } catch (Exception e) {
             log.error("Onboarding credentials email failed for user {}: {}", event.userId(), e.getMessage());
             annotate(event.jobId(), "credentials email failed: " + e.getMessage());
+        }
+    }
+
+    /** Sends a one-time code for a self-service email change. */
+    public void sendVerificationCode(String email, String code) {
+        JavaMailSender sender = mailSenderProvider.getIfAvailable();
+        if (sender == null || mailHost == null || mailHost.isBlank()) {
+            throw new FssaiException("Email verification is not configured", FailureCode.INVALID_REQUEST);
+        }
+        try {
+            MimeMessage message = sender.createMimeMessage();
+            message.setRecipient(MimeMessage.RecipientType.TO, new InternetAddress(email));
+            if (fromAddress != null && !fromAddress.isBlank()) {
+                message.setFrom(new InternetAddress(fromAddress));
+            }
+            message.setSubject("DukaanLocker email verification code", "UTF-8");
+
+            MimeMultipart alternative = new MimeMultipart("alternative");
+            MimeBodyPart text = new MimeBodyPart();
+            text.setText("Your DukaanLocker email verification code is " + code
+                    + ". It is valid for 10 minutes. Ignore this mail if you did not request it.", "UTF-8");
+            MimeBodyPart html = new MimeBodyPart();
+            html.setContent("<!DOCTYPE html><html><body style=\"margin:0;background:#f6f8fb;padding:24px;"
+                            + "font-family:Arial,Helvetica,sans-serif;color:#222\">"
+                            + "<div style=\"max-width:560px;margin:auto;background:#fff;border:1px solid #e5e9f0;"
+                            + "border-radius:12px;padding:28px\">"
+                            + "<h2 style=\"margin:0 0 12px;font-size:20px;color:#1b3a6b\">DukaanLocker</h2>"
+                            + "<p style=\"margin:0 0 16px\">Your email verification code is:</p>"
+                            + "<p style=\"margin:0 0 16px;font-size:26px;font-weight:700;letter-spacing:4px\">"
+                            + code + "</p>"
+                            + "<p style=\"margin:0 0 16px\">This code is valid for 10 minutes.</p>"
+                            + "<p style=\"margin:0;color:#777;font-size:12px\">Ignore this mail if you did not "
+                            + "request an email change.</p></div></body></html>",
+                    "text/html; charset=UTF-8");
+            alternative.addBodyPart(text);
+            alternative.addBodyPart(html);
+            message.setContent(alternative);
+            sender.send(message);
+            log.info("Email verification code sent to {}", email);
+        } catch (Exception e) {
+            log.error("Could not send email verification code to {}: {}", email, e.getMessage());
+            throw new FssaiException("Could not send the verification email", FailureCode.INVALID_REQUEST);
         }
     }
 

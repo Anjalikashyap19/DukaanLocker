@@ -47,8 +47,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.iadv.dukaanlocker.AppViewModel
 import com.iadv.dukaanlocker.BuildConfig
 import com.iadv.dukaanlocker.SupportInfo
+import com.iadv.dukaanlocker.ui.components.FieldErrorText
 import com.iadv.dukaanlocker.ui.components.LauncherLogo
 import com.iadv.dukaanlocker.ui.strings.AppStrings
 import com.iadv.dukaanlocker.ui.strings.LocalAppLanguage
@@ -795,7 +798,9 @@ private fun UserProfileScreen(
     managerCode: String,
     dlId: String,
     businessCount: Int,
-    appLockEnabled: Boolean
+    appLockEnabled: Boolean,
+    onEditEmail: () -> Unit,
+    onEditMobile: () -> Unit
 ) {
     val scrollState = rememberScrollState()
     Column(
@@ -838,8 +843,26 @@ private fun UserProfileScreen(
             ) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) {
                     ProfileInfoRow(AppStrings.get(lang, "Mobile Number"), userMobile, colors)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = onEditMobile) {
+                            Text(
+                                AppStrings.get(lang, "Edit Mobile Number"),
+                                color = colors.primary,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
                     HorizontalDivider(color = colors.border)
                     ProfileInfoRow(AppStrings.get(lang, "Email Address"), userEmail, colors)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = onEditEmail) {
+                            Text(
+                                AppStrings.get(lang, "Edit Email Address"),
+                                color = colors.primary,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
                     HorizontalDivider(color = colors.border)
                     ProfileInfoRow(AppStrings.get(lang, "Role"), roleLabel(userRole, lang), colors)
                     HorizontalDivider(color = colors.border)
@@ -881,6 +904,140 @@ private fun UserProfileScreen(
     }
 }
 
+@Composable
+private fun EditContactScreen(
+    colors: AppColors,
+    lang: String,
+    isEmail: Boolean,
+    currentValue: String,
+    vm: AppViewModel,
+    onDone: (String) -> Unit
+) {
+    var value by remember { mutableStateOf(currentValue) }
+    var code by remember { mutableStateOf("") }
+    var codeSent by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier.fillMaxWidth().background(colors.background)
+            .verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            if (isEmail) AppStrings.get(lang, "Enter your new email address. A verification code will be sent to it.")
+            else AppStrings.get(lang, "Enter your new mobile number. An OTP will be sent to it by SMS."),
+            color = colors.textSecondary,
+            fontSize = 13.sp
+        )
+        OutlinedTextField(
+            value = value,
+            onValueChange = { input ->
+                value = if (isEmail) input.trim()
+                else input.filter { it.isDigit() }.take(10)
+                error = null
+                message = null
+            },
+            label = {
+                Text(
+                    if (isEmail) AppStrings.get(lang, "New Email Address")
+                    else AppStrings.get(lang, "New Mobile Number"),
+                    color = colors.textSecondary
+                )
+            },
+            leadingIcon = {
+                Icon(
+                    if (isEmail) Icons.Default.Email else Icons.Default.Phone,
+                    contentDescription = null,
+                    tint = colors.primary
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !codeSent && !busy,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = if (isEmail) KeyboardType.Email else KeyboardType.Phone,
+                imeAction = ImeAction.Next
+            )
+        )
+        if (codeSent) {
+            OutlinedTextField(
+                value = code,
+                onValueChange = { input -> code = input.filter { it.isDigit() }.take(8); error = null },
+                label = {
+                    Text(
+                        if (isEmail) AppStrings.get(lang, "Verification Code")
+                        else AppStrings.get(lang, "OTP"),
+                        color = colors.textSecondary
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done
+                )
+            )
+        }
+        message?.let { Text(it, color = colors.primary, fontSize = 12.sp) }
+        error?.let { FieldErrorText(text = it, colors = colors) }
+        if (busy) {
+            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = colors.primary)
+        }
+        Button(
+            onClick = {
+                if (busy) return@Button
+                error = null
+                message = null
+                busy = true
+                if (!codeSent) {
+                    if (isEmail) {
+                        vm.requestEmailChangeCode(value) { ok, msg ->
+                            busy = false
+                            if (ok) { codeSent = true; message = msg } else error = msg
+                        }
+                    } else {
+                        vm.requestMobileChangeOtp(value) { ok, msg, _ ->
+                            busy = false
+                            if (ok) { codeSent = true; message = msg } else error = msg
+                        }
+                    }
+                } else if (isEmail) {
+                    vm.confirmEmailChange(value, code) { ok, msg ->
+                        busy = false
+                        if (ok) onDone(value.trim()) else error = msg
+                    }
+                } else {
+                    vm.confirmMobileChange(value, code) { ok, msg ->
+                        busy = false
+                        if (ok) onDone(value) else error = msg
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = value.isNotBlank() && (!codeSent || code.isNotBlank()) && !busy
+        ) {
+            Text(
+                if (!codeSent) {
+                    if (isEmail) AppStrings.get(lang, "Send Verification Code")
+                    else AppStrings.get(lang, "Send OTP")
+                } else AppStrings.get(lang, "Verify & Save")
+            )
+        }
+        if (codeSent) {
+            TextButton(onClick = {
+                codeSent = false
+                code = ""
+                message = null
+                error = null
+            }) {
+                Text(AppStrings.get(lang, "Change Value"), color = colors.primary)
+            }
+        }
+    }
+}
+
 object AppSettingsInfo {
     fun buildFeedbackSubject(rating: Int): String =
         "[Feedback] DukaanLocker v${BuildConfig.VERSION_NAME} \u2014 ${rating}\u2605"
@@ -912,7 +1069,8 @@ fun AppSettingsScreen(
     userRole: String = "",
     userManagerCode: String = "",
     userDlId: String = "",
-    businessCount: Int = 0
+    businessCount: Int = 0,
+    vm: AppViewModel = viewModel()
 ) {
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
@@ -924,11 +1082,16 @@ fun AppSettingsScreen(
     var showAboutApp by remember { mutableStateOf(false) }
     var showFeedback by remember { mutableStateOf(false) }
     var showUserProfile by remember { mutableStateOf(false) }
+    var contactEditMode by remember { mutableStateOf<String?>(null) }
+    var currentEmail by remember(userEmail) { mutableStateOf(userEmail) }
+    var currentMobile by remember(userMobile) { mutableStateOf(userMobile) }
 
     // A single header owns the whole flow. It stays in place while sub-screens
     // swap in underneath, so there is never a second stacked title, and back
     // closes the current sub-screen before leaving App Settings entirely.
     val headerTitle = when {
+        contactEditMode == "EMAIL" -> AppStrings.get(lang, "Edit Email Address")
+        contactEditMode == "MOBILE" -> AppStrings.get(lang, "Edit Mobile Number")
         showUserProfile -> AppStrings.get(lang, "User Profile")
         showChangePassword -> AppStrings.get(lang, "Change Password")
         showHelpSupport -> AppStrings.get(lang, "Help & Support")
@@ -948,6 +1111,7 @@ fun AppSettingsScreen(
             colors = colors,
             onBack = {
                 when {
+                    contactEditMode != null -> contactEditMode = null
                     showUserProfile -> showUserProfile = false
                     showChangePassword -> showChangePassword = false
                     showHelpSupport -> showHelpSupport = false
@@ -958,18 +1122,32 @@ fun AppSettingsScreen(
             }
         )
 
-        if (showUserProfile) {
+        if (contactEditMode != null) {
+            EditContactScreen(
+                colors = colors,
+                lang = lang,
+                isEmail = contactEditMode == "EMAIL",
+                currentValue = if (contactEditMode == "EMAIL") currentEmail else currentMobile,
+                vm = vm,
+                onDone = { updated ->
+                    if (contactEditMode == "EMAIL") currentEmail = updated else currentMobile = updated
+                    contactEditMode = null
+                }
+            )
+        } else if (showUserProfile) {
             UserProfileScreen(
                 colors = colors,
                 lang = lang,
                 userName = userName,
-                userMobile = userMobile,
-                userEmail = userEmail,
+                userMobile = currentMobile,
+                userEmail = currentEmail,
                 userRole = userRole,
                 managerCode = userManagerCode,
                 dlId = userDlId,
                 businessCount = businessCount,
-                appLockEnabled = appLockEnabled
+                appLockEnabled = appLockEnabled,
+                onEditEmail = { contactEditMode = "EMAIL" },
+                onEditMobile = { contactEditMode = "MOBILE" }
             )
         } else if (showChangePassword) {
             VerifyMobileForPasswordChange(

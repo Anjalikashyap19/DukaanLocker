@@ -6,6 +6,8 @@ import com.shoplocker.fssai.service.FssaiOnboardingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -45,6 +47,9 @@ public class FssaiOnboardingScheduler {
     @Value("${app.onboarding.max-per-run:10}")
     private int maxPerRun;
 
+    @Value("${app.onboarding.backfill-on-start:false}")
+    private boolean backfillOnStart;
+
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(20))
             .build();
@@ -53,6 +58,23 @@ public class FssaiOnboardingScheduler {
                                     ObjectMapper objectMapper) {
         this.onboardingService = onboardingService;
         this.objectMapper = objectMapper;
+    }
+
+    /** One-time, opt-in pass over all previously failed certificates. */
+    @EventListener(ApplicationReadyEvent.class)
+    public void backfillOnStartup() {
+        if (!enabled || !backfillOnStart) {
+            return;
+        }
+        try {
+            List<String> names = onboardingService.requeueAllFailedJobs();
+            for (String fileName : names) {
+                onboardingService.process(fileName);
+            }
+            log.info("FSSAI onboarding backfill: {} failed job(s) re-queued", names.size());
+        } catch (Exception e) {
+            log.warn("FSSAI onboarding backfill failed: {}", e.getMessage());
+        }
     }
 
     public void pollFeed() {

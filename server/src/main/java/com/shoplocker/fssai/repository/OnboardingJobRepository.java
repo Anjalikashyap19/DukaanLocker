@@ -19,4 +19,6 @@ public interface OnboardingJobRepository extends JpaRepository<OnboardingJob, Lo
     List<OnboardingJob> findByStatusAndCreatedAtBetween(OnboardingJobStatus status,
                                                         LocalDateTime from,
                                                         LocalDateTime to);
+
+    List<OnboardingJob> findByStatus(OnboardingJobStatus status);
 }

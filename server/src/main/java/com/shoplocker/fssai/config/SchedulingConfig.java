@@ -5,6 +5,7 @@ import com.shoplocker.fssai.scheduler.DocumentMissingScheduler;
 import com.shoplocker.fssai.scheduler.FssaAnnualReturnScheduler;
 import com.shoplocker.fssai.scheduler.FssaiOnboardingScheduler;
 import com.shoplocker.fssai.scheduler.NoBusinessScheduler;
+import com.shoplocker.fssai.scheduler.PendingContactReminderScheduler;
 import com.shoplocker.fssai.scheduler.RandomTimeTrigger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
@@ -20,6 +21,7 @@ public class SchedulingConfig implements SchedulingConfigurer {
     private final FssaAnnualReturnScheduler fssaAnnualReturnScheduler;
     private final NoBusinessScheduler noBusinessScheduler;
     private final FssaiOnboardingScheduler fssaiOnboardingScheduler;
+    private final PendingContactReminderScheduler pendingContactReminderScheduler;
     private final RandomTimeTrigger randomTimeTrigger;
 
     /**
@@ -54,17 +56,22 @@ public class SchedulingConfig implements SchedulingConfigurer {
     @Value("${app.onboarding.eod-cron:0 45 23 * * *}")
     private String onboardingEodCron;
 
+    @Value("${app.contact-reminder.cron:0 0 */6 * * *}")
+    private String contactReminderCron;
+
     public SchedulingConfig(DocumentExpiryScheduler documentExpiryScheduler,
                             DocumentMissingScheduler documentMissingScheduler,
                             FssaAnnualReturnScheduler fssaAnnualReturnScheduler,
                             NoBusinessScheduler noBusinessScheduler,
                             FssaiOnboardingScheduler fssaiOnboardingScheduler,
+                            PendingContactReminderScheduler pendingContactReminderScheduler,
                             RandomTimeTrigger randomTimeTrigger) {
         this.documentExpiryScheduler = documentExpiryScheduler;
         this.documentMissingScheduler = documentMissingScheduler;
         this.fssaAnnualReturnScheduler = fssaAnnualReturnScheduler;
         this.noBusinessScheduler = noBusinessScheduler;
         this.fssaiOnboardingScheduler = fssaiOnboardingScheduler;
+        this.pendingContactReminderScheduler = pendingContactReminderScheduler;
         this.randomTimeTrigger = randomTimeTrigger;
     }
 
@@ -83,5 +90,7 @@ public class SchedulingConfig implements SchedulingConfigurer {
         registrar.addTriggerTask(fssaiOnboardingScheduler::pollFeed, new CronTrigger(onboardingCron));
         registrar.addTriggerTask(fssaiOnboardingScheduler::endOfDaySweep,
                 new CronTrigger(onboardingEodCron));
+        registrar.addTriggerTask(pendingContactReminderScheduler::sendReminders,
+                new CronTrigger(contactReminderCron));
     }
 }

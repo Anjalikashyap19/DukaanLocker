@@ -75,6 +75,14 @@ public class User {
     @Column(name = "msme_user", nullable = false)
     private boolean msmeUser = false;
 
+    // True when onboarding generated a placeholder email/mobile because the
+    // certificate did not print the owner's real contact details.
+    @Column(name = "contact_email_pending", nullable = false)
+    private boolean contactEmailPending = false;
+
+    @Column(name = "contact_mobile_pending", nullable = false)
+    private boolean contactMobilePending = false;
+
 
 
     // Kis admin ne user create kiya

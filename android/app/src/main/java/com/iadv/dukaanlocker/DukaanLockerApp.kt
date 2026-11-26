@@ -745,7 +745,8 @@ BackHandler(
                                     userRole = state.currentUserRole,
                                     userManagerCode = state.currentUserManagerCode,
                                     userDlId = state.currentDlId,
-                                    businessCount = state.shops.size
+                                    businessCount = state.shops.size,
+                                    vm = vm
                                 )
                             }
                             is Screen.RenewalPayment -> {

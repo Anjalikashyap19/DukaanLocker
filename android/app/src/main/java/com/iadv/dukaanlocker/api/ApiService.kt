@@ -137,6 +137,20 @@ interface ApiService {
     @POST("api/auth/reset-password")
     suspend fun resetPassword(@Body request: ResetPasswordRequest): Response<MessageResponse>
 
+    // ── Verified account contact changes ────────────────────────
+
+    @POST("api/users/me/email/code")
+    suspend fun requestEmailChangeCode(@Body request: EmailVerificationRequest): Response<ContactStatusResponse>
+
+    @PUT("api/users/me/email")
+    suspend fun updateEmail(@Body request: EmailUpdateRequest): Response<ContactStatusResponse>
+
+    @POST("api/users/me/mobile/code")
+    suspend fun requestMobileChangeOtp(@Body request: MobileVerificationRequest): Response<ContactStatusResponse>
+
+    @PUT("api/users/me/mobile")
+    suspend fun updateMobile(@Body request: MobileUpdateRequest): Response<ContactStatusResponse>
+
     // ── Business Profile ───────────────────────────────────────
 
     @POST("api/business-profile")
