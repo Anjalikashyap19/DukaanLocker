@@ -94,12 +94,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
 
             UserDetails userDetails;
+            User resolvedUser = null;
             try {
                 userDetails = userDetailsService.loadUserByUsername(email);
             } catch (org.springframework.security.core.userdetails.UsernameNotFoundException unf) {
-                writeJsonError(response, HttpServletResponse.SC_UNAUTHORIZED,
-                        "unauthorized", "Token references an unknown user.");
-                return;
+                // The JWT subject is the email at login time. A verified email
+                // change makes that subject stale while the token is still valid,
+                // so resolve the same authenticated user by the immutable userId claim.
+                resolvedUser = userById(claims);
+                if (resolvedUser == null) {
+                    writeJsonError(response, HttpServletResponse.SC_UNAUTHORIZED,
+                            "unauthorized", "Token references an unknown user.");
+                    return;
+                }
+                log.info("JWT subject {} no longer resolves; using userId claim {}", email, resolvedUser.getId());
+                userDetails = toUserDetails(resolvedUser);
             }
 
             // Defense-in-depth: prefer the role baked into the JWT claim over
@@ -128,7 +137,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             // active users an indefinite session while forcing re-login after
             // prolonged inactivity.
             try {
-                User user = userRepository.findByEmailId(email).orElse(null);
+                User user = resolvedUser;
+                if (user == null) {
+                    user = userRepository.findByEmailId(email).orElse(null);
+                }
                 if (user == null) {
                     // Fallback: for MSME users the subject is a mobile number
                     user = userRepository.findByMobileNumber(email).orElse(null);
@@ -158,6 +170,37 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             writeJsonError(response, HttpServletResponse.SC_UNAUTHORIZED,
                     "unauthorized", "Invalid or expired token. Please login again.");
         }
+    }
+
+    private User userById(Claims claims) {
+        Object id = claims.get("userId");
+        try {
+            if (id instanceof Number number) {
+                return userRepository.findById(number.longValue()).orElse(null);
+            }
+            if (id instanceof String value) {
+                return userRepository.findById(Long.valueOf(value)).orElse(null);
+            }
+        } catch (Exception e) {
+            log.debug("Could not resolve userId claim: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    private static UserDetails toUserDetails(User user) {
+        String username = user.getEmailId() != null && !user.getEmailId().isBlank()
+                ? user.getEmailId()
+                : user.getMobileNumber();
+        return org.springframework.security.core.userdetails.User.builder()
+                .username(username)
+                .password(user.getPassword() == null ? "" : user.getPassword())
+                .disabled(!user.isEnabled())
+                .accountLocked(false)
+                .credentialsExpired(false)
+                .accountExpired(false)
+                .authorities(List.of(new SimpleGrantedAuthority(
+                        JwtService.roleAuthority(user.getRole()))))
+                .build();
     }
 
     private void writeJsonError(HttpServletResponse response, int status, String code, String message)

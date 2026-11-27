@@ -1,8 +1,13 @@
 package com.shoplocker.fssai.service;
 
 import com.shoplocker.fssai.repository.UserRepository;
+import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -49,5 +54,29 @@ class FssaiOnboardingServiceTest {
 
         String mobile = service.generatePlaceholderMobile();
         assertThat(mobile).matches("^[6-9]\\d{9}$");
+    }
+
+    @Test
+    @DisplayName("reads the real contact mobile from the licence lookup JSON")
+    void looksUpContactMobile() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/", exchange -> {
+            byte[] body = "{\"details\":{\"contactMobile\":\"8682981642\"}}"
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+        try {
+            FssaiOnboardingService service = new FssaiOnboardingService(null, null, null, null,
+                    null, null, null, null, null, null);
+            ReflectionTestUtils.setField(service, "contactLookupUrl",
+                    "http://localhost:" + server.getAddress().getPort() + "/?lic_num=");
+
+            assertThat(service.lookupMobile("22425449000148")).isEqualTo("8682981642");
+        } finally {
+            server.stop(0);
+        }
     }
 }

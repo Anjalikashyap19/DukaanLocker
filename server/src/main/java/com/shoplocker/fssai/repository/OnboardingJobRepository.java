@@ -21,4 +21,6 @@ public interface OnboardingJobRepository extends JpaRepository<OnboardingJob, Lo
                                                         LocalDateTime to);
 
     List<OnboardingJob> findByStatus(OnboardingJobStatus status);
+
+    List<OnboardingJob> findByUserId(Long userId);
 }

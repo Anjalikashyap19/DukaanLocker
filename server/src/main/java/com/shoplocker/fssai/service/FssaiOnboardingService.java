@@ -1,5 +1,7 @@
 package com.shoplocker.fssai.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shoplocker.fssai.dto.FssaiCertificateData;
 import com.shoplocker.fssai.entity.BusinessScale;
 import com.shoplocker.fssai.entity.Document;
@@ -99,6 +101,11 @@ public class FssaiOnboardingService {
     @Value("${app.onboarding.dry-run:true}")
     private boolean dryRun;
 
+    @Value("${app.onboarding.contact-lookup-url:}")
+    private String contactLookupUrl;
+
+    private static final ObjectMapper CONTACT_MAPPER = new ObjectMapper();
+
     /** Self-reference so {@link #createAccount} runs through the transactional proxy. */
     @Lazy
     @Autowired
@@ -181,7 +188,13 @@ public class FssaiOnboardingService {
                     data.setEmailId(generatePlaceholderEmail(data.getOwnerName()));
                 }
                 if (mobilePending) {
-                    data.setMobileNumber(generatePlaceholderMobile());
+                    String lookedUp = lookupMobile(data.getLicenseNumber());
+                    if (lookedUp != null) {
+                        data.setMobileNumber(lookedUp);
+                        mobilePending = false;
+                    } else {
+                        data.setMobileNumber(generatePlaceholderMobile());
+                    }
                 }
                 log.info("Onboarding {} uses generated contact details (email={}, mobile={})",
                         fileName, emailPending, mobilePending);
@@ -459,6 +472,63 @@ public class FssaiOnboardingService {
             }
         }
         return candidate;
+    }
+
+    /** Real contact mobile from the licence lookup API, or null when unavailable. */
+    String lookupMobile(String licenseNumber) {
+        if (contactLookupUrl == null || contactLookupUrl.isBlank()
+                || licenseNumber == null || licenseNumber.isBlank()) {
+            return null;
+        }
+        try {
+            String url = contactLookupUrl + URLEncoder.encode(licenseNumber, StandardCharsets.UTF_8);
+            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(Duration.ofSeconds(20))
+                    .GET()
+                    .build();
+            HttpResponse<String> response = httpClient.send(request,
+                    HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                log.warn("Contact lookup for licence {} returned HTTP {}", licenseNumber, response.statusCode());
+                return null;
+            }
+            JsonNode details = CONTACT_MAPPER.readTree(response.body()).path("details");
+            String mobile = details.path("contactMobile").asText(null);
+            return hasUsableMobile(mobile) ? mobile.trim() : null;
+        } catch (Exception e) {
+            log.warn("Contact lookup failed for licence {}: {}", licenseNumber, e.getMessage());
+            return null;
+        }
+    }
+
+    /** One-time pass: replace generated mobiles with the real ones from the API. */
+    @Transactional
+    public int backfillContactMobiles() {
+        int updated = 0;
+        for (User user : userRepository.findByContactMobilePendingTrue()) {
+            List<OnboardingJob> jobs = jobRepository.findByUserId(user.getId());
+            for (OnboardingJob job : jobs) {
+                String mobile = lookupMobile(job.getLicenseNumber());
+                if (mobile == null) {
+                    continue;
+                }
+                User owner = userRepository.findByMobileNumber(mobile).orElse(null);
+                if (owner != null && !owner.getId().equals(user.getId())) {
+                    log.info("Contact backfill skipped for user {}: mobile belongs to another account", user.getId());
+                    continue;
+                }
+                user.setMobileNumber(mobile);
+                user.setContactMobilePending(false);
+                userRepository.save(user);
+                for (Shop shop : shopRepository.findByOwnerId(user.getId())) {
+                    shop.setMobile(mobile);
+                    shopRepository.save(shop);
+                }
+                updated++;
+                break;
+            }
+        }
+        return updated;
     }
 
     /** A unique, non-existent 10-digit mobile number for placeholder accounts. */

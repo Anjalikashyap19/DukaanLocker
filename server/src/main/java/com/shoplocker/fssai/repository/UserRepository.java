@@ -26,4 +26,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByManagerCode(String managerCode);
 
     List<User> findByContactEmailPendingTrueOrContactMobilePendingTrue();
+
+    List<User> findByContactMobilePendingTrue();
 }

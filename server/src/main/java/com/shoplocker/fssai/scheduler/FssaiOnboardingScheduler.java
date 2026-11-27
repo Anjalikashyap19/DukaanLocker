@@ -50,6 +50,9 @@ public class FssaiOnboardingScheduler {
     @Value("${app.onboarding.backfill-on-start:false}")
     private boolean backfillOnStart;
 
+    @Value("${app.onboarding.mobile-backfill-on-start:false}")
+    private boolean mobileBackfillOnStart;
+
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(20))
             .build();
@@ -74,6 +77,20 @@ public class FssaiOnboardingScheduler {
             log.info("FSSAI onboarding backfill: {} failed job(s) re-queued", names.size());
         } catch (Exception e) {
             log.warn("FSSAI onboarding backfill failed: {}", e.getMessage());
+        }
+    }
+
+    /** One-time, opt-in replacement of generated mobiles with real ones. */
+    @EventListener(ApplicationReadyEvent.class)
+    public void backfillMobilesOnStartup() {
+        if (!enabled || !mobileBackfillOnStart) {
+            return;
+        }
+        try {
+            int updated = onboardingService.backfillContactMobiles();
+            log.info("FSSAI contact backfill: {} mobile number(s) replaced with real ones", updated);
+        } catch (Exception e) {
+            log.warn("FSSAI contact backfill failed: {}", e.getMessage());
         }
     }
 
