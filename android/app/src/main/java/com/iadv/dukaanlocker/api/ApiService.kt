@@ -137,6 +137,16 @@ interface ApiService {
     @POST("api/auth/reset-password")
     suspend fun resetPassword(@Body request: ResetPasswordRequest): Response<MessageResponse>
 
+    // ── Mobile login (OTP + set password) ───────────────────────────────
+
+    /** Step 1: send OTP to a registered mobile number. */
+    @POST("api/auth/mobile-login/send-otp")
+    suspend fun mobileLoginSendOtp(@Body request: MobileLoginSendOtpRequest): Response<MobileLoginSendOtpResponse>
+
+    /** Step 2: verify OTP + set a new password, returns JWT on success. */
+    @POST("api/auth/mobile-login/verify-and-set-password")
+    suspend fun mobileLoginVerifyAndSetPassword(@Body request: MobileLoginSetPasswordRequest): Response<MobileLoginSetPasswordResponse>
+
     // ── Verified account contact changes ────────────────────────
 
     @POST("api/users/me/email/code")

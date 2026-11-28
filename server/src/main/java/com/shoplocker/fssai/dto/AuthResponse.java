@@ -20,6 +20,7 @@ public class AuthResponse {
     private Role role;
     private String managerCode;
     private String dlId;
+    private boolean passwordChangeRequired = false;
 
     public AuthResponse() {}
 
@@ -56,6 +57,7 @@ public class AuthResponse {
                 user.getRole(),
                 user.getManagerCode());
         response.setDlId(user.getDlId());
+        response.setPasswordChangeRequired(!user.isPasswordChanged());
         return response;
     }
 
@@ -86,4 +88,7 @@ public class AuthResponse {
     /** Dukaan Locker ID (DL ID): the 4-digit folder identifier for this account. */
     public String getDlId() { return dlId; }
     public void setDlId(String dlId) { this.dlId = dlId; }
+
+    public boolean isPasswordChangeRequired() { return passwordChangeRequired; }
+    public void setPasswordChangeRequired(boolean passwordChangeRequired) { this.passwordChangeRequired = passwordChangeRequired; }
 }

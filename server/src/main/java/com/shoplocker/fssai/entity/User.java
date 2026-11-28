@@ -83,6 +83,10 @@ public class User {
     @Column(name = "contact_mobile_pending", nullable = false)
     private boolean contactMobilePending = false;
 
+    // True once the owner has set their own password. False for auto-created
+    // FSSAI accounts so the app can prompt them to change the mailed password.
+    @Column(name = "password_changed", nullable = false)
+    private boolean passwordChanged = true;
 
 
     // Kis admin ne user create kiya
@@ -251,5 +255,13 @@ public class User {
 
     public void setLastActiveAt(LocalDateTime lastActiveAt) {
         this.lastActiveAt = lastActiveAt;
+    }
+
+    public boolean isPasswordChanged() {
+        return passwordChanged;
+    }
+
+    public void setPasswordChanged(boolean passwordChanged) {
+        this.passwordChanged = passwordChanged;
     }
 }

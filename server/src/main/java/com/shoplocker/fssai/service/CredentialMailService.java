@@ -21,7 +21,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.util.HtmlUtils;
-
 /**
  * Emails the credentials of an auto-onboarded owner.
  *
@@ -37,6 +36,7 @@ public class CredentialMailService {
 
     private final ObjectProvider<JavaMailSender> mailSenderProvider;
     private final OnboardingJobRepository jobRepository;
+    private final WhatsAppService whatsAppService;
 
     @Value("${spring.mail.host:}")
     private String mailHost;
@@ -48,25 +48,39 @@ public class CredentialMailService {
     private String playStoreUrl;
 
     public CredentialMailService(ObjectProvider<JavaMailSender> mailSenderProvider,
-                                 OnboardingJobRepository jobRepository) {
+                                 OnboardingJobRepository jobRepository,
+                                 WhatsAppService whatsAppService) {
         this.mailSenderProvider = mailSenderProvider;
         this.jobRepository = jobRepository;
+        this.whatsAppService = whatsAppService;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onAccountCreated(AccountCredentialsEvent event) {
+        // No email address at all — nothing to email.
         if (event.emailId() == null || event.emailId().isBlank()) {
+            // If we have a real mobile (not generated), try WhatsApp instead.
+            if (event.emailPending() && !event.mobilePending()
+                    && event.mobileNumber() != null && !event.mobileNumber().isBlank()) {
+                sendWhatsApp(event);
+            } else {
+                log.info("Onboarding mail skipped for user {} (job {}): no email and no real mobile",
+                        event.userId(), event.jobId());
+                annotate(event.jobId(), "credentials NOT sent (no email, no real mobile)");
+            }
             return;
         }
-        if (event.placeholderContact()) {
+
+        // Both email and mobile were generated — no real contact to reach.
+        if (event.emailPending() && event.mobilePending()) {
             log.info("Onboarding mail skipped for user {} (job {}): generated contact details",
                     event.userId(), event.jobId());
-            annotate(event.jobId(), "credentials NOT emailed (generated contact details)");
+            annotate(event.jobId(), "credentials NOT sent (generated contact details)");
             return;
         }
+
+        // Real email exists — send email normally.
         JavaMailSender sender = mailSenderProvider.getIfAvailable();
-        // An empty spring.mail.host still satisfies Boot's condition and yields a
-        // sender that can only fail, so the host itself decides availability.
         if (sender == null || mailHost == null || mailHost.isBlank()) {
             log.warn("Onboarding mail skipped for {}: spring.mail.host is not configured", event.emailId());
             annotate(event.jobId(), "credentials NOT emailed (SMTP not configured)");
@@ -86,6 +100,25 @@ public class CredentialMailService {
         } catch (Exception e) {
             log.error("Onboarding credentials email failed for user {}: {}", event.userId(), e.getMessage());
             annotate(event.jobId(), "credentials email failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Sends the WhatsApp template when the account has a real mobile number
+     * (from the licence lookup API) but no real email on the certificate.
+     */
+    private void sendWhatsApp(AccountCredentialsEvent event) {
+        var job = jobRepository.findById(event.jobId()).orElse(null);
+        if (job != null && job.isWhatsappSent()) {
+            log.info("WhatsApp already sent for job {}", event.jobId());
+            return;
+        }
+        boolean sent = whatsAppService.sendTemplate(
+                event.jobId(), event.mobileNumber(), event.ownerName(), event.shopName(),
+                event.emailId());
+        if (sent && job != null) {
+            job.setWhatsappSent(true);
+            jobRepository.save(job);
         }
     }
 

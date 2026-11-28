@@ -11,6 +11,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -22,13 +25,14 @@ class CredentialMailServiceTest {
     @Test
     @DisplayName("contains logo, welcome, credentials and footer")
     void buildsTemplate() {
-        CredentialMailService service = new CredentialMailService(null, null);
+        CredentialMailService service = new CredentialMailService(
+                null, mock(OnboardingJobRepository.class), mock(WhatsAppService.class));
         ReflectionTestUtils.setField(service, "playStoreUrl",
                 "https://play.google.com/store/apps/details?id=com.iadv.dukaanlocker&pcampaignid=web_share");
 
         String html = service.buildHtml(new AccountCredentialsEvent(
                 1L, 2L, "owner@example.com", "TEST@123", "OM PRAKASH", "NEW TYRES HOUSE",
-                "1234567890", false));
+                "1234567890", false, false, "9876543210"));
 
         assertThat(html)
                 .contains("cid:dukaanlockerLogo")
@@ -47,19 +51,49 @@ class CredentialMailServiceTest {
     }
 
     @Test
-    @DisplayName("does not email credentials for generated contact details")
+    @DisplayName("does not email or WhatsApp when both contact details are generated")
     void skipsGeneratedContact() {
         @SuppressWarnings("unchecked")
         ObjectProvider<JavaMailSender> provider = mock(ObjectProvider.class);
         JavaMailSender sender = mock(JavaMailSender.class);
         when(provider.getIfAvailable()).thenReturn(sender);
+        WhatsAppService whatsApp = mock(WhatsAppService.class);
         CredentialMailService service = new CredentialMailService(
-                provider, mock(OnboardingJobRepository.class));
+                provider, mock(OnboardingJobRepository.class), whatsApp);
         ReflectionTestUtils.setField(service, "mailHost", "smtp.gmail.com");
 
         service.onAccountCreated(new AccountCredentialsEvent(
-                1L, 2L, "generated@gmail.com", "TEST@123", "OWNER", "SHOP", "1234567890", true));
+                1L, 2L, "generated@gmail.com", "TEST@123", "OWNER", "SHOP", "1234567890",
+                true, true, "9876543210"));
 
         verify(sender, never()).send(any(MimeMessage.class));
+        verify(whatsApp, never()).sendTemplate(
+                anyLong(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("sends WhatsApp when email is generated but mobile is real")
+    void sendsWhatsAppWhenRealMobileNoEmail() {
+        WhatsAppService whatsApp = mock(WhatsAppService.class);
+        when(whatsApp.sendTemplate(
+                eq(1L),
+                eq("9876543210"),
+                anyString(),
+                anyString(),
+                anyString()))
+                .thenReturn(true);
+        CredentialMailService service = new CredentialMailService(
+                mock(ObjectProvider.class), mock(OnboardingJobRepository.class), whatsApp);
+
+        service.onAccountCreated(new AccountCredentialsEvent(
+                1L, 2L, "", "TEST@123", "OWNER", "SHOP", "1234567890",
+                true, false, "9876543210"));
+
+        verify(whatsApp).sendTemplate(
+                eq(1L),
+                eq("9876543210"),
+                anyString(),
+                anyString(),
+                anyString());
     }
 }

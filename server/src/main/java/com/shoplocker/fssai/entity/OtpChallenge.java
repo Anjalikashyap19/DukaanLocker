@@ -21,6 +21,7 @@ public class OtpChallenge {
     public static final String PURPOSE_MSME_LOGIN = "MSME_LOGIN";
     public static final String PURPOSE_PASSWORD_RESET = "PASSWORD_RESET";
     public static final String PURPOSE_MOBILE_UPDATE = "MOBILE_UPDATE";
+    public static final String PURPOSE_MOBILE_LOGIN = "MOBILE_LOGIN";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

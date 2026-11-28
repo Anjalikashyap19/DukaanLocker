@@ -1233,7 +1233,79 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Step 1 of changing the account email: send a code to the new address. */
+    /** Step 1 of mobile login: send OTP to a registered mobile number. */
+    fun mobileLoginSendOtp(
+        mobileNumber: String,
+        onResult: (Boolean, String?, MobileLoginSendOtpResponse?) -> Unit
+    ) {
+        viewModelScope.launch {
+            updateState { it.copy(isLoading = true) }
+            try {
+                val response = api.mobileLoginSendOtp(
+                    MobileLoginSendOtpRequest(mobileNumber = mobileNumber.trim())
+                )
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    onResult(true, body?.message, body)
+                } else {
+                    val parsed = response.parseOtpError()
+                    onResult(false, parsed.message, null)
+                }
+            } catch (e: Exception) {
+                onResult(false, "Network error: ${e.message}", null)
+            }
+            updateState { it.copy(isLoading = false) }
+        }
+    }
+
+    /** Step 2 of mobile login: verify OTP + set a new password, then sign in with the JWT. */
+    fun mobileLoginVerifyAndSetPassword(
+        mobileNumber: String,
+        otp: String,
+        password: String,
+        confirmPassword: String,
+        onResult: (Boolean, String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            updateState { it.copy(isLoading = true) }
+            try {
+                val response = api.mobileLoginVerifyAndSetPassword(
+                    MobileLoginSetPasswordRequest(
+                        mobileNumber = mobileNumber.trim(),
+                        otp = otp.trim(),
+                        password = password,
+                        confirmPassword = confirmPassword
+                    )
+                )
+                if (response.isSuccessful) {
+                    val body = response.body() ?: return@launch
+                    if (body.success && body.token != null) {
+                        val auth = AuthResponse(
+                            token = body.token,
+                            tokenType = body.tokenType ?: "Bearer",
+                            userId = body.userId ?: -1,
+                            userName = body.userName ?: "",
+                            mobileNumber = body.mobileNumber ?: "",
+                            emailId = body.emailId ?: "",
+                            role = body.role ?: "",
+                            dlId = null
+                        )
+                        saveAuth(auth, sendWelcomePush = true)
+                        navigateToHome()
+                        showToast("Welcome, ${auth.userName}!", ToastType.SUCCESS)
+                        onResult(true, body.message)
+                    } else {
+                        onResult(false, body.message ?: "Password could not be set.")
+                    }
+                } else {
+                    onResult(false, response.parseErrorMessage())
+                }
+            } catch (e: Exception) {
+                onResult(false, "Network error: ${e.message}")
+            }
+            updateState { it.copy(isLoading = false) }
+        }
+    }
     fun requestEmailChangeCode(email: String, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             updateState { it.copy(isLoading = true) }

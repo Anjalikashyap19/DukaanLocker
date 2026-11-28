@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.iadv.dukaanlocker.api.MobileHintResult
+import com.iadv.dukaanlocker.api.MobileLoginSendOtpResponse
 import com.iadv.dukaanlocker.api.RateLimitInfo
 import com.iadv.dukaanlocker.R
 import com.iadv.dukaanlocker.ui.components.FieldErrorText
@@ -66,7 +67,10 @@ fun LoginScreen(
     onGoogleSignIn: () -> Unit = {},
     onBackToMain: () -> Unit,
     isBiometricLoginEnabled: Boolean = false,
-    onBiometricLogin: () -> Unit = {}
+    onBiometricLogin: () -> Unit = {},
+    onMobileLoginTap: () -> Unit = {},
+    onMobileLoginSendOtp: (String, (Boolean, String?, MobileLoginSendOtpResponse?) -> Unit) -> Unit = { _, _ -> },
+    onMobileLoginVerifyAndSetPassword: (String, String, String, String, (Boolean, String?) -> Unit) -> Unit = { _, _, _, _, _ -> }
 ) {
     val colors = LocalAppColors.current
     val lang = LocalAppLanguage.current
@@ -317,6 +321,10 @@ fun LoginScreen(
                             onManagerLoginTap = {
                                 authFocusManager.clearFocus(force = true)
                                 selectedView = "manager"
+                            },
+                            onMobileLoginTap = {
+                                authFocusManager.clearFocus(force = true)
+                                selectedView = "mobileLogin"
                             }
                         )
 
@@ -356,6 +364,25 @@ fun LoginScreen(
                                     }
                                     else -> codeError = true
                                 }
+                            }
+                        )
+
+                        "mobileLogin" -> MobileLoginScreen(
+                            colors = colors,
+                            lang = lang,
+                            onSendOtp = { mobile, onResult ->
+                                onMobileLoginSendOtp(mobile, onResult)
+                            },
+                            onVerifyAndSetPassword = { mobile, otp, password, confirmPassword, onResult ->
+                                onMobileLoginVerifyAndSetPassword(mobile, otp, password, confirmPassword, onResult)
+                            },
+                            onDone = { success ->
+                                authFocusManager.clearFocus(force = true)
+                                selectedView = null
+                            },
+                            onBack = {
+                                authFocusManager.clearFocus(force = true)
+                                selectedView = null
                             }
                         )
 
@@ -437,7 +464,8 @@ fun LoginForm(
     onMsmeLoginVerify: (msmeNumber: String, otp: String, onResult: (Boolean, String?) -> Unit) -> Unit = { _, _, _ -> },
     onMsmeLoginTap: () -> Unit,
     onGoogleSignIn: () -> Unit = {},
-    onManagerLoginTap: () -> Unit
+    onManagerLoginTap: () -> Unit,
+    onMobileLoginTap: () -> Unit = {}
 ) {
     val focusManager = LocalFocusManager.current
 
@@ -445,6 +473,26 @@ fun LoginForm(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // "Login with mobile number" sits above the email field, same style as
+        // "forgot password?", so auto-onboarded FSSAI owners who never received
+        // credentials can still get in via OTP + set-password.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            TextButton(
+                onClick = onMobileLoginTap,
+                colors = ButtonDefaults.textButtonColors(contentColor = colors.primary)
+            ) {
+                Text(
+                    AppStrings.get(lang, "Login with Mobile Number"),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.primary
+                )
+            }
+        }
+
         LoginUiTextField(
             label = AppStrings.get(lang, "Email Address"),
             placeholder = "you@example.com",

@@ -296,6 +296,8 @@ public class FssaiOnboardingService {
         user.setMsmeUser(false);
         user.setContactEmailPending(emailPending);
         user.setContactMobilePending(mobilePending);
+        // Auto-created: owner must set their own password on first login.
+        user.setPasswordChanged(false);
         User savedUser = userRepository.save(user);
         savedUser.setDlId(DlIds.forUser(savedUser.getId()));
         savedUser = userRepository.save(savedUser);
@@ -374,7 +376,9 @@ public class FssaiOnboardingService {
                 savedUser.getUserName(),
                 savedShop.getShopName(),
                 data.getLicenseNumber(),
-                emailPending || mobilePending));
+                emailPending,
+                mobilePending,
+                savedUser.getMobileNumber()));
 
         return new Created(savedUser.getId(), savedShop.getId());
     }

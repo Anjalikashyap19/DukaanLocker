@@ -46,6 +46,9 @@ public class OnboardingJob {
     @Column(name = "shop_id")
     private Long shopId;
 
+    @Column(name = "whatsapp_sent", nullable = false)
+    private boolean whatsappSent = false;
+
     @Column(nullable = false)
     private int attempts;
 
@@ -92,6 +95,9 @@ public class OnboardingJob {
 
     public Long getShopId() { return shopId; }
     public void setShopId(Long shopId) { this.shopId = shopId; }
+
+    public boolean isWhatsappSent() { return whatsappSent; }
+    public void setWhatsappSent(boolean whatsappSent) { this.whatsappSent = whatsappSent; }
 
     public int getAttempts() { return attempts; }
     public void setAttempts(int attempts) { this.attempts = attempts; }

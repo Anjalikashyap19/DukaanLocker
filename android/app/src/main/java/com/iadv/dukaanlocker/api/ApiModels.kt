@@ -393,7 +393,45 @@ data class OtpSendResponse(
 
 data class MessageResponse(
     @SerializedName("success") val success: Boolean,
-    @SerializedName("message") val message: String?
+    @SerializedName("message") val message?
+)
+
+// ── Mobile login (OTP + set password) ────────────────────────────────────────
+
+/** Step 1: send OTP to a registered mobile number. */
+data class MobileLoginSendOtpRequest(
+    @SerializedName("mobileNumber") val mobileNumber: String
+)
+
+/** Step 1 response: whether an account exists and whether it needs a password set. */
+data class MobileLoginSendOtpResponse(
+    @SerializedName("sent") val sent: Boolean = false,
+    @SerializedName("passwordChangeRequired") val passwordChangeRequired: Boolean = false,
+    @SerializedName("message") val message: String?,
+    @SerializedName("remainingSends") val remainingSends: Int? = null,
+    @SerializedName("resendAvailableInSeconds") val resendAvailableInSeconds: Int? = null,
+    @SerializedName("devOtp") val devOtp: String? = null
+)
+
+/** Step 2: verify OTP + set a new password. */
+data class MobileLoginSetPasswordRequest(
+    @SerializedName("mobileNumber") val mobileNumber: String,
+    @SerializedName("otp") val otp: String,
+    @SerializedName("password") val password: String,
+    @SerializedName("confirmPassword") val confirmPassword: String
+)
+
+/** Step 2 response: JWT on success so the user lands straight in the app. */
+data class MobileLoginSetPasswordResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("message") val message?,
+    @SerializedName("token") val token: String?,
+    @SerializedName("tokenType") val tokenType: String?,
+    @SerializedName("userId") val userId: Long?,
+    @SerializedName("userName") val userName: String?,
+    @SerializedName("mobileNumber") val mobileNumber: String?,
+    @SerializedName("emailId") val emailId: String?,
+    @SerializedName("role") val role: String?
 )
 
 // ── Verified account contact changes ────────────────────────────────────────

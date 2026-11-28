@@ -357,7 +357,14 @@ BackHandler(
                                         onForgotPasswordRequest = { email, mobile, onResult -> vm.forgotPasswordRequest(email, mobile, onResult) },
                                         onForgotPasswordReset = { email, mobile, otp, password, onResult -> vm.resetPassword(email, mobile, otp, password, onResult) },
                                         onMobileHint = { email, onResult -> vm.mobileHint(email, onResult) },
-                                        onManagerLogin = { code, onDone -> vm.loginByCode(code, onDone) }
+                                        onManagerLogin = { code, onDone -> vm.loginByCode(code, onDone) },
+                                        onMobileLoginTap = {},
+                                        onMobileLoginSendOtp = { mobile, onResult -> vm.mobileLoginSendOtp(mobile, onResult) },
+                                        onMobileLoginVerifyAndSetPassword = { mobile, otp, password, confirmPassword, onResult ->
+                                            vm.mobileLoginVerifyAndSetPassword(mobile, otp, password, confirmPassword) { success, msg ->
+                                                onResult(success, msg)
+                                            }
+                                        }
                                     )
                                 }
 

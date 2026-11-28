@@ -11,8 +11,11 @@ package com.shoplocker.fssai.event;
  * @param ownerName     owner name from the certificate
  * @param shopName      shop name from the certificate
  * @param licenseNumber FSSAI licence number from the certificate
- * @param placeholderContact true when email/mobile were generated because the
- *                            certificate did not print the owner's real details
+ * @param emailPending  true when email was generated because the certificate
+ *                       did not print the owner's real email
+ * @param mobilePending true when mobile was generated because the certificate
+ *                       did not print the owner's real mobile
+ * @param mobileNumber  the account's mobile number (real or generated)
  */
 public record AccountCredentialsEvent(Long jobId,
                                       Long userId,
@@ -21,5 +24,7 @@ public record AccountCredentialsEvent(Long jobId,
                                       String ownerName,
                                       String shopName,
                                       String licenseNumber,
-                                      boolean placeholderContact) {
+                                      boolean emailPending,
+                                      boolean mobilePending,
+                                      String mobileNumber) {
 }

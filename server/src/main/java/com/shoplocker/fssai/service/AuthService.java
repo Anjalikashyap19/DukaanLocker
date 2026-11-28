@@ -224,6 +224,8 @@ public class AuthService {
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setRole(Role.ADMIN);
         user.setEnabled(true);
+        // Manual registration: user sets their own password, so no forced change.
+        user.setPasswordChanged(true);
 
         User saved = userRepository.save(user);
         refreshLastActive(saved);
@@ -1162,6 +1164,7 @@ public class AuthService {
         }
 
         user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setPasswordChanged(true);
         userRepository.save(user);
 
         // A completed reset clears the send budget so a legitimate owner is not
