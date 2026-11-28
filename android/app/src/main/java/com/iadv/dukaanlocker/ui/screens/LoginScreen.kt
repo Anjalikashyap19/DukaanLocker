@@ -1,15 +1,18 @@
 package com.iadv.dukaanlocker.ui.screens
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -103,6 +106,8 @@ fun LoginScreen(
 
     var accessCode by remember { mutableStateOf("") }
     var codeError by remember { mutableStateOf(false) }
+
+    var showMobileLoginDialog by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     // Swapping the auth view disposes the fields of the old one. Clearing focus first
@@ -324,7 +329,7 @@ fun LoginScreen(
                             },
                             onMobileLoginTap = {
                                 authFocusManager.clearFocus(force = true)
-                                selectedView = "mobileLogin"
+                                showMobileLoginDialog = true
                             }
                         )
 
@@ -364,25 +369,6 @@ fun LoginScreen(
                                     }
                                     else -> codeError = true
                                 }
-                            }
-                        )
-
-                        "mobileLogin" -> MobileLoginScreen(
-                            colors = colors,
-                            lang = lang,
-                            onSendOtp = { mobile, onResult ->
-                                onMobileLoginSendOtp(mobile, onResult)
-                            },
-                            onVerifyAndSetPassword = { mobile, otp, password, confirmPassword, onResult ->
-                                onMobileLoginVerifyAndSetPassword(mobile, otp, password, confirmPassword, onResult)
-                            },
-                            onDone = { success ->
-                                authFocusManager.clearFocus(force = true)
-                                selectedView = null
-                            },
-                            onBack = {
-                                authFocusManager.clearFocus(force = true)
-                                selectedView = null
                             }
                         )
 
@@ -444,6 +430,56 @@ fun LoginScreen(
             }
         }
     }
+
+    // Mobile login opens as a Material Design popup dialog.
+    AnimatedVisibility(
+        visible = showMobileLoginDialog,
+        enter = fadeIn(animationSpec = tween(200, easing = FastOutSlowInEasing)),
+        exit = fadeOut(animationSpec = tween(150))
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            // White backdrop behind the dialog at 90% opacity
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.White.copy(alpha = 0.9f))
+                    .clickable { showMobileLoginDialog = false }
+            )
+
+            // Dialog card — Material Design: rounded corners, constrained width
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth(0.88f)
+                    .padding(24.dp)
+                    .padding(bottom = 24.dp)
+                    .imePadding()
+                    .background(colors.cardBg, RoundedCornerShape(20.dp))
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                MobileLoginScreen(
+                    colors = colors,
+                    lang = lang,
+                    onSendOtp = { mobile, onResult ->
+                        onMobileLoginSendOtp(mobile, onResult)
+                    },
+                    onVerifyAndSetPassword = { mobile, otp, password, confirmPassword, onResult ->
+                        onMobileLoginVerifyAndSetPassword(mobile, otp, password, confirmPassword, onResult)
+                    },
+                    onDone = { success ->
+                        showMobileLoginDialog = false
+                    },
+                    onBack = {
+                        showMobileLoginDialog = false
+                    }
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -471,22 +507,23 @@ fun LoginForm(
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // "Login with mobile number" sits above the email field, same style as
-        // "forgot password?", so auto-onboarded FSSAI owners who never received
-        // credentials can still get in via OTP + set-password.
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             TextButton(
-                onClick = onMobileLoginTap,
+                onClick = {
+                    focusManager.clearFocus(force = true)
+                    onMobileLoginTap()
+                },
                 colors = ButtonDefaults.textButtonColors(contentColor = colors.primary)
             ) {
                 Text(
-                    AppStrings.get(lang, "Login with Mobile Number"),
-                    fontSize = 12.sp,
+                    AppStrings.get(lang, "Have a mobile number?"),
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
                     color = colors.primary
                 )

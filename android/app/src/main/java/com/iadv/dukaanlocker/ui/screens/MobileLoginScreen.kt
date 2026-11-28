@@ -422,10 +422,3 @@ fun MobileLoginScreen(
         }
     }
 }
-
-/** Formats seconds as MM:SS for the countdown display. */
-private fun formatCountdown(seconds: Int): String {
-    val mins = seconds / 60
-    val secs = seconds % 60
-    return String.format("%02d:%02d", mins, secs)
-}

@@ -393,7 +393,7 @@ data class OtpSendResponse(
 
 data class MessageResponse(
     @SerializedName("success") val success: Boolean,
-    @SerializedName("message") val message?
+    @SerializedName("message") val message: String?
 )
 
 // ── Mobile login (OTP + set password) ────────────────────────────────────────
@@ -424,7 +424,7 @@ data class MobileLoginSetPasswordRequest(
 /** Step 2 response: JWT on success so the user lands straight in the app. */
 data class MobileLoginSetPasswordResponse(
     @SerializedName("success") val success: Boolean,
-    @SerializedName("message") val message?,
+    @SerializedName("message") val message: String?,
     @SerializedName("token") val token: String?,
     @SerializedName("tokenType") val tokenType: String?,
     @SerializedName("userId") val userId: Long?,

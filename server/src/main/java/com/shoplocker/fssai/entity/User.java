@@ -132,6 +132,10 @@ public class User {
         return id;
     }
 
+    public void setId(Long id) {
+        this.id = id;
+    }
+
 
     public String getDlId() {
         return dlId;
@@ -263,5 +267,23 @@ public class User {
 
     public void setPasswordChanged(boolean passwordChanged) {
         this.passwordChanged = passwordChanged;
+    }
+
+
+    public boolean isContactEmailPending() {
+        return contactEmailPending;
+    }
+
+    public void setContactEmailPending(boolean contactEmailPending) {
+        this.contactEmailPending = contactEmailPending;
+    }
+
+
+    public boolean isContactMobilePending() {
+        return contactMobilePending;
+    }
+
+    public void setContactMobilePending(boolean contactMobilePending) {
+        this.contactMobilePending = contactMobilePending;
     }
 }

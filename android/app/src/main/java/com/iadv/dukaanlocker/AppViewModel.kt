@@ -1246,7 +1246,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 if (response.isSuccessful) {
                     val body = response.body()
-                    onResult(true, body?.message, body)
+                    onResult(body?.sent ?: false, body?.message, body)
                 } else {
                     val parsed = response.parseOtpError()
                     onResult(false, parsed.message, null)

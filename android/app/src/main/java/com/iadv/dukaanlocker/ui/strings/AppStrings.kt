@@ -1,3 +1,4 @@
+
 package com.iadv.dukaanlocker.ui.strings
 
 import androidx.compose.runtime.compositionLocalOf
@@ -285,6 +286,7 @@ object AppStrings {
             "Too many attempts. Try again in %s" to "बहुत अधिक प्रयास। %s में पुनः प्रयास करें",
             "%d resend(s) left before a 10 minute lockout" to "10 मिनट के लॉकआउट से पहले %d पुनः भेजने बाकी",
             "Login with Mobile Number" to "मोबाइल नंबर से लॉगिन करें",
+            "Have a mobile number?" to "क्या आपके पास मोबाइल नंबर है?",
             "SEND OTP" to "OTP भेजें",
             "VERIFY OTP" to "OTP सत्यापित करें",
             "SAVE NEW PASSWORD" to "नया पासवर्ड सेव करें",
